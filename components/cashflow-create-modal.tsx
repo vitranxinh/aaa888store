@@ -1,0 +1,98 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { useToastStore } from "@/store/toast-store";
+
+export function CashflowCreateModal({
+  branchId,
+  orders,
+  purchases,
+  customers,
+  suppliers
+}: {
+  branchId: string;
+  orders: { id: string; code: string }[];
+  purchases: { id: string; code: string }[];
+  customers: { id: string; name: string }[];
+  suppliers: { id: string; name: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<"RECEIPT" | "PAYMENT">("RECEIPT");
+  const [amount, setAmount] = useState(0);
+  const [orderId, setOrderId] = useState("");
+  const [purchaseOrderId, setPurchaseOrderId] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [note, setNote] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const pushToast = useToastStore((state) => state.push);
+
+  function submit() {
+    startTransition(async () => {
+      const response = await fetch("/api/cash-transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId, type, amount, orderId, purchaseOrderId, customerId, supplierId, note })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        pushToast({ title: "Không thể tạo phiếu", description: payload.error, variant: "error" });
+        return;
+      }
+      pushToast({ title: "Đã tạo phiếu", description: payload.transaction.code });
+      setOpen(false);
+      window.location.reload();
+    });
+  }
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="rounded-2xl bg-emerald-600 px-6 py-4 text-2xl font-semibold text-white shadow-soft">
+        + Tạo phiếu
+      </button>
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-3xl rounded-[28px] bg-white p-7 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <h3 className="text-5xl font-bold">Phiếu thu / chi</h3>
+              <button onClick={() => setOpen(false)} className="text-5xl text-slate-500">×</button>
+            </div>
+            <div className="mt-6 grid gap-4">
+              <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={type} onChange={(e) => setType(e.target.value as "RECEIPT" | "PAYMENT")}>
+                <option value="RECEIPT">Phiếu thu</option>
+                <option value="PAYMENT">Phiếu chi</option>
+              </select>
+              <input className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} placeholder="Số tiền" />
+              {type === "RECEIPT" ? (
+                <>
+                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                    <option value="">Chọn khách hàng</option>
+                    {customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={orderId} onChange={(e) => setOrderId(e.target.value)}>
+                    <option value="">Chọn hóa đơn</option>
+                    {orders.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                    <option value="">Chọn NCC</option>
+                    {suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={purchaseOrderId} onChange={(e) => setPurchaseOrderId(e.target.value)}>
+                    <option value="">Chọn phiếu nhập</option>
+                    {purchases.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}
+                  </select>
+                </>
+              )}
+              <textarea className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / ghi chú" />
+              <Button className="h-16 text-3xl" onClick={submit} disabled={isPending || amount <= 0}>{isPending ? "Đang lưu..." : "Lưu phiếu"}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}

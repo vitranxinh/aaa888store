@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>302 Store Manager</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <p class="eyebrow">Quản lý cửa hàng</p>
+          <h1>302 Store Manager</h1>
+          <p id="storeMeta" class="muted"></p>
+        </div>
+
+        <nav id="navTabs" class="nav"></nav>
+
+        <div class="sidebar-card">
+          <p class="card-title">Dữ liệu gốc</p>
+          <p id="seedSummary" class="muted"></p>
+          <button id="resetBtn" class="ghost-button">Khôi phục dữ liệu từ Excel</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Ứng dụng thay thế file Excel</p>
+            <h2 id="viewTitle">Tổng quan</h2>
+          </div>
+          <div class="actions">
+            <button id="printInvoiceBtn" class="ghost-button hidden">In hóa đơn đang chọn</button>
+          </div>
+        </header>
+
+        <section id="app"></section>
+      </main>
+    </div>
+
+    <template id="statsCardTemplate">
+      <article class="stat-card">
+        <p class="stat-label"></p>
+        <h3 class="stat-value"></h3>
+        <p class="stat-note muted"></p>
+      </article>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+  </html>

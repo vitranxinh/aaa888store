@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CASHIER
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  DRAFT
+  COMPLETED
+  PARTIAL
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MIXED
+}
+
+enum StockTxnType {
+  IMPORT
+  EXPORT
+  ADJUSTMENT
+  TRANSFER_OUT
+  TRANSFER_IN
+  SALE
+}
+
+enum PromotionType {
+  PERCENT
+  FIXED
+  BUY_X_GET_Y
+}
+
+enum PurchaseStatus {
+  DRAFT
+  COMPLETED
+  PARTIAL
+  CANCELLED
+}
+
+enum CashTxnType {
+  RECEIPT
+  PAYMENT
+}
+
+model Branch {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  name            String
+  address         String?
+  phone           String?
+  isActive        Boolean                @default(true)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  users           User[]
+  inventories     Inventory[]
+  inventoryTxns   InventoryTransaction[]
+  orders          Order[]
+  purchaseOrders  PurchaseOrder[]
+  cashTxns        CashTransaction[]
+  promotions      PromotionBranch[]
+  batches         ProductBatch[]
+}
+
+model User {
+  id              String                 @id @default(cuid())
+  name            String
+  email           String                 @unique
+  passwordHash    String
+  role            UserRole
+  isActive        Boolean                @default(true)
+  branchId        String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  branch          Branch?                @relation(fields: [branchId], references: [id])
+  orders          Order[]                @relation("OrderCreatedBy")
+  purchaseOrders  PurchaseOrder[]        @relation("PurchaseCreatedBy")
+  inventoryTxns   InventoryTransaction[] @relation("InventoryTxnCreatedBy")
+  cashTxns        CashTransaction[]      @relation("CashTxnCreatedBy")
+}
+
+model Category {
+  id              String                 @id @default(cuid())
+  name            String
+  slug            String                 @unique
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  products        Product[]
+}
+
+model Brand {
+  id              String                 @id @default(cuid())
+  name            String
+  slug            String                 @unique
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  products        Product[]
+}
+
+model Product {
+  id              String                 @id @default(cuid())
+  name            String
+  slug            String                 @unique
+  sku             String                 @unique
+  barcode         String?                @unique
+  imageUrl        String?
+  categoryId      String?
+  brandId         String?
+  costPrice       Decimal                @db.Decimal(14, 2)
+  sellingPrice    Decimal                @db.Decimal(14, 2)
+  lowStockAlert   Int                    @default(10)
+  status          ProductStatus          @default(ACTIVE)
+  description     String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  category        Category?              @relation(fields: [categoryId], references: [id])
+  brand           Brand?                 @relation(fields: [brandId], references: [id])
+  variants        ProductVariant[]
+  inventories     Inventory[]
+  inventoryTxns   InventoryTransaction[]
+  orderItems      OrderItem[]
+  purchaseItems   PurchaseOrderItem[]
+  batches         ProductBatch[]
+  promoProducts   PromotionProduct[]
+}
+
+model ProductVariant {
+  id              String                 @id @default(cuid())
+  productId       String
+  sku             String                 @unique
+  barcode         String?                @unique
+  name            String
+  color           String?
+  size            String?
+  priceOverride   Decimal?               @db.Decimal(14, 2)
+  isActive        Boolean                @default(true)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventories     Inventory[]
+  inventoryTxns   InventoryTransaction[]
+  orderItems      OrderItem[]
+}
+
+model ProductBatch {
+  id              String                 @id @default(cuid())
+  branchId        String
+  productId       String
+  batchNumber     String
+  expiryDate      DateTime?
+  quantity        Int                    @default(0)
+  importPrice     Decimal                @db.Decimal(14, 2)
+  purchaseItemId  String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchaseItem    PurchaseOrderItem?     @relation(fields: [purchaseItemId], references: [id])
+  inventoryTxns   InventoryTransaction[]
+
+  @@index([branchId, productId, expiryDate])
+}
+
+model Inventory {
+  id              String                 @id @default(cuid())
+  branchId        String
+  productId       String?
+  variantId       String?
+  quantity        Int                    @default(0)
+  reservedQty     Int                    @default(0)
+  updatedAt       DateTime               @updatedAt
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product         Product?               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant         ProductVariant?        @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, productId, variantId])
+}
+
+model InventoryTransaction {
+  id              String                 @id @default(cuid())
+  branchId        String
+  productId       String?
+  variantId       String?
+  batchId         String?
+  type            StockTxnType
+  quantity        Int
+  note            String?
+  referenceCode   String?
+  createdById     String?
+  createdAt       DateTime               @default(now())
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product         Product?               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant         ProductVariant?        @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  batch           ProductBatch?          @relation(fields: [batchId], references: [id])
+  createdBy       User?                  @relation("InventoryTxnCreatedBy", fields: [createdById], references: [id])
+}
+
+model CustomerGroup {
+  id              String                 @id @default(cuid())
+  name            String
+  createdAt       DateTime               @default(now())
+  customers       Customer[]
+}
+
+model Customer {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  name            String
+  phone           String                 @unique
+  email           String?
+  address         String?
+  note            String?
+  loyaltyPoints   Int                    @default(0)
+  openingDebt     Decimal                @default(0) @db.Decimal(14, 2)
+  receivableDebt  Decimal                @default(0) @db.Decimal(14, 2)
+  totalSpend      Decimal                @default(0) @db.Decimal(14, 2)
+  groupId         String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  group           CustomerGroup?         @relation(fields: [groupId], references: [id])
+  orders          Order[]
+  cashTxns        CashTransaction[]
+}
+
+model Supplier {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  name            String
+  phone           String?
+  address         String?
+  note            String?
+  openingDebt     Decimal                @default(0) @db.Decimal(14, 2)
+  payableDebt     Decimal                @default(0) @db.Decimal(14, 2)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  purchaseOrders  PurchaseOrder[]
+  cashTxns        CashTransaction[]
+}
+
+model Promotion {
+  id              String                 @id @default(cuid())
+  name            String
+  code            String                 @unique
+  type            PromotionType
+  value           Decimal                @db.Decimal(14, 2)
+  buyQuantity     Int?
+  getQuantity     Int?
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean                @default(true)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  branches        PromotionBranch[]
+  products        PromotionProduct[]
+}
+
+model PromotionBranch {
+  promotionId     String
+  branchId        String
+  promotion       Promotion              @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, branchId])
+}
+
+model PromotionProduct {
+  promotionId     String
+  productId       String
+  promotion       Promotion              @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, productId])
+}
+
+model Order {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  branchId        String
+  customerId      String
+  createdById     String
+  status          OrderStatus            @default(COMPLETED)
+  subtotal        Decimal                @db.Decimal(14, 2)
+  discountTotal   Decimal                @default(0) @db.Decimal(14, 2)
+  grandTotal      Decimal                @db.Decimal(14, 2)
+  profitEstimate  Decimal                @default(0) @db.Decimal(14, 2)
+  paymentMethod   PaymentMethod
+  paidAmount      Decimal                @db.Decimal(14, 2)
+  debtAmount      Decimal                @default(0) @db.Decimal(14, 2)
+  note            String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  branch          Branch                 @relation(fields: [branchId], references: [id])
+  customer        Customer               @relation(fields: [customerId], references: [id])
+  createdBy       User                   @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  items           OrderItem[]
+  cashTxns        CashTransaction[]
+}
+
+model OrderItem {
+  id              String                 @id @default(cuid())
+  orderId         String
+  productId       String
+  variantId       String?
+  quantity        Int
+  unitPrice       Decimal                @db.Decimal(14, 2)
+  costPrice       Decimal                @db.Decimal(14, 2)
+  discountValue   Decimal                @default(0) @db.Decimal(14, 2)
+  total           Decimal                @db.Decimal(14, 2)
+  order           Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product                @relation(fields: [productId], references: [id])
+  variant         ProductVariant?        @relation(fields: [variantId], references: [id])
+}
+
+model PurchaseOrder {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  branchId        String
+  supplierId      String
+  createdById     String
+  status          PurchaseStatus         @default(COMPLETED)
+  totalAmount     Decimal                @db.Decimal(14, 2)
+  paidAmount      Decimal                @default(0) @db.Decimal(14, 2)
+  debtAmount      Decimal                @default(0) @db.Decimal(14, 2)
+  note            String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  branch          Branch                 @relation(fields: [branchId], references: [id])
+  supplier        Supplier               @relation(fields: [supplierId], references: [id])
+  createdBy       User                   @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  items           PurchaseOrderItem[]
+  cashTxns        CashTransaction[]
+}
+
+model PurchaseOrderItem {
+  id              String                 @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  importPrice     Decimal                @db.Decimal(14, 2)
+  total           Decimal                @db.Decimal(14, 2)
+  batchNumber     String
+  expiryDate      DateTime?
+  purchaseOrder   PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product                @relation(fields: [productId], references: [id])
+  batches         ProductBatch[]
+}
+
+model CashTransaction {
+  id              String                 @id @default(cuid())
+  code            String                 @unique
+  branchId        String
+  type            CashTxnType
+  amount          Decimal                @db.Decimal(14, 2)
+  note            String?
+  orderId         String?
+  purchaseOrderId String?
+  customerId      String?
+  supplierId      String?
+  createdById     String?
+  createdAt       DateTime               @default(now())
+  branch          Branch                 @relation(fields: [branchId], references: [id])
+  order           Order?                 @relation(fields: [orderId], references: [id])
+  purchaseOrder   PurchaseOrder?         @relation(fields: [purchaseOrderId], references: [id])
+  customer        Customer?              @relation(fields: [customerId], references: [id])
+  supplier        Supplier?              @relation(fields: [supplierId], references: [id])
+  createdBy       User?                  @relation("CashTxnCreatedBy", fields: [createdById], references: [id])
+}
