@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? "dev-secret");
 
 function getRequestOrigin(request: Request) {
