@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 
 export async function POST(request: Request) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER"]);
+    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const contentType = request.headers.get("content-type") || "";
     let xlsxPath = "/Users/vitran/Downloads/302.xlsx";
     let uploadedPath: string | null = null;
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
                 phone: normalizedPhone,
                 address: item.address || null,
                 note: item.note || null,
-                openingDebt: item.openingDebt,
+                openingDebt: 0,
               },
             });
           } else {
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
                 phone: normalizedPhone,
                 address: item.address || null,
                 note: item.note || null,
-                openingDebt: item.openingDebt,
+                openingDebt: 0,
                 receivableDebt: 0,
               },
             });

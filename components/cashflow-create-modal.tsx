@@ -52,13 +52,14 @@ export function CashflowCreateModal({
         + Tạo phiếu
       </button>
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-3xl rounded-[28px] bg-white p-7 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <h3 className="text-5xl font-bold">Phiếu thu / chi</h3>
-              <button onClick={() => setOpen(false)} className="text-5xl text-slate-500">×</button>
+        <div className="fixed inset-0 z-50 bg-black/45 p-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+          <div className="flex h-full w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[28px]">
+            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-100 bg-white px-4 py-4 sm:px-7 sm:py-6">
+              <h3 className="text-2xl font-bold sm:text-5xl">Phiếu thu / chi</h3>
+              <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
-            <div className="mt-6 grid gap-4">
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
+            <div className="grid gap-4">
               <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={type} onChange={(e) => setType(e.target.value as "RECEIPT" | "PAYMENT")}>
                 <option value="RECEIPT">Phiếu thu</option>
                 <option value="PAYMENT">Phiếu chi</option>
@@ -88,7 +89,10 @@ export function CashflowCreateModal({
                 </>
               )}
               <textarea className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / ghi chú" />
-              <Button className="h-16 text-3xl" onClick={submit} disabled={isPending || amount <= 0}>{isPending ? "Đang lưu..." : "Lưu phiếu"}</Button>
+              <div className="sticky bottom-0 border-t border-slate-100 bg-white pt-4">
+                <Button className="h-16 w-full text-3xl" onClick={submit} disabled={isPending || amount <= 0}>{isPending ? "Đang lưu..." : "Lưu phiếu"}</Button>
+              </div>
+            </div>
             </div>
           </div>
         </div>

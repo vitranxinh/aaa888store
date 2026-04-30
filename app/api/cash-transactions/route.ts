@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireApiSession } from "@/lib/auth";
+import { requireApiSession, resolveActorUserId } from "@/lib/auth";
+import {
+  recalculateCustomerReceivableDebt,
+  recalculateOrderPaymentState,
+  recalculatePurchasePaymentState,
+  recalculateSupplierPayableDebt
+} from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { cashTransactionSchema } from "@/lib/validations";
@@ -8,6 +14,7 @@ import { cashTransactionSchema } from "@/lib/validations";
 export async function POST(request: Request) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const actorUserId = await resolveActorUserId(session);
     const body = await request.json();
     const parsed = cashTransactionSchema.safeParse(body);
     if (!parsed.success) {
@@ -29,52 +36,24 @@ export async function POST(request: Request) {
           supplierId: payload.supplierId || null,
           orderId: payload.orderId || null,
           purchaseOrderId: payload.purchaseOrderId || null,
-          createdById: session.id
+          createdById: actorUserId
         }
       });
 
       if (payload.type === "RECEIPT" && payload.orderId) {
-        const order = await tx.order.findUnique({ where: { id: payload.orderId } });
-        if (order) {
-          const paid = Math.min(Number(order.paidAmount) + payload.amount, Number(order.grandTotal));
-          const debt = Math.max(Number(order.grandTotal) - paid, 0);
-          await tx.order.update({
-            where: { id: order.id },
-            data: {
-              paidAmount: new Prisma.Decimal(paid),
-              debtAmount: new Prisma.Decimal(debt),
-              status: debt > 0 ? "PARTIAL" : "COMPLETED"
-            }
-          });
-          if (order.customerId) {
-            await tx.customer.update({
-              where: { id: order.customerId },
-              data: { receivableDebt: new Prisma.Decimal(Math.max(Number(order.debtAmount) - payload.amount, 0)) }
-            });
-          }
-        }
+        await recalculateOrderPaymentState(tx, payload.orderId);
+      }
+
+      if (payload.customerId) {
+        await recalculateCustomerReceivableDebt(tx, payload.customerId);
       }
 
       if (payload.type === "PAYMENT" && payload.purchaseOrderId) {
-        const purchase = await tx.purchaseOrder.findUnique({ where: { id: payload.purchaseOrderId } });
-        if (purchase) {
-          const paid = Math.min(Number(purchase.paidAmount) + payload.amount, Number(purchase.totalAmount));
-          const debt = Math.max(Number(purchase.totalAmount) - paid, 0);
-          await tx.purchaseOrder.update({
-            where: { id: purchase.id },
-            data: {
-              paidAmount: new Prisma.Decimal(paid),
-              debtAmount: new Prisma.Decimal(debt),
-              status: debt > 0 ? "PARTIAL" : "COMPLETED"
-            }
-          });
-          if (purchase.supplierId) {
-            await tx.supplier.update({
-              where: { id: purchase.supplierId },
-              data: { payableDebt: new Prisma.Decimal(Math.max(Number(purchase.debtAmount) - payload.amount, 0)) }
-            });
-          }
-        }
+        await recalculatePurchasePaymentState(tx, payload.purchaseOrderId);
+      }
+
+      if (payload.supplierId) {
+        await recalculateSupplierPayableDebt(tx, payload.supplierId);
       }
 
       return created;

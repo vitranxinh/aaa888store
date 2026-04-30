@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireApiSession } from "@/lib/auth";
+import { requireApiSession, resolveActorUserId } from "@/lib/auth";
+import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { orderPaymentSchema } from "@/lib/validations";
@@ -8,6 +9,7 @@ import { orderPaymentSchema } from "@/lib/validations";
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const actorUserId = await resolveActorUserId(session);
     const body = await request.json();
     const parsed = orderPaymentSchema.safeParse(body);
     if (!parsed.success) {
@@ -42,15 +44,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
           amount: new Prisma.Decimal(parsed.data.amount),
           orderId: order.id,
           customerId: order.customerId,
-          createdById: session.id,
+          createdById: actorUserId,
           note: parsed.data.note ?? `Thu tiền hóa đơn ${order.code}`
         }
       });
 
-      await tx.customer.update({
-        where: { id: order.customerId },
-        data: { receivableDebt: new Prisma.Decimal(Math.max(Number(order.debtAmount) - parsed.data.amount, 0)) }
-      });
+      await recalculateCustomerReceivableDebt(tx, order.customerId);
 
       return result;
     });

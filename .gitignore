@@ -1,5 +1,15 @@
-node_modules
 .next
+node_modules
 .env
-backups
+.env.local
+.env.*.local
+dist
+coverage
+*.log
+prisma/dev.db
+backups/
 .DS_Store
+tsconfig.tsbuildinfo
+New project/
+*.dump
+*.dump.enc

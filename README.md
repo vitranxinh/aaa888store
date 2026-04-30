@@ -84,9 +84,9 @@ Mở `http://localhost:3000`.
 
 ## Tài khoản mẫu
 
-- `admin@soban.vn / 12345678`
-- `manager@soban.vn / 12345678`
-- `cashier@soban.vn / 12345678`
+- `huyha@gbb.vn / huyha2005`
+- `nam@gbb.vn / nam`
+- `bich@gbb.vn / bich`
 
 ## API chính
 
@@ -106,6 +106,39 @@ Mở `http://localhost:3000`.
 ```bash
 npm run test
 ```
+
+## Backup dữ liệu mã hóa
+
+Tạo backup mã hóa local:
+
+```bash
+cd ~/Projects/soban-retail
+npm run backup:data
+```
+
+Script sẽ:
+- hỏi mật khẩu mã hóa
+- tạo file `.dump.enc`
+- lưu mặc định tại `backups/database`
+
+Nếu muốn lưu ra ổ ngoài:
+
+```bash
+cd ~/Projects/soban-retail
+npm run backup:data -- /Volumes/TenOBackup/SoBanRetail
+```
+
+Khôi phục từ file backup mã hóa:
+
+```bash
+cd ~/Projects/soban-retail
+npm run restore:data -- /duong-dan/toi/file.dump.enc
+```
+
+Lưu ý:
+- restore sẽ tự tạo thêm 1 backup mã hóa mới trước khi ghi đè dữ liệu
+- nên cất file `.dump.enc` ở ổ riêng/USB riêng và không để chung với máy làm việc
+- nên nhớ kỹ mật khẩu, vì mất mật khẩu thì không giải mã được backup
 
 ## Ghi chú triển khai
 

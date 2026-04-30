@@ -1,30 +1,33 @@
-import { endOfDay, format, startOfDay, startOfMonth, subDays } from "date-fns";
+import { eachDayOfInterval, format } from "date-fns";
+import { resolveVietnamDateRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
 
 export type DashboardRange = "today" | "7d" | "30d" | "month";
 
 function resolveRange(range: DashboardRange) {
-  const now = new Date();
-  switch (range) {
-    case "today":
-      return { start: startOfDay(now), end: endOfDay(now) };
-    case "30d":
-      return { start: startOfDay(subDays(now, 29)), end: endOfDay(now) };
-    case "month":
-      return { start: startOfMonth(now), end: endOfDay(now) };
-    case "7d":
-    default:
-      return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) };
-  }
+  const resolved = resolveVietnamDateRange(range);
+  return {
+    start: resolved?.gte ?? new Date(),
+    end: resolved?.lte ?? new Date()
+  };
 }
 
 export async function getDashboardData(branchId: string | undefined, range: DashboardRange = "today") {
   const { start, end } = resolveRange(range);
   const branchWhere = branchId ? { branchId } : {};
+  const customerWhere = {
+    NOT: { code: "KH000000" }
+  };
 
-  const [customerCount, productCount, orders, lowStock, recentOrders] = await Promise.all([
-    prisma.customer.count(),
+  const [customerCount, productCount, invoiceCount, orders, lowStock, recentOrders] = await Promise.all([
+    prisma.customer.count({ where: customerWhere }),
     prisma.product.count(),
+    prisma.order.count({
+      where: {
+        ...branchWhere,
+        createdAt: { gte: start, lte: end }
+      }
+    }),
     prisma.order.findMany({
       where: {
         ...branchWhere,
@@ -50,16 +53,15 @@ export async function getDashboardData(branchId: string | undefined, range: Dash
   const debt = orders.reduce((sum, order) => sum + Number(order.debtAmount), 0);
   const lowStockCount = lowStock.filter((item) => item.product && item.quantity <= item.product.lowStockAlert).length;
 
-  const chartDays = range === "today" ? 1 : range === "7d" ? 7 : range === "30d" ? 30 : 12;
+  const intervalDays = eachDayOfInterval({ start, end });
   const revenueByPeriod = await Promise.all(
-    Array.from({ length: chartDays }).map(async (_, index) => {
-      const date = subDays(end, chartDays - index - 1);
-      const dayStart = startOfDay(date);
-      const dayEnd = endOfDay(date);
+    intervalDays.map(async (date) => {
+      const dayKey = format(date, "yyyy-MM-dd");
+      const dayRange = resolveVietnamDateRange("custom", dayKey, dayKey);
       const aggregate = await prisma.order.aggregate({
         where: {
           ...branchWhere,
-          createdAt: { gte: dayStart, lte: dayEnd },
+          createdAt: { gte: dayRange?.gte, lte: dayRange?.lte },
           status: { in: ["COMPLETED", "PARTIAL"] }
         },
         _sum: { grandTotal: true }
@@ -75,7 +77,7 @@ export async function getDashboardData(branchId: string | undefined, range: Dash
     range,
     customerCount,
     productCount,
-    invoiceCount: recentOrders.length,
+    invoiceCount,
     revenue,
     debt,
     lowStockCount,
@@ -101,10 +103,10 @@ export async function getPosData(branchId?: string) {
     prisma.promotion.findMany({
       where: {
         isActive: true,
-        ...(branchId ? { branches: { some: { branchId } } } : {})
+        ...(branchId ? { branches: { some: { branchId } } } : {}),
       },
-      orderBy: { updatedAt: "desc" },
-      take: 20
+      orderBy: { startDate: "desc" },
+      take: 20,
     })
   ]);
 

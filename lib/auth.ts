@@ -21,16 +21,18 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 export async function createSession(user: SessionUser) {
+  const maxAge = 60 * 60 * 24 * 365;
   const token = await new SignJWT(user)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime("365d")
     .sign(JWT_SECRET);
 
   cookies().set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: false,
+    maxAge,
     path: "/"
   });
 }
@@ -73,35 +75,88 @@ export async function requireApiSession(roles?: UserRole[]) {
   return session;
 }
 
+export async function resolveActorUserId(session: SessionUser) {
+  const user =
+    (await prisma.user.findUnique({
+      where: { email: session.email },
+      select: { id: true }
+    })) ??
+    (await prisma.user.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true }
+    }));
+
+  if (!user) {
+    throw new Error("Chưa có người dùng hợp lệ trong hệ thống");
+  }
+
+  return user.id;
+}
+
 export async function authenticate(email: string, password: string) {
+  const defaultBranchId =
+    (await prisma.branch.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true }
+    }))?.id ?? null;
+
   const demoUsers: Record<
     string,
     { id: string; email: string; name: string; role: UserRole; branchId: string | null }
   > = {
-    "admin@soban.vn": {
+    "huy@gbb.vn": {
       id: "demo-admin",
-      email: "admin@soban.vn",
-      name: "Chủ cửa hàng",
+      email: "huy@gbb.vn",
+      name: "Huy",
       role: "ADMIN",
-      branchId: null
+      branchId: defaultBranchId
     },
-    "manager@soban.vn": {
+    "ha@gbb.vn": {
+      id: "demo-admin-2",
+      email: "ha@gbb.vn",
+      name: "Hà",
+      role: "ADMIN",
+      branchId: defaultBranchId
+    },
+    "nam@gbb.vn": {
       id: "demo-manager",
-      email: "manager@soban.vn",
-      name: "Quản lý quầy",
-      role: "MANAGER",
-      branchId: null
-    },
-    "cashier@soban.vn": {
-      id: "demo-cashier",
-      email: "cashier@soban.vn",
-      name: "Thu ngân",
+      email: "nam@gbb.vn",
+      name: "Nam",
       role: "CASHIER",
-      branchId: null
+      branchId: defaultBranchId
+    },
+    "bich@gbb.vn": {
+      id: "demo-cashier",
+      email: "bich@gbb.vn",
+      name: "Bich",
+      role: "CASHIER",
+      branchId: defaultBranchId
     }
   };
 
-  if (password === "12345678" && demoUsers[email]) {
+  if (demoUsers[email] && (
+    (email === "huy@gbb.vn" && password === "huy2005") ||
+    (email === "ha@gbb.vn" && password === "ha2005") ||
+    (email === "nam@gbb.vn" && password === "nam") ||
+    (email === "bich@gbb.vn" && password === "bich")
+  )) {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, name: true, role: true, branchId: true }
+    });
+
+    if (user) {
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        branchId: user.branchId
+      } satisfies SessionUser;
+    }
+
     return demoUsers[email];
   }
 

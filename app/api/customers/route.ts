@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         address: parsed.data.address || null,
         note: parsed.data.note || null,
         groupId: parsed.data.groupId || null,
-        openingDebt: parsed.data.openingDebt,
+        openingDebt: 0,
         receivableDebt: 0,
       },
     });

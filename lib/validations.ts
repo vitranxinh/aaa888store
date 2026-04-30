@@ -2,23 +2,24 @@ import { z } from "zod";
 
 export const loginSchema = z.object({
   email: z.string().email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu tối thiểu 6 ký tự")
+  password: z.string().min(3, "Mật khẩu tối thiểu 3 ký tự")
 });
 
 export const posItemSchema = z.object({
   productId: z.string().min(1),
   variantId: z.string().optional(),
-  quantity: z.number().int().positive(),
-  unitPrice: z.number().nonnegative(),
-  discountValue: z.number().nonnegative().default(0)
+  quantity: z.coerce.number().int().positive(),
+  unitPrice: z.coerce.number().nonnegative(),
+  discountValue: z.coerce.number().nonnegative().default(0)
 });
 
 export const posCheckoutSchema = z.object({
   branchId: z.string().min(1),
   customerId: z.string().min(1),
   paymentMethod: z.enum(["CASH", "BANK_TRANSFER", "MIXED"]),
-  paidAmount: z.number().nonnegative(),
-  orderDiscount: z.number().nonnegative().default(0),
+  paidAmount: z.coerce.number().nonnegative(),
+  orderDiscount: z.coerce.number().nonnegative().default(0),
+  otherCharge: z.coerce.number().nonnegative().default(0),
   note: z.string().optional(),
   status: z.enum(["DRAFT", "COMPLETED", "PARTIAL", "CANCELLED"]).default("COMPLETED"),
   items: z.array(posItemSchema).min(1, "Giỏ hàng đang trống")
@@ -41,12 +42,12 @@ export const productSchema = z.object({
 export const customerSchema = z.object({
   code: z.string().min(3),
   name: z.string().min(2),
-  phone: z.string().min(9),
+  phone: z.string().min(1),
   email: z.string().email().optional().or(z.literal("")),
   address: z.string().optional(),
   note: z.string().optional(),
   groupId: z.string().optional(),
-  openingDebt: z.number().nonnegative().default(0)
+  openingDebt: z.number().default(0)
 });
 
 export const supplierSchema = z.object({
@@ -72,7 +73,7 @@ export const purchaseItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().positive(),
   importPrice: z.number().nonnegative(),
-  batchNumber: z.string().min(1),
+  batchNumber: z.string().optional().or(z.literal("")),
   expiryDate: z.string().optional()
 });
 

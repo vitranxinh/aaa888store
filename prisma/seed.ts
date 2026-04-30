@@ -38,37 +38,49 @@ async function main() {
   const branch = await prisma.branch.create({
     data: {
       code: "Q302",
-      name: "Quầy 302 Hapulico",
+      name: "AAA888",
       address: "Thanh Xuân, Hà Nội",
       phone: "0918377022"
     }
   });
 
-  const passwordHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD ?? "12345678", 10);
-  const [admin, manager, cashier] = await prisma.$transaction([
+  const adminHuyPasswordHash = await bcrypt.hash(process.env.SEED_ADMIN_HUY_PASSWORD ?? "huy2005", 10);
+  const adminHaPasswordHash = await bcrypt.hash(process.env.SEED_ADMIN_HA_PASSWORD ?? "ha2005", 10);
+  const employeeNamPasswordHash = await bcrypt.hash(process.env.SEED_EMPLOYEE_NAM_PASSWORD ?? "nam", 10);
+  const employeeBichPasswordHash = await bcrypt.hash(process.env.SEED_EMPLOYEE_BICH_PASSWORD ?? "bich", 10);
+  const [ownerHuy, ownerHa, employeeA, employeeB] = await prisma.$transaction([
     prisma.user.create({
       data: {
-        name: "Chủ cửa hàng",
-        email: process.env.SEED_ADMIN_EMAIL ?? "admin@soban.vn",
-        passwordHash,
+        name: "Huy",
+        email: process.env.SEED_ADMIN_HUY_EMAIL ?? "huy@gbb.vn",
+        passwordHash: adminHuyPasswordHash,
         role: UserRole.ADMIN,
         branchId: branch.id
       }
     }),
     prisma.user.create({
       data: {
-        name: "Quản lý quầy",
-        email: "manager@soban.vn",
-        passwordHash,
-        role: UserRole.MANAGER,
+        name: "Hà",
+        email: process.env.SEED_ADMIN_HA_EMAIL ?? "ha@gbb.vn",
+        passwordHash: adminHaPasswordHash,
+        role: UserRole.ADMIN,
         branchId: branch.id
       }
     }),
     prisma.user.create({
       data: {
-        name: "Thu ngân",
-        email: "cashier@soban.vn",
-        passwordHash,
+        name: "Nam",
+        email: process.env.SEED_EMPLOYEE_NAM_EMAIL ?? "nam@gbb.vn",
+        passwordHash: employeeNamPasswordHash,
+        role: UserRole.CASHIER,
+        branchId: branch.id
+      }
+    }),
+    prisma.user.create({
+      data: {
+        name: "Bich",
+        email: process.env.SEED_EMPLOYEE_BICH_EMAIL ?? "bich@gbb.vn",
+        passwordHash: employeeBichPasswordHash,
         role: UserRole.CASHIER,
         branchId: branch.id
       }
@@ -228,7 +240,7 @@ async function main() {
       code: "PN000001",
       branchId: branch.id,
       supplierId: suppliers[0].id,
-      createdById: manager.id,
+      createdById: employeeA.id,
       status: PurchaseStatus.PARTIAL,
       totalAmount: 2700000,
       paidAmount: 1500000,
@@ -277,7 +289,7 @@ async function main() {
         type: StockTxnType.IMPORT,
         quantity: item.quantity,
         referenceCode: purchase1.code,
-        createdById: manager.id,
+        createdById: employeeA.id,
         note: `Nhập lô ${item.batchNumber}`
       }
     });
@@ -288,7 +300,7 @@ async function main() {
       code: "HD050838",
       branchId: branch.id,
       customerId: customerA.id,
-      createdById: cashier.id,
+      createdById: employeeB.id,
       status: OrderStatus.COMPLETED,
       subtotal: 400000,
       discountTotal: 0,
@@ -317,7 +329,7 @@ async function main() {
       code: "HD556384",
       branchId: branch.id,
       customerId: customerB.id,
-      createdById: cashier.id,
+      createdById: employeeB.id,
       status: OrderStatus.PARTIAL,
       subtotal: 204999,
       discountTotal: 0,
@@ -346,7 +358,7 @@ async function main() {
       code: "HD512137",
       branchId: branch.id,
       customerId: walkIn.id,
-      createdById: cashier.id,
+      createdById: employeeB.id,
       status: OrderStatus.COMPLETED,
       subtotal: 0,
       discountTotal: 0,
@@ -367,7 +379,7 @@ async function main() {
         amount: 400000,
         customerId: customerA.id,
         orderId: order1.id,
-        createdById: cashier.id,
+        createdById: employeeB.id,
         note: "Thu đủ hóa đơn HD050838"
       },
       {
@@ -377,7 +389,7 @@ async function main() {
         amount: 1500000,
         supplierId: suppliers[0].id,
         purchaseOrderId: purchase1.id,
-        createdById: manager.id,
+        createdById: employeeA.id,
         note: "Thanh toán một phần phiếu nhập"
       }
     ]
@@ -398,7 +410,7 @@ async function main() {
 
   console.log({
     branch: branch.name,
-    users: [admin.email, manager.email, cashier.email],
+    users: [ownerHuy.email, ownerHa.email, employeeA.email, employeeB.email],
     customers: 3,
     suppliers: 2,
     products: 4,

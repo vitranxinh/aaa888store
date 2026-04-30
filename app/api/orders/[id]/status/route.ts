@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/auth";
+import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -22,8 +23,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     await prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id: params.id },
-        data: { status: body.status }
+        data: {
+          status: body.status,
+          debtAmount: 0
+        }
       });
+
+      await recalculateCustomerReceivableDebt(tx, order.customerId);
     });
 
     return NextResponse.json({ ok: true });

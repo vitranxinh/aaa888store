@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/auth";
 import { productSchema } from "@/lib/validations";
 
-function buildSlug(name: string) {
-  return name
+function buildSlug(name: string, sku: string) {
+  return `${name}-${sku}`
     .toLowerCase()
     .trim()
     .replace(/\//g, "-")
@@ -49,7 +49,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       where: { id: params.id },
       data: {
         name: parsed.data.name,
-        slug: buildSlug(parsed.data.name),
+        slug: buildSlug(parsed.data.name, parsed.data.sku),
         sku: parsed.data.sku,
         barcode: parsed.data.barcode || null,
         imageUrl: parsed.data.imageUrl || null,
@@ -85,11 +85,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
           select: {
             orderItems: true,
             purchaseItems: true,
-            inventoryTxns: true,
-            variants: true,
-            inventories: true,
-            batches: true,
-            promoProducts: true
+            inventoryTxns: true
           }
         }
       }

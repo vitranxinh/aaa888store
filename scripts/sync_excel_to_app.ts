@@ -25,8 +25,8 @@ type ImportedCustomer = {
   openingDebt: number;
 };
 
-function toSlug(value: string) {
-  return value
+function toSlug(value: string, suffix = "") {
+  return `${value}${suffix ? `-${suffix}` : ""}`
     .toLowerCase()
     .trim()
     .replace(/\//g, "-")
@@ -83,7 +83,7 @@ async function syncProducts(xlsxPath: string) {
         where: { sku: item.sku },
         update: {
           name: item.name,
-          slug: toSlug(item.name),
+          slug: toSlug(item.name, item.sku),
           categoryId,
           sellingPrice: item.sellingPrice,
           imageUrl: item.imageUrl || null,
@@ -92,7 +92,7 @@ async function syncProducts(xlsxPath: string) {
         },
         create: {
           name: item.name,
-          slug: toSlug(item.name),
+          slug: toSlug(item.name, item.sku),
           sku: item.sku,
           barcode: null,
           categoryId,
@@ -128,7 +128,6 @@ async function syncProducts(xlsxPath: string) {
           data: {
             branchId,
             productId: product.id,
-            variantId: null,
             quantity: Math.round(item.stock || 0),
             reservedQty: 0,
           },

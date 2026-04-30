@@ -6,10 +6,10 @@ export function AppHeader({ title, description, session }: { title: string; desc
   return (
     <header className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
       <div>
-        <h2 className="text-5xl font-bold text-slate-900">{title}</h2>
-        <p className="mt-2 text-2xl text-slate-500">{description}</p>
+        <h2 className="text-[2.25rem] font-bold leading-tight text-slate-900 sm:text-4xl lg:text-5xl">{title}</h2>
+        <p className="mt-2 text-base text-slate-500 sm:text-lg lg:text-2xl">{description}</p>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="hidden items-center gap-3 lg:flex">
         <div className="text-right">
           <p className="text-sm font-medium text-slate-900">{session.name}</p>
           <p className="text-xs uppercase tracking-wide text-slate-500">{session.role}</p>

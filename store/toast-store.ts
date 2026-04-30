@@ -9,6 +9,14 @@ export type Toast = {
   variant?: "success" | "error";
 };
 
+function createToastId() {
+  if (typeof globalThis !== "undefined" && "crypto" in globalThis && typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `toast-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 type ToastStore = {
   toasts: Toast[];
   push: (toast: Omit<Toast, "id">) => void;
@@ -19,7 +27,7 @@ export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   push: (toast) =>
     set((state) => ({
-      toasts: [...state.toasts, { ...toast, id: crypto.randomUUID() }]
+      toasts: [...state.toasts, { ...toast, id: createToastId() }]
     })),
   remove: (id) =>
     set((state) => ({

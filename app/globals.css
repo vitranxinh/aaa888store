@@ -4,6 +4,17 @@
 
 body {
   @apply bg-background text-foreground antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 19px;
+  }
+
+  body {
+    background: linear-gradient(180deg, #f8fafc 0%, #eef6f3 100%);
+  }
 }
 
 .grid-layout {
@@ -16,4 +27,39 @@ body {
 
 .table-shell {
   @apply overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+@page {
+  size: A4 landscape;
+  margin: 6mm;
+}
+
+@media print {
+  html,
+  body {
+    width: 297mm;
+    min-height: 210mm;
+    background: #fff !important;
+  }
+
+  .invoice-sheet {
+    width: 285mm;
+    min-height: auto;
+    padding: 4mm !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    page-break-inside: auto;
+  }
+
+  .invoice-table th,
+  .invoice-table td {
+    line-height: 1.1;
+  }
 }

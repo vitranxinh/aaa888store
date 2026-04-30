@@ -34,7 +34,15 @@ type Props = {
 export function ProductEditModal({ product, categories, brands, canDelete = false }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isAddingBrand, setIsAddingBrand] = useState(false);
   const [imagePreview, setImagePreview] = useState(product.imageUrl || "");
+  const [categoryOptions, setCategoryOptions] = useState(categories);
+  const [brandOptions, setBrandOptions] = useState(brands);
+  const [showCategoryCreator, setShowCategoryCreator] = useState(false);
+  const [showBrandCreator, setShowBrandCreator] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newBrandName, setNewBrandName] = useState("");
   const pushToast = useToastStore((state) => state.push);
 
   const defaultValues = useMemo<FormValues>(
@@ -112,6 +120,64 @@ export function ProductEditModal({ product, categories, brands, canDelete = fals
     });
   }
 
+  async function createCategory() {
+    const categoryName = newCategoryName.trim();
+    if (categoryName.length < 2) {
+      pushToast({ title: "Không thể thêm danh mục", description: "Tên danh mục phải có ít nhất 2 ký tự.", variant: "error" });
+      return;
+    }
+
+    setIsAddingCategory(true);
+    try {
+      const response = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: categoryName })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        pushToast({ title: "Không thể thêm danh mục", description: payload.error, variant: "error" });
+        return;
+      }
+      setCategoryOptions((prev) => (prev.some((item) => item.id === payload.id) ? prev : [...prev, payload]));
+      form.setValue("categoryId", payload.id, { shouldDirty: true });
+      setNewCategoryName("");
+      setShowCategoryCreator(false);
+      pushToast({ title: "Đã thêm danh mục", description: payload.name });
+    } finally {
+      setIsAddingCategory(false);
+    }
+  }
+
+  async function createBrand() {
+    const brandName = newBrandName.trim();
+    if (brandName.length < 2) {
+      pushToast({ title: "Không thể thêm thương hiệu", description: "Tên thương hiệu phải có ít nhất 2 ký tự.", variant: "error" });
+      return;
+    }
+
+    setIsAddingBrand(true);
+    try {
+      const response = await fetch("/api/brands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: brandName })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        pushToast({ title: "Không thể thêm thương hiệu", description: payload.error, variant: "error" });
+        return;
+      }
+      setBrandOptions((prev) => (prev.some((item) => item.id === payload.id) ? prev : [...prev, payload]));
+      form.setValue("brandId", payload.id, { shouldDirty: true });
+      setNewBrandName("");
+      setShowBrandCreator(false);
+      pushToast({ title: "Đã thêm thương hiệu", description: payload.name });
+    } finally {
+      setIsAddingBrand(false);
+    }
+  }
+
   return (
     <>
       <button
@@ -122,19 +188,20 @@ export function ProductEditModal({ product, categories, brands, canDelete = fals
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-3xl rounded-[28px] bg-white p-7 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 p-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+          <div className="flex h-full w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[28px]">
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white px-4 py-4 sm:px-7 sm:py-6">
               <div>
-                <h3 className="text-4xl font-bold text-slate-900">Sửa sản phẩm</h3>
-                <p className="mt-1 text-base text-slate-500">{product.sku}</p>
+                <h3 className="text-2xl font-bold text-slate-900 sm:text-4xl">Sửa sản phẩm</h3>
+                <p className="mt-1 text-sm text-slate-500 sm:text-base">{product.sku}</p>
               </div>
-              <button onClick={() => setOpen(false)} className="text-5xl leading-none text-slate-500">
+              <button onClick={() => setOpen(false)} className="text-4xl leading-none text-slate-500 sm:text-5xl">
                 ×
               </button>
             </div>
 
-            <form className="mt-6 grid gap-4" onSubmit={form.handleSubmit(onSubmit)}>
+            <form className="flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6" onSubmit={form.handleSubmit(onSubmit)}>
+              <div className="grid gap-4">
               <Input placeholder="Tên sản phẩm" {...form.register("name")} className="h-14 text-xl" />
               <div className="grid gap-4 md:grid-cols-2">
                 <Input placeholder="SKU" {...form.register("sku")} className="h-14 text-xl" />
@@ -158,22 +225,64 @@ export function ProductEditModal({ product, categories, brands, canDelete = fals
                 </div>
               ) : null}
               <div className="grid gap-4 md:grid-cols-2">
-                <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" {...form.register("categoryId")}>
+                <div className="grid gap-2">
+                <select
+                  className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                  value={form.watch("categoryId")}
+                  onChange={(event) => form.setValue("categoryId", event.target.value, { shouldDirty: true })}
+                >
                   <option value="">Chọn danh mục</option>
-                  {categories.map((category) => (
+                  {categoryOptions.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
                   ))}
                 </select>
-                <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" {...form.register("brandId")}>
+                <button
+                  type="button"
+                  className="text-left text-sm font-semibold text-emerald-700"
+                  onClick={() => setShowCategoryCreator((prev) => !prev)}
+                >
+                  + Thêm danh mục mới
+                </button>
+                {showCategoryCreator ? (
+                  <div className="flex gap-2">
+                    <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} className="h-12 text-base" />
+                    <Button type="button" className="shrink-0" disabled={isAddingCategory} onClick={createCategory}>
+                      {isAddingCategory ? "Đang thêm..." : "Thêm"}
+                    </Button>
+                  </div>
+                ) : null}
+                </div>
+                <div className="grid gap-2">
+                <select
+                  className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                  value={form.watch("brandId")}
+                  onChange={(event) => form.setValue("brandId", event.target.value, { shouldDirty: true })}
+                >
                   <option value="">Chọn thương hiệu</option>
-                  {brands.map((brand) => (
+                  {brandOptions.map((brand) => (
                     <option key={brand.id} value={brand.id}>
                       {brand.name}
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  className="text-left text-sm font-semibold text-emerald-700"
+                  onClick={() => setShowBrandCreator((prev) => !prev)}
+                >
+                  + Thêm thương hiệu mới
+                </button>
+                {showBrandCreator ? (
+                  <div className="flex gap-2">
+                    <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} className="h-12 text-base" />
+                    <Button type="button" className="shrink-0" disabled={isAddingBrand} onClick={createBrand}>
+                      {isAddingBrand ? "Đang thêm..." : "Thêm"}
+                    </Button>
+                  </div>
+                ) : null}
+                </div>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <Input type="number" placeholder="Giá vốn" {...form.register("costPrice", { valueAsNumber: true })} className="h-14 text-xl" />
@@ -200,20 +309,23 @@ export function ProductEditModal({ product, categories, brands, canDelete = fals
                 className="rounded-2xl border border-slate-300 px-4 py-4 text-xl"
                 {...form.register("description")}
               />
-              <div className="flex flex-col gap-3 md:flex-row">
-                <Button className="h-14 flex-1 text-2xl" disabled={isPending}>
-                  {isPending ? "Đang lưu..." : "Lưu thay đổi"}
-                </Button>
-                {canDelete ? (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={isPending}
-                    className="h-14 rounded-2xl border border-red-200 bg-red-50 px-6 text-2xl font-semibold text-red-600 disabled:opacity-60"
-                  >
-                    {isPending ? "Đang xử lý..." : "Xóa sản phẩm"}
-                  </button>
-                ) : null}
+              <div className="sticky bottom-0 border-t border-slate-100 bg-white pt-4">
+              <div className="flex flex-col gap-3 sm:flex-row">
+              <Button className="h-14 w-full flex-1 text-2xl" disabled={isPending}>
+                {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+              </Button>
+              {canDelete ? (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="h-14 rounded-2xl border border-red-200 bg-red-50 px-6 text-2xl font-semibold text-red-600 disabled:opacity-60"
+                >
+                  {isPending ? "Đang xử lý..." : "Xóa sản phẩm"}
+                </button>
+              ) : null}
+              </div>
+              </div>
               </div>
             </form>
           </div>

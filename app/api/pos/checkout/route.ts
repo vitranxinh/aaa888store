@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/auth";
 import { createOrderFromPayload } from "@/lib/order-service";
+import { prisma } from "@/lib/prisma";
 import { posCheckoutSchema } from "@/lib/validations";
 
 export async function POST(request: Request) {
@@ -12,9 +13,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten().formErrors[0] ?? "Dữ liệu không hợp lệ" }, { status: 400 });
     }
 
+    const actor =
+      (await prisma.user.findUnique({
+        where: { email: session.email },
+        select: { id: true }
+      })) ??
+      (await prisma.user.findFirst({
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true }
+      }));
+
+    if (!actor) {
+      return NextResponse.json({ error: "Chưa có người dùng hợp lệ trong hệ thống để tạo hóa đơn" }, { status: 500 });
+    }
+
     const order = await createOrderFromPayload({
       ...parsed.data,
-      createdById: session.id
+      createdById: actor.id
     });
 
     return NextResponse.json({ ok: true, order });

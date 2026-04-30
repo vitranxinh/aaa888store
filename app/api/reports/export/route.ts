@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER"]);
+    const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    if (session.role === "CASHIER") {
+      return NextResponse.json({ error: "Tài khoản nhân viên không được tải Excel" }, { status: 403 });
+    }
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
 

@@ -56,7 +56,6 @@ export function CustomerCreateForm({ groups }: Props) {
           <Input placeholder="Email" {...form.register("email")} />
         </div>
         <Input placeholder="Địa chỉ" {...form.register("address")} />
-        <Input type="number" placeholder="Công nợ đầu kỳ" {...form.register("openingDebt", { valueAsNumber: true })} />
         <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" {...form.register("groupId")}>
           <option value="">Chọn nhóm khách</option>
           {groups.map((group) => (

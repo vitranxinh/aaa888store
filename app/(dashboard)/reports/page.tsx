@@ -6,7 +6,9 @@ import { formatCurrency } from "@/lib/utils";
 import { requireSession } from "@/lib/auth";
 
 export default async function ReportsPage() {
-  const session = await requireSession(["ADMIN", "MANAGER"]);
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const canExportExcel = session.role !== "CASHIER";
+  const canSeeCustomerPrivateFields = session.role !== "CASHIER";
 
   const [orders, customers, inventories, orderItems] = await Promise.all([
     prisma.order.findMany({ where: { branchId: session.branchId ?? undefined, status: "COMPLETED" } }),
@@ -51,9 +53,13 @@ export default async function ReportsPage() {
         </Card>
         <Card>
           <p className="text-sm text-slate-500">Xuất dữ liệu</p>
-          <Link href="/api/reports/export?type=sales" className="mt-2 inline-block text-sm font-semibold text-teal-700">
-            Tải CSV báo cáo bán hàng
-          </Link>
+          {canExportExcel ? (
+            <Link href="/api/reports/export?type=sales" className="mt-2 inline-block text-sm font-semibold text-teal-700">
+              Tải CSV báo cáo bán hàng
+            </Link>
+          ) : (
+            <p className="mt-2 text-sm font-medium text-slate-400">Tài khoản nhân viên không được tải Excel/CSV.</p>
+          )}
         </Card>
       </div>
 
@@ -67,7 +73,7 @@ export default async function ReportsPage() {
               <div key={customer.id} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
                 <div>
                   <p className="font-medium text-slate-900">{customer.name}</p>
-                  <p className="text-sm text-slate-500">{customer.phone}</p>
+                  <p className="text-sm text-slate-500">{canSeeCustomerPrivateFields ? customer.phone : "Thông tin liên hệ bị ẩn"}</p>
                 </div>
                 <span className="text-sm font-semibold text-teal-700">{formatCurrency(Number(customer.totalSpend))}</span>
               </div>

@@ -5,8 +5,8 @@ import { PrismaClient } from "@prisma/client";
 const execFileAsync = promisify(execFile);
 const prisma = new PrismaClient();
 
-function toSlug(value) {
-  return value
+function toSlug(value, suffix = "") {
+  return `${value}${suffix ? `-${suffix}` : ""}`
     .toLowerCase()
     .trim()
     .replace(/\//g, "-")
@@ -41,79 +41,83 @@ async function syncProducts(xlsxPath) {
   const branchId = await ensureBranchId();
   const parsed = await readJson("scripts/import_products_from_xlsx.py", xlsxPath);
   let total = 0;
+  const categoryCache = new Map();
 
-  await prisma.$transaction(async (tx) => {
-    for (const item of parsed.products) {
-      let categoryId = null;
+  for (const item of parsed.products) {
+    let categoryId = null;
 
-      if (item.category) {
-        const category = await tx.category.upsert({
-          where: { slug: toSlug(item.category) },
+    if (item.category) {
+      const categorySlug = toSlug(item.category);
+      if (categoryCache.has(categorySlug)) {
+        categoryId = categoryCache.get(categorySlug);
+      } else {
+        const category = await prisma.category.upsert({
+          where: { slug: categorySlug },
           update: { name: item.category },
-          create: { name: item.category, slug: toSlug(item.category) },
+          create: { name: item.category, slug: categorySlug },
         });
         categoryId = category.id;
+        categoryCache.set(categorySlug, category.id);
       }
+    }
 
-      const product = await tx.product.upsert({
-        where: { sku: item.sku },
-        update: {
-          name: item.name,
-          slug: toSlug(item.name),
-          categoryId,
-          sellingPrice: item.sellingPrice,
-          imageUrl: item.imageUrl || null,
-          status: item.status,
-          description: item.description || null,
-        },
-        create: {
-          name: item.name,
-          slug: toSlug(item.name),
-          sku: item.sku,
-          barcode: null,
-          categoryId,
-          brandId: null,
-          costPrice: 0,
-          sellingPrice: item.sellingPrice,
-          imageUrl: item.imageUrl || null,
-          lowStockAlert: 10,
-          status: item.status,
-          description: item.description || null,
+    const product = await prisma.product.upsert({
+      where: { sku: item.sku },
+      update: {
+        name: item.name,
+        slug: toSlug(item.name, item.sku),
+        categoryId,
+        sellingPrice: item.sellingPrice,
+        imageUrl: item.imageUrl || null,
+        status: item.status,
+        description: item.description || null,
+      },
+      create: {
+        name: item.name,
+        slug: toSlug(item.name, item.sku),
+        sku: item.sku,
+        barcode: null,
+        categoryId,
+        brandId: null,
+        costPrice: 0,
+        sellingPrice: item.sellingPrice,
+        imageUrl: item.imageUrl || null,
+        lowStockAlert: 10,
+        status: item.status,
+        description: item.description || null,
+      },
+    });
+
+    const existingInventory = await prisma.inventory.findFirst({
+      where: {
+        branchId,
+        productId: product.id,
+        variantId: null,
+      },
+      select: { id: true },
+    });
+
+    if (existingInventory) {
+      await prisma.inventory.update({
+        where: { id: existingInventory.id },
+        data: {
+          quantity: Math.round(item.stock || 0),
+          reservedQty: 0,
         },
       });
-
-      const existingInventory = await tx.inventory.findFirst({
-        where: {
+    } else {
+      await prisma.inventory.create({
+        data: {
           branchId,
           productId: product.id,
-          variantId: null,
+          quantity: Math.round(item.stock || 0),
+          reservedQty: 0,
         },
-        select: { id: true },
       });
-
-      if (existingInventory) {
-        await tx.inventory.update({
-          where: { id: existingInventory.id },
-          data: {
-            quantity: Math.round(item.stock || 0),
-            reservedQty: 0,
-          },
-        });
-      } else {
-        await tx.inventory.create({
-          data: {
-            branchId,
-            productId: product.id,
-            variantId: null,
-            quantity: Math.round(item.stock || 0),
-            reservedQty: 0,
-          },
-        });
-      }
-
-      total += 1;
     }
-  });
+
+    total += 1;
+  }
 
   return { total, source: parsed.source };
 }
@@ -122,53 +126,51 @@ async function syncCustomers(xlsxPath) {
   const parsed = await readJson("scripts/import_customers_from_xlsx.py", xlsxPath);
   let total = 0;
 
-  await prisma.$transaction(async (tx) => {
-    for (const item of parsed.customers) {
-      if (!item.code || !item.name) continue;
+  for (const item of parsed.customers) {
+    if (!item.code || !item.name) continue;
 
-      const normalizedPhone = item.phone.trim() || `NO-PHONE-${item.code}`;
-      const existingByCode = await tx.customer.findUnique({
-        where: { code: item.code },
-        select: { id: true },
+    const normalizedPhone = item.phone.trim() || `NO-PHONE-${item.code}`;
+    const existingByCode = await prisma.customer.findUnique({
+      where: { code: item.code },
+      select: { id: true },
+    });
+    const existingByPhone = normalizedPhone.startsWith("NO-PHONE-")
+      ? null
+      : await prisma.customer.findFirst({
+          where: { phone: normalizedPhone },
+          select: { id: true },
+        });
+
+    const targetId = existingByCode?.id ?? existingByPhone?.id ?? null;
+
+    if (targetId) {
+      await prisma.customer.update({
+        where: { id: targetId },
+        data: {
+          code: item.code,
+          name: item.name,
+          phone: normalizedPhone,
+          address: item.address || null,
+          note: item.note || null,
+          openingDebt: 0,
+        },
       });
-      const existingByPhone = normalizedPhone.startsWith("NO-PHONE-")
-        ? null
-        : await tx.customer.findFirst({
-            where: { phone: normalizedPhone },
-            select: { id: true },
-          });
-
-      const targetId = existingByCode?.id ?? existingByPhone?.id ?? null;
-
-      if (targetId) {
-        await tx.customer.update({
-          where: { id: targetId },
-          data: {
-            code: item.code,
-            name: item.name,
-            phone: normalizedPhone,
-            address: item.address || null,
-            note: item.note || null,
-            openingDebt: item.openingDebt || 0,
-          },
-        });
-      } else {
-        await tx.customer.create({
-          data: {
-            code: item.code,
-            name: item.name,
-            phone: normalizedPhone,
-            address: item.address || null,
-            note: item.note || null,
-            openingDebt: item.openingDebt || 0,
-            receivableDebt: 0,
-          },
-        });
-      }
-
-      total += 1;
+    } else {
+      await prisma.customer.create({
+        data: {
+          code: item.code,
+          name: item.name,
+          phone: normalizedPhone,
+          address: item.address || null,
+          note: item.note || null,
+          openingDebt: 0,
+          receivableDebt: 0,
+        },
+      });
     }
-  });
+
+    total += 1;
+  }
 
   return { total, source: parsed.source };
 }

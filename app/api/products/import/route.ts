@@ -85,7 +85,7 @@ export async function POST(request: Request) {
             categoryId = category.id;
           }
 
-          const slug = item.name.toLowerCase().replace(/ /g, "-").replace(/\//g, "-");
+          const slug = `${item.name}-${item.sku}`.toLowerCase().replace(/ /g, "-").replace(/\//g, "-").replace(/-+/g, "-");
           const product = await tx.product.upsert({
             where: { sku: item.sku },
             update: {
@@ -125,14 +125,16 @@ export async function POST(request: Request) {
           if (existingInventory) {
             await tx.inventory.update({
               where: { id: existingInventory.id },
-              data: { quantity: Math.round(item.stock) },
+              data: {
+                quantity: Math.round(item.stock),
+                reservedQty: 0,
+              },
             });
           } else {
             await tx.inventory.create({
               data: {
                 branchId,
                 productId: product.id,
-                variantId: null,
                 quantity: Math.round(item.stock),
                 reservedQty: 0,
               },

@@ -1,10 +1,11 @@
 import { Card } from "@/components/ui/card";
+import { AdminBackupCard } from "@/components/admin-backup-card";
 import { rolePermissions } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 
 export default async function SettingsPage() {
-  await requireSession(["ADMIN"]);
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const branches = await prisma.branch.findMany({ orderBy: { name: "asc" } });
 
   return (
@@ -42,6 +43,8 @@ export default async function SettingsPage() {
           <li>Có thể mở rộng thêm mẫu hóa đơn VAT, cấu hình thuế và mẫu in POS</li>
         </ul>
       </Card>
+
+      {session.role === "ADMIN" ? <AdminBackupCard /> : null}
     </div>
   );
 }

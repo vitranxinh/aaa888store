@@ -1,10 +1,27 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "SoBan Retail",
-  description: "Nền tảng quản lý bán lẻ cho cửa hàng và chuỗi nhỏ tại Việt Nam"
+  title: "AAA888",
+  description: "Nền tảng quản lý bán lẻ cho cửa hàng và chuỗi nhỏ tại Việt Nam",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "AAA888"
+  },
+  formatDetection: {
+    telephone: false
+  }
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  themeColor: "#059669"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

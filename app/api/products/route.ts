@@ -3,6 +3,20 @@ import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/auth";
 import { productSchema } from "@/lib/validations";
 
+async function generateProductSku() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = `SP${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
+    const existing = await prisma.product.findUnique({
+      where: { sku: candidate },
+      select: { id: true }
+    });
+
+    if (!existing) return candidate;
+  }
+
+  return `SP${Date.now()}${Math.floor(Math.random() * 900 + 100)}`;
+}
+
 export async function GET() {
   try {
     await requireApiSession(["ADMIN", "MANAGER"]);
@@ -18,13 +32,26 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER"]);
+    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const body = await request.json();
-    const parsed = productSchema.safeParse(body);
+    const productInput = {
+      name: body.name,
+      sku: body.sku || (await generateProductSku()),
+      barcode: body.barcode || "",
+      imageUrl: body.imageUrl || "",
+      categoryId: body.categoryId || "",
+      brandId: body.brandId || "",
+      costPrice: typeof body.costPrice === "number" ? body.costPrice : 0,
+      sellingPrice: typeof body.sellingPrice === "number" ? body.sellingPrice : Number(body.sellingPrice ?? 0),
+      lowStockAlert: typeof body.lowStockAlert === "number" ? body.lowStockAlert : 10,
+      status: body.status || "ACTIVE",
+      description: body.description || ""
+    };
+    const parsed = productSchema.safeParse(productInput);
     if (!parsed.success) {
       return NextResponse.json({ error: "Dữ liệu sản phẩm không hợp lệ" }, { status: 400 });
     }
-    const slug = parsed.data.name.toLowerCase().replace(/ /g, "-");
+    const slug = `${parsed.data.name}-${parsed.data.sku}`.toLowerCase().replace(/\//g, "-").replace(/ /g, "-").replace(/-+/g, "-");
     const product = await prisma.product.create({
       data: {
         ...parsed.data,
