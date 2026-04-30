@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/auth";
 import { supplierSchema } from "@/lib/validations";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
