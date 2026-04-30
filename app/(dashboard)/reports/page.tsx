@@ -9,11 +9,25 @@ export default async function ReportsPage() {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canExportExcel = session.role !== "CASHIER";
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
+  const branchWhere = { branchId: session.branchId ?? undefined };
 
-  const [orders, customers, inventories, orderItems] = await Promise.all([
-    prisma.order.findMany({ where: { branchId: session.branchId ?? undefined, status: "COMPLETED" } }),
+  const [salesAggregate, customers, inventories, orderItems] = await Promise.all([
+    prisma.order.aggregate({
+      where: { ...branchWhere, status: "COMPLETED" },
+      _sum: { grandTotal: true, profitEstimate: true }
+    }),
     prisma.customer.findMany({ orderBy: { totalSpend: "desc" }, take: 5 }),
-    prisma.inventory.findMany({ where: { branchId: session.branchId ?? undefined }, include: { product: true } }),
+    prisma.inventory.findMany({
+      where: branchWhere,
+      select: {
+        quantity: true,
+        product: {
+          select: {
+            costPrice: true
+          }
+        }
+      }
+    }),
     prisma.orderItem.groupBy({
       by: ["productId"],
       _sum: { quantity: true, total: true },
@@ -22,8 +36,8 @@ export default async function ReportsPage() {
     })
   ]);
 
-  const sales = orders.reduce((sum, order) => sum + Number(order.grandTotal), 0);
-  const profit = orders.reduce((sum, order) => sum + Number(order.profitEstimate), 0);
+  const sales = Number(salesAggregate._sum.grandTotal ?? 0);
+  const profit = Number(salesAggregate._sum.profitEstimate ?? 0);
   const inventoryValue = inventories.reduce(
     (sum, item) => sum + item.quantity * Number(item.product?.costPrice ?? 0),
     0

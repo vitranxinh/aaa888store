@@ -1,35 +1,106 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
 
 export function PurchaseCreateModal({
   branchId,
-  suppliers,
-  products
+  suppliers
 }: {
   branchId: string;
   suppliers: { id: string; name: string }[];
-  products: { id: string; name: string }[];
 }) {
+  type ProductSuggestion = {
+    id: string;
+    label: string;
+    sellingPrice: number;
+    meta?: string;
+  };
+
+  type PurchaseLine = {
+    productId: string;
+    productName: string;
+    quantity: number;
+    importPrice: number;
+    batchNumber: string;
+    expiryDate: string;
+  };
+
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [note, setNote] = useState("");
   const [search, setSearch] = useState("");
   const [paidAmount, setPaidAmount] = useState(0);
-  const [items, setItems] = useState<Array<{ productId: string; quantity: number; importPrice: number; batchNumber: string; expiryDate: string }>>([]);
+  const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+  const [items, setItems] = useState<PurchaseLine[]>([]);
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
 
-  const matched = useMemo(() => products.filter((item) => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 10), [products, search]);
+  useEffect(() => {
+    if (!open) return;
+    const query = search.trim();
+
+    if (!query) {
+      setProductResults([]);
+      setIsSearchingProducts(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearchingProducts(true);
+      try {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=20`, {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          setProductResults([]);
+          return;
+        }
+
+        const payload = (await response.json()) as Array<{
+          id: string;
+          label: string;
+          sellingPrice?: number;
+          meta?: string;
+        }>;
+        setProductResults(
+          payload.map((item) => ({
+            id: item.id,
+            label: item.label,
+            sellingPrice: Number(item.sellingPrice ?? 0),
+            meta: item.meta
+          }))
+        );
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setProductResults([]);
+        }
+      } finally {
+        setIsSearchingProducts(false);
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, search]);
+
   const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
   const debtAmount = Math.max(totalAmount - paidAmount, 0);
 
-  function addProduct(productId: string) {
-    setItems((prev) => [...prev, { productId, quantity: 1, importPrice: 0, batchNumber: "", expiryDate: "" }]);
+  function addProduct(product: ProductSuggestion) {
+    setItems((prev) => [
+      ...prev,
+      { productId: product.id, productName: product.label, quantity: 1, importPrice: 0, batchNumber: "", expiryDate: "" }
+    ]);
     setSearch("");
+    setProductResults([]);
   }
 
   function resetForm() {
@@ -45,7 +116,19 @@ export function PurchaseCreateModal({
       const response = await fetch("/api/purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId, supplierId, paidAmount, note, items })
+        body: JSON.stringify({
+          branchId,
+          supplierId,
+          paidAmount,
+          note,
+          items: items.map(({ productId, quantity, importPrice, batchNumber, expiryDate }) => ({
+            productId,
+            quantity,
+            importPrice,
+            batchNumber,
+            expiryDate
+          }))
+        })
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -107,12 +190,15 @@ export function PurchaseCreateModal({
               <input value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl" placeholder="Tìm theo tên hàng..." />
               {search ? (
                 <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200">
-                  {matched.length === 0 ? (
+                  {isSearchingProducts ? (
+                    <div className="px-4 py-3 text-sm text-slate-500 sm:text-lg">Đang tìm sản phẩm...</div>
+                  ) : productResults.length === 0 ? (
                     <div className="px-4 py-3 text-sm text-slate-500 sm:text-lg">Không tìm thấy sản phẩm.</div>
                   ) : (
-                    matched.map((product) => (
-                      <button key={product.id} type="button" className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm sm:text-xl" onClick={() => addProduct(product.id)}>
-                        {product.name}
+                    productResults.map((product) => (
+                      <button key={product.id} type="button" className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm sm:text-xl" onClick={() => addProduct(product)}>
+                        <div className="font-semibold text-slate-900">{product.label}</div>
+                        <div className="mt-1 text-xs text-slate-500 sm:text-sm">{product.meta ?? ""}</div>
                       </button>
                     ))
                   )}
@@ -126,13 +212,12 @@ export function PurchaseCreateModal({
                   </div>
                 ) : null}
                 {items.map((item, index) => {
-                  const product = products.find((p) => p.id === item.productId);
                   const lineTotal = item.quantity * item.importPrice;
                   return (
                     <div key={`${item.productId}-${index}`} className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-soft sm:p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-bold leading-snug text-slate-900 sm:text-xl">{product?.name}</p>
+                          <p className="text-sm font-bold leading-snug text-slate-900 sm:text-xl">{item.productName}</p>
                           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Dòng hàng {index + 1}</p>
                         </div>
                         <button

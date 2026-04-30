@@ -29,16 +29,27 @@ export default async function InventoryPage({
         }
       : {})
   };
-  const [purchases, purchaseCount, suppliers, products] = await Promise.all([
+  const [purchases, purchaseCount, suppliers] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where: purchaseWhere,
-      include: { supplier: true, items: true },
+      include: {
+        supplier: { select: { name: true } },
+        items: {
+          select: {
+            productId: true,
+            quantity: true,
+            importPrice: true,
+            batchNumber: true,
+            expiryDate: true,
+            product: { select: { name: true } }
+          }
+        }
+      },
       orderBy: { createdAt: "desc" },
       take: 30
     }),
     prisma.purchaseOrder.count({ where: purchaseWhere }),
-    prisma.supplier.findMany({ orderBy: { code: "asc" } }),
-    prisma.product.findMany({ orderBy: { name: "asc" }, take: 300 })
+    prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { code: "asc" }, take: 80 })
   ]);
 
   return (
@@ -84,7 +95,6 @@ export default async function InventoryPage({
         <PurchaseCreateModal
           branchId={session.branchId ?? ""}
           suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
-          products={products.map((product) => ({ id: product.id, name: product.name }))}
         />
       </div>
 
@@ -134,19 +144,19 @@ export default async function InventoryPage({
                     supplierId: item.supplierId,
                     paidAmount: Number(item.paidAmount),
                     note: item.note,
-                    items: item.items.map((purchaseItem) => ({
-                      productId: purchaseItem.productId,
-                      quantity: purchaseItem.quantity,
-                      importPrice: Number(purchaseItem.importPrice),
-                      batchNumber: purchaseItem.batchNumber,
-                      expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
-                    }))
-                  }}
-                  suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
-                  products={products.map((product) => ({ id: product.id, name: product.name }))}
-                />
-              </div>
-            </div>
+                        items: item.items.map((purchaseItem) => ({
+                          productId: purchaseItem.productId,
+                          productName: purchaseItem.product.name,
+                          quantity: purchaseItem.quantity,
+                          importPrice: Number(purchaseItem.importPrice),
+                          batchNumber: purchaseItem.batchNumber,
+                          expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
+                        }))
+                      }}
+                      suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
+                    />
+                  </div>
+                </div>
           ))
         )}
       </div>
@@ -191,6 +201,7 @@ export default async function InventoryPage({
                         note: item.note,
                         items: item.items.map((purchaseItem) => ({
                           productId: purchaseItem.productId,
+                          productName: purchaseItem.product.name,
                           quantity: purchaseItem.quantity,
                           importPrice: Number(purchaseItem.importPrice),
                           batchNumber: purchaseItem.batchNumber,
@@ -198,7 +209,6 @@ export default async function InventoryPage({
                         }))
                       }}
                       suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
-                      products={products.map((product) => ({ id: product.id, name: product.name }))}
                     />
                   </td>
                 </tr>

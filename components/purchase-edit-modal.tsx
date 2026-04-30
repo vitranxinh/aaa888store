@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
 
 type PurchaseItemValue = {
   productId: string;
+  productName: string;
   quantity: number;
   importPrice: number;
   batchNumber: string;
@@ -24,14 +25,21 @@ type Props = {
     items: PurchaseItemValue[];
   };
   suppliers: { id: string; name: string }[];
-  products: { id: string; name: string }[];
 };
 
-export function PurchaseEditModal({ purchase, suppliers, products }: Props) {
+type ProductSuggestion = {
+  id: string;
+  label: string;
+  meta?: string;
+};
+
+export function PurchaseEditModal({ purchase, suppliers }: Props) {
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState(purchase.supplierId);
   const [note, setNote] = useState(purchase.note ?? "");
   const [search, setSearch] = useState("");
+  const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
   const [paidAmount, setPaidAmount] = useState(purchase.paidAmount);
   const [items, setItems] = useState<PurchaseItemValue[]>(purchase.items);
   const [isPending, startTransition] = useTransition();
@@ -39,14 +47,59 @@ export function PurchaseEditModal({ purchase, suppliers, products }: Props) {
   const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
   const debtAmount = Math.max(totalAmount - paidAmount, 0);
 
-  const matched = useMemo(
-    () => products.filter((item) => item.name.toLowerCase().includes(search.toLowerCase())).slice(0, 10),
-    [products, search]
-  );
+  useEffect(() => {
+    if (!open) return;
+    const query = search.trim();
 
-  function addProduct(productId: string) {
-    setItems((prev) => [...prev, { productId, quantity: 1, importPrice: 0, batchNumber: "", expiryDate: "" }]);
+    if (!query) {
+      setProductResults([]);
+      setIsSearchingProducts(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearchingProducts(true);
+      try {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=20`, {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          setProductResults([]);
+          return;
+        }
+
+        const payload = (await response.json()) as Array<{ id: string; label: string; meta?: string }>;
+        setProductResults(
+          payload.map((item) => ({
+            id: item.id,
+            label: item.label,
+            meta: item.meta
+          }))
+        );
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setProductResults([]);
+        }
+      } finally {
+        setIsSearchingProducts(false);
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, search]);
+
+  function addProduct(product: ProductSuggestion) {
+    setItems((prev) => [
+      ...prev,
+      { productId: product.id, productName: product.label, quantity: 1, importPrice: 0, batchNumber: "", expiryDate: "" }
+    ]);
     setSearch("");
+    setProductResults([]);
   }
 
   function submit() {
@@ -54,7 +107,19 @@ export function PurchaseEditModal({ purchase, suppliers, products }: Props) {
       const response = await fetch(`/api/purchases/${purchase.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId: purchase.branchId, supplierId, paidAmount, note, items })
+        body: JSON.stringify({
+          branchId: purchase.branchId,
+          supplierId,
+          paidAmount,
+          note,
+          items: items.map(({ productId, quantity, importPrice, batchNumber, expiryDate }) => ({
+            productId,
+            quantity,
+            importPrice,
+            batchNumber,
+            expiryDate
+          }))
+        })
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -127,12 +192,15 @@ export function PurchaseEditModal({ purchase, suppliers, products }: Props) {
               <input value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-14 sm:text-xl" placeholder="Tìm theo tên hàng..." />
               {search ? (
                 <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200">
-                  {matched.length === 0 ? (
+                  {isSearchingProducts ? (
+                    <div className="px-4 py-3 text-sm text-slate-500 sm:text-lg">Đang tìm sản phẩm...</div>
+                  ) : productResults.length === 0 ? (
                     <div className="px-4 py-3 text-sm text-slate-500 sm:text-lg">Không tìm thấy sản phẩm.</div>
                   ) : (
-                    matched.map((product) => (
-                      <button key={product.id} type="button" className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm sm:text-lg" onClick={() => addProduct(product.id)}>
-                        {product.name}
+                    productResults.map((product) => (
+                      <button key={product.id} type="button" className="block w-full border-b border-slate-100 px-4 py-3 text-left text-sm sm:text-lg" onClick={() => addProduct(product)}>
+                        <div className="font-semibold text-slate-900">{product.label}</div>
+                        <div className="mt-1 text-xs text-slate-500 sm:text-sm">{product.meta ?? ""}</div>
                       </button>
                     ))
                   )}
@@ -146,13 +214,12 @@ export function PurchaseEditModal({ purchase, suppliers, products }: Props) {
                   </div>
                 ) : null}
                 {items.map((item, index) => {
-                  const product = products.find((p) => p.id === item.productId);
                   const lineTotal = item.quantity * item.importPrice;
                   return (
                     <div key={`${item.productId}-${index}`} className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-soft sm:p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-bold leading-snug text-slate-900 sm:text-xl">{product?.name}</p>
+                          <p className="text-sm font-bold leading-snug text-slate-900 sm:text-xl">{item.productName}</p>
                           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Dòng hàng {index + 1}</p>
                         </div>
                         <button type="button" className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-500" onClick={() => setItems((prev) => prev.filter((_, idx) => idx !== index))}>
