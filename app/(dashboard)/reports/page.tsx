@@ -1,22 +1,29 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { ChartCard } from "@/components/chart-card";
 import { Card } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { requireSession } from "@/lib/auth";
 
-export default async function ReportsPage() {
-  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
-  const canExportExcel = session.role !== "CASHIER";
-  const canSeeCustomerPrivateFields = session.role !== "CASHIER";
-  const branchWhere = { branchId: session.branchId ?? undefined };
+async function getReportsData(branchId?: string) {
+  const branchWhere = { branchId: branchId ?? undefined };
 
   const [salesAggregate, customers, inventories, orderItems] = await Promise.all([
     prisma.order.aggregate({
       where: { ...branchWhere, status: "COMPLETED" },
       _sum: { grandTotal: true, profitEstimate: true }
     }),
-    prisma.customer.findMany({ orderBy: { totalSpend: "desc" }, take: 5 }),
+    prisma.customer.findMany({
+      orderBy: { totalSpend: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        totalSpend: true
+      }
+    }),
     prisma.inventory.findMany({
       where: branchWhere,
       select: {
@@ -42,6 +49,29 @@ export default async function ReportsPage() {
     (sum, item) => sum + item.quantity * Number(item.product?.costPrice ?? 0),
     0
   );
+
+  return {
+    sales,
+    profit,
+    inventoryValue,
+    customers,
+    orderItems
+  };
+}
+
+async function getCachedReportsData(branchId?: string) {
+  return unstable_cache(
+    () => getReportsData(branchId),
+    ["reports-data", branchId ?? "all"],
+    { revalidate: 60 }
+  )();
+}
+
+export default async function ReportsPage() {
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const canExportExcel = session.role !== "CASHIER";
+  const canSeeCustomerPrivateFields = session.role !== "CASHIER";
+  const { sales, profit, inventoryValue, customers, orderItems } = await getCachedReportsData(session.branchId ?? undefined);
 
   const revenueByMonth = [
     { label: "T1", revenue: sales * 0.8 },

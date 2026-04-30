@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { eachDayOfInterval, format } from "date-fns";
 import { resolveVietnamDateRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
@@ -12,7 +13,7 @@ function resolveRange(range: DashboardRange) {
   };
 }
 
-export async function getDashboardData(branchId: string | undefined, range: DashboardRange = "today") {
+async function fetchDashboardData(branchId: string | undefined, range: DashboardRange = "today") {
   const { start, end } = resolveRange(range);
   const branchWhere = branchId ? { branchId } : {};
   const customerWhere = {
@@ -96,6 +97,14 @@ export async function getDashboardData(branchId: string | undefined, range: Dash
     revenueByPeriod,
     recentOrders
   };
+}
+
+export async function getDashboardData(branchId: string | undefined, range: DashboardRange = "today") {
+  return unstable_cache(
+    () => fetchDashboardData(branchId, range),
+    ["dashboard-data", branchId ?? "all", range],
+    { revalidate: 30 }
+  )();
 }
 
 export async function getPosData(branchId?: string) {
