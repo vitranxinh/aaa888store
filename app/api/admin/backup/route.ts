@@ -5,6 +5,9 @@ import path from "node:path";
 import os from "node:os";
 import { requireApiSession } from "@/lib/auth";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const execFileAsync = promisify(execFile);
 
 export async function POST(request: Request) {
