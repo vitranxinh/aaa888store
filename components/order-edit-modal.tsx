@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { compareSearchResults, getSearchScore } from "@/lib/search";
 import { useToastStore } from "@/store/toast-store";
 
 type OrderLine = {
   productId: string;
+  productName: string;
   quantity: number;
   unitPrice: number;
   discountValue: number;
@@ -21,7 +21,13 @@ type Props = {
   paidAmount: number;
   lines: OrderLine[];
   customers: { id: string; name: string }[];
-  products: { id: string; name: string; sellingPrice: number }[];
+};
+
+type ProductSuggestion = {
+  id: string;
+  label: string;
+  sellingPrice: number;
+  meta?: string;
 };
 
 export function OrderEditModal({
@@ -32,13 +38,14 @@ export function OrderEditModal({
   otherCharge: initialOtherCharge,
   paidAmount: initialPaidAmount,
   lines: initialLines,
-  customers,
-  products
+  customers
 }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [productQuery, setProductQuery] = useState("");
+  const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
   const [note, setNote] = useState(initialNote);
   const [otherCharge, setOtherCharge] = useState(initialOtherCharge);
   const [paidAmount, setPaidAmount] = useState(initialPaidAmount);
@@ -58,21 +65,6 @@ export function OrderEditModal({
     }
   }, [open, initialCustomerId, initialNote, initialOtherCharge, initialPaidAmount, initialLines]);
 
-  const matchedProducts = useMemo(() => {
-    return products
-      .map((item) => ({ item, score: getSearchScore(item.name, productQuery) }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) =>
-        compareSearchResults(
-          { label: a.item.name, score: a.score, searchText: a.item.name },
-          { label: b.item.name, score: b.score, searchText: b.item.name },
-          productQuery
-        )
-      )
-      .map((entry) => entry.item)
-      .slice(0, 100);
-  }, [productQuery, products]);
-
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
   useEffect(() => {
@@ -81,20 +73,80 @@ export function OrderEditModal({
     }
   }, [orderTotal, paymentTouched, open, initialPaidAmount]);
 
-  function addProduct(productId: string) {
-    const product = products.find((item) => item.id === productId);
-    if (!product) return;
-    setLines((prev) => [...prev, { productId, quantity: 1, unitPrice: product.sellingPrice, discountValue: 0 }]);
+  useEffect(() => {
+    if (!open) return;
+    const query = productQuery.trim();
+
+    if (!query) {
+      setProductResults([]);
+      setIsSearchingProducts(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearchingProducts(true);
+      try {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=30`, {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          setProductResults([]);
+          return;
+        }
+
+        const payload = (await response.json()) as Array<{
+          id: string;
+          label: string;
+          sellingPrice?: number;
+          meta?: string;
+        }>;
+        setProductResults(
+          payload.map((item) => ({
+            id: item.id,
+            label: item.label,
+            sellingPrice: Number(item.sellingPrice ?? 0),
+            meta: item.meta
+          }))
+        );
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setProductResults([]);
+        }
+      } finally {
+        setIsSearchingProducts(false);
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, productQuery]);
+
+  function addProduct(product: ProductSuggestion) {
+    setLines((prev) => [
+      ...prev,
+      {
+        productId: product.id,
+        productName: product.label,
+        quantity: 1,
+        unitPrice: product.sellingPrice,
+        discountValue: 0
+      }
+    ]);
     setProductQuery("");
+    setProductResults([]);
   }
 
-  function updateLine(index: number, key: keyof OrderLine, value: number | string) {
+  function updateLine(index: number, key: "quantity" | "unitPrice", value: number) {
     setLines((prev) =>
       prev.map((line, idx) =>
         idx === index
           ? {
               ...line,
-              [key]: key === "productId" ? value : Number(value)
+              [key]: value
             }
           : line
       )
@@ -121,7 +173,12 @@ export function OrderEditModal({
             otherCharge: Math.max(otherCharge, 0),
             note,
             status: "COMPLETED",
-            items: lines
+            items: lines.map(({ productId, quantity, unitPrice, discountValue }) => ({
+              productId,
+              quantity,
+              unitPrice,
+              discountValue
+            }))
           })
         });
 
@@ -193,16 +250,25 @@ export function OrderEditModal({
                 />
                 {productQuery ? (
                   <div className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white">
-                    {matchedProducts.map((product) => (
-                      <button
-                        key={product.id}
-                        type="button"
-                        className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50 sm:px-4 sm:py-2.5 sm:text-base"
-                        onClick={() => addProduct(product.id)}
-                      >
-                        {product.name}
-                      </button>
-                    ))}
+                    {isSearchingProducts ? (
+                      <div className="px-3 py-3 text-sm text-slate-500 sm:px-4">Đang tìm sản phẩm...</div>
+                    ) : productResults.length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-slate-500 sm:px-4">Không tìm thấy sản phẩm phù hợp.</div>
+                    ) : (
+                      productResults.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50 sm:px-4 sm:py-2.5 sm:text-base"
+                          onClick={() => addProduct(product)}
+                        >
+                          <div className="font-semibold text-slate-900">{product.label}</div>
+                          <div className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+                            {product.meta ?? ""} · {product.sellingPrice.toLocaleString("vi-VN")} đ
+                          </div>
+                        </button>
+                      ))
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -218,26 +284,14 @@ export function OrderEditModal({
                   </div>
 
                   {lines.map((line, index) => {
-                    const product = products.find((item) => item.id === line.productId);
                     const lineTotal = line.quantity * line.unitPrice;
                     return (
                       <div key={`${line.productId}-${index}`} className="grid min-w-[660px] grid-cols-[minmax(0,2.2fr)_76px_110px_130px_36px] gap-2 sm:min-w-0 sm:grid-cols-[minmax(0,2.2fr)_92px_132px_150px_40px]">
                         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-sm leading-5 sm:px-3 sm:py-2.5 sm:text-base sm:leading-6">
-                          <div className="mb-2 font-semibold text-slate-900">{product?.name}</div>
-                          <select
-                            value={line.productId}
-                            onChange={(e) => updateLine(index, "productId", e.target.value)}
-                            className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
-                          >
-                            {products.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="font-semibold text-slate-900">{line.productName}</div>
                         </div>
-                        <input className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" type="number" min="1" value={line.quantity} onChange={(e) => updateLine(index, "quantity", e.target.value)} />
-                        <input className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" type="number" min="0" value={line.unitPrice} onChange={(e) => updateLine(index, "unitPrice", e.target.value)} />
+                        <input className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" type="number" min="1" value={line.quantity} onChange={(e) => updateLine(index, "quantity", Number(e.target.value))} />
+                        <input className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" type="number" min="0" value={line.unitPrice} onChange={(e) => updateLine(index, "unitPrice", Number(e.target.value))} />
                         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-right text-sm font-semibold text-slate-900 sm:px-3 sm:py-2.5 sm:text-base">
                           {lineTotal.toLocaleString("vi-VN")} đ
                         </div>

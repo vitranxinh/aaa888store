@@ -51,7 +51,7 @@ export default async function OrdersPage({
     ]
   };
 
-  const [orders, orderCount, customers, products, defaultBranch, pendingDeleteRequests] = await Promise.all([
+  const [orders, orderCount, customers, defaultBranch, pendingDeleteRequests] = await Promise.all([
     prisma.order.findMany({
       where: orderWhere,
       include: {
@@ -63,8 +63,7 @@ export default async function OrdersPage({
       take: 30
     }),
     prisma.order.count({ where: orderWhere }),
-    prisma.customer.findMany({ orderBy: { code: "desc" }, take: 300 }),
-    prisma.product.findMany({ orderBy: { name: "asc" }, take: 5000 }),
+    prisma.customer.findMany({ select: { id: true, name: true, code: true }, orderBy: { code: "desc" }, take: 120 }),
     prisma.branch.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: "asc" },
@@ -114,7 +113,6 @@ export default async function OrdersPage({
         <OrderCreateModal
           branchId={branchId}
           customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
-          products={products.map((product) => ({ id: product.id, name: product.name, sellingPrice: Number(product.sellingPrice) }))}
         />
       </div>
 

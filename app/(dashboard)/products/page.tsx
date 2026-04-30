@@ -5,7 +5,6 @@ import { ProductEditModal } from "@/components/product-edit-modal";
 import { ProductStockAdjustModal } from "@/components/product-stock-adjust-modal";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { compareSearchResults, getSearchScore } from "@/lib/search";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function ProductsPage({
@@ -23,65 +22,52 @@ export default async function ProductsPage({
     ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
     : await prisma.branch.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { id: true } });
   const branchId = activeBranch?.id ?? "";
+  const productWhere = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" as const } },
+          { sku: { contains: q, mode: "insensitive" as const } },
+          { barcode: { contains: q, mode: "insensitive" as const } },
+          { category: { name: { contains: q, mode: "insensitive" as const } } }
+        ]
+      }
+    : undefined;
 
-  const [products, productCount, categories, brands, productSuggestionsSource] = await Promise.all([
+  const [products, productCount, categories, brands] = await Promise.all([
     prisma.product.findMany({
-      include: {
-        category: true,
-        inventories: {
-          where: branchId ? { branchId } : undefined
-        }
-      },
-      orderBy: { sku: "asc" },
-      take: 5000
-    }),
-    prisma.product.count(),
-    prisma.category.findMany(),
-    prisma.brand.findMany(),
-    prisma.product.findMany({
+      where: productWhere,
       select: {
         id: true,
         name: true,
         sku: true,
+        barcode: true,
         imageUrl: true,
-        category: {
+        categoryId: true,
+        brandId: true,
+        costPrice: true,
+        sellingPrice: true,
+        lowStockAlert: true,
+        status: true,
+        description: true,
+        category: true,
+        inventories: {
           select: {
-            name: true
-          }
+            quantity: true
+          },
+          where: branchId ? { branchId } : undefined
         }
       },
-      orderBy: [{ name: "asc" }]
-    })
+      orderBy: { sku: "asc" },
+      take: q ? 100 : 80
+    }),
+    prisma.product.count({ where: productWhere }),
+    prisma.category.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.brand.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
   ]);
-  const filteredProducts = q
-    ? products
-        .map((product) => ({
-          product,
-          score: getSearchScore(product.name, q)
-        }))
-        .filter((entry) => entry.score > 0)
-        .sort((a, b) =>
-          compareSearchResults(
-            { label: a.product.name, score: a.score, searchText: a.product.name },
-            { label: b.product.name, score: b.score, searchText: b.product.name },
-            q
-          )
-        )
-        .map((entry) => entry.product)
-    : products;
 
   const categoryOptions = categories.map((item) => ({ id: item.id, name: item.name }));
   const brandOptions = brands.map((item) => ({ id: item.id, name: item.name }));
-  const productSuggestions = productSuggestionsSource.map((product) => ({
-    label: product.name,
-    value: product.name,
-    meta: `${product.sku}${product.category?.name ? ` • ${product.category.name}` : ""}`,
-    imageUrl: product.imageUrl,
-    accent: product.sku,
-    searchText: product.name
-  }));
-
-  const displayCount = q ? filteredProducts.length : productCount;
+  const displayCount = productCount;
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -93,7 +79,8 @@ export default async function ProductsPage({
             name="q"
             defaultValue={q}
             placeholder="Tìm theo tên, mã, nhóm hàng..."
-            suggestions={productSuggestions}
+            suggestions={[]}
+            fetchUrl="/api/products/search?limit=30"
           />
         </form>
         {canCreateProducts ? (
@@ -111,7 +98,7 @@ export default async function ProductsPage({
       </div>
 
       <div className="grid gap-3 sm:hidden">
-        {filteredProducts.map((product) => {
+        {products.map((product) => {
           const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
 
           return (
@@ -205,7 +192,7 @@ export default async function ProductsPage({
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.map((product) => {
+            {products.map((product) => {
               const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
 
               return (

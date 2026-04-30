@@ -19,7 +19,7 @@ export async function getDashboardData(branchId: string | undefined, range: Dash
     NOT: { code: "KH000000" }
   };
 
-  const [customerCount, productCount, invoiceCount, orders, lowStock, recentOrders] = await Promise.all([
+  const [customerCount, productCount, invoiceCount, periodOrders, lowStockCount, recentOrders] = await Promise.all([
     prisma.customer.count({ where: customerWhere }),
     prisma.product.count(),
     prisma.order.count({
@@ -34,44 +34,56 @@ export async function getDashboardData(branchId: string | undefined, range: Dash
         createdAt: { gte: start, lte: end },
         status: { in: ["COMPLETED", "PARTIAL"] }
       },
-      include: { customer: true },
-      orderBy: { createdAt: "desc" }
+      select: {
+        createdAt: true,
+        grandTotal: true,
+        debtAmount: true
+      }
     }),
-    prisma.inventory.findMany({
-      where: { ...branchWhere },
-      include: { product: true, branch: true }
+    prisma.inventory.count({
+      where: {
+        ...branchWhere,
+        product: {
+          lowStockAlert: {
+            gte: 0
+          }
+        }
+      }
     }),
     prisma.order.findMany({
       where: branchWhere,
-      include: { customer: true },
+      select: {
+        id: true,
+        code: true,
+        grandTotal: true,
+        paidAmount: true,
+        customer: {
+          select: {
+            name: true
+          }
+        }
+      },
       orderBy: { createdAt: "desc" },
-      take: 10
+      take: 6
     })
   ]);
 
-  const revenue = orders.reduce((sum, order) => sum + Number(order.grandTotal), 0);
-  const debt = orders.reduce((sum, order) => sum + Number(order.debtAmount), 0);
-  const lowStockCount = lowStock.filter((item) => item.product && item.quantity <= item.product.lowStockAlert).length;
+  const revenue = periodOrders.reduce((sum, order) => sum + Number(order.grandTotal), 0);
+  const debt = periodOrders.reduce((sum, order) => sum + Number(order.debtAmount), 0);
 
   const intervalDays = eachDayOfInterval({ start, end });
-  const revenueByPeriod = await Promise.all(
-    intervalDays.map(async (date) => {
-      const dayKey = format(date, "yyyy-MM-dd");
-      const dayRange = resolveVietnamDateRange("custom", dayKey, dayKey);
-      const aggregate = await prisma.order.aggregate({
-        where: {
-          ...branchWhere,
-          createdAt: { gte: dayRange?.gte, lte: dayRange?.lte },
-          status: { in: ["COMPLETED", "PARTIAL"] }
-        },
-        _sum: { grandTotal: true }
-      });
-      return {
-        label: format(date, "dd/MM"),
-        revenue: Number(aggregate._sum.grandTotal ?? 0)
-      };
-    })
-  );
+  const revenueByDayMap = periodOrders.reduce<Map<string, number>>((map, order) => {
+    const dayKey = format(order.createdAt, "yyyy-MM-dd");
+    map.set(dayKey, (map.get(dayKey) ?? 0) + Number(order.grandTotal));
+    return map;
+  }, new Map());
+  const revenueByPeriod = intervalDays.map((date) => {
+    const dayKey = format(date, "yyyy-MM-dd");
+    return {
+      label: format(date, "dd/MM"),
+      revenue: revenueByDayMap.get(dayKey) ?? 0
+    };
+  });
 
   return {
     range,

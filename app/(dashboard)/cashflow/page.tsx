@@ -26,35 +26,46 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
     branchId: session.branchId ?? undefined,
     ...(createdAt ? { createdAt } : {})
   };
-  const [transactions, transactionCount, summaryTransactions, orders, purchases, customers, suppliers, employeeUsers] = await Promise.all([
-    prisma.cashTransaction.findMany({
-      where: cashflowWhere,
-      include: { customer: true, supplier: true, order: true, purchaseOrder: true, createdBy: true },
-      orderBy: { createdAt: "desc" },
-      take: 40
-    }),
-    prisma.cashTransaction.count({
-      where: cashflowWhere
-    }),
+  const [transactions, transactionCount, summaryByEmployee, orders, purchases, customers, suppliers, employeeUsers] = await Promise.all([
     prisma.cashTransaction.findMany({
       where: cashflowWhere,
       select: {
         id: true,
+        code: true,
         type: true,
         amount: true,
-        createdBy: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
+        note: true,
+        orderId: true,
+        purchaseOrderId: true,
+        customerId: true,
+        supplierId: true,
+        createdAt: true,
+        customer: { select: { name: true } },
+        supplier: { select: { name: true } },
+        order: { select: { code: true } },
+        purchaseOrder: { select: { code: true } },
+        createdBy: { select: { name: true } }
       },
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
+      take: 25
     }),
-    prisma.order.findMany({ where: { branchId: session.branchId ?? undefined }, select: { id: true, code: true }, orderBy: { createdAt: "desc" }, take: 40 }),
-    prisma.purchaseOrder.findMany({ where: { branchId: session.branchId ?? undefined }, select: { id: true, code: true }, orderBy: { createdAt: "desc" }, take: 40 }),
-    prisma.customer.findMany({ select: { id: true, name: true }, orderBy: { code: "desc" }, take: 100 }),
-    prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { code: "asc" }, take: 100 }),
+    prisma.cashTransaction.count({
+      where: cashflowWhere
+    }),
+    prisma.cashTransaction.groupBy({
+      where: cashflowWhere,
+      by: ["createdById", "type"],
+      _sum: {
+        amount: true
+      },
+      _count: {
+        _all: true
+      }
+    }),
+    prisma.order.findMany({ where: { branchId: session.branchId ?? undefined }, select: { id: true, code: true }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.purchaseOrder.findMany({ where: { branchId: session.branchId ?? undefined }, select: { id: true, code: true }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.customer.findMany({ select: { id: true, name: true }, orderBy: { code: "desc" }, take: 50 }),
+    prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { code: "asc" }, take: 50 }),
     prisma.user.findMany({
       where: {
         isActive: true,
@@ -90,14 +101,15 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
     return map;
   }, new Map());
 
-  summaryTransactions.forEach((item) => {
-    const actorId = item.createdBy?.id ?? "unknown";
-    const actorName = item.createdBy?.name ?? "Không rõ";
+  summaryByEmployee.forEach((item) => {
+    const actorId = item.createdById ?? "unknown";
+    const actorName = employeeUsers.find((user) => user.id === actorId)?.name ?? "Không rõ";
     const existing = employeeSummaryMap.get(actorId);
-    const amount = Number(item.amount);
+    const amount = Number(item._sum.amount ?? 0);
+    const transactionCount = item._count._all;
 
     if (existing) {
-      existing.transactionCount += 1;
+      existing.transactionCount += transactionCount;
       if (item.type === "RECEIPT") {
         existing.receiptTotal += amount;
       } else {
@@ -111,7 +123,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
       name: actorName,
       receiptTotal: item.type === "RECEIPT" ? amount : 0,
       paymentTotal: item.type === "PAYMENT" ? amount : 0,
-      transactionCount: 1
+      transactionCount
     });
   });
 

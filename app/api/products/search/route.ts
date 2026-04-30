@@ -3,22 +3,35 @@ import { requireApiSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { compareSearchResults, getSearchScore } from "@/lib/search";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim() ?? "";
+    const limit = Math.min(Number(searchParams.get("limit") ?? "40") || 40, 100);
 
     if (!query) {
       return NextResponse.json([]);
     }
 
     const products = await prisma.product.findMany({
+      where: {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { sku: { contains: query, mode: "insensitive" } },
+          { barcode: { contains: query, mode: "insensitive" } },
+          { category: { name: { contains: query, mode: "insensitive" } } }
+        ]
+      },
       select: {
         id: true,
         name: true,
         sku: true,
         imageUrl: true,
+        sellingPrice: true,
         category: {
           select: {
             name: true
@@ -26,7 +39,7 @@ export async function GET(request: Request) {
         }
       },
       orderBy: { name: "asc" },
-      take: 5000
+      take: 400
     });
 
     const results = products
@@ -42,14 +55,16 @@ export async function GET(request: Request) {
           query
         )
       )
-      .slice(0, 100)
+      .slice(0, limit)
       .map((entry) => ({
         label: entry.product.name,
         value: entry.product.name,
+        id: entry.product.id,
         meta: `${entry.product.sku}${entry.product.category?.name ? ` • ${entry.product.category.name}` : ""}`,
         imageUrl: entry.product.imageUrl,
         accent: entry.product.sku,
-        searchText: entry.product.name
+        searchText: entry.product.name,
+        sellingPrice: Number(entry.product.sellingPrice)
       }));
 
     return NextResponse.json(results);

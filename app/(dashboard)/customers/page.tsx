@@ -36,10 +36,10 @@ export default async function CustomersPage({
     prisma.customer.findMany({
       where: customerWhere,
       orderBy: { code: "desc" },
-      take: 1000
+      take: q ? 100 : 80
     }),
     prisma.customer.count({ where: customerWhere }),
-    prisma.customerGroup.findMany({ orderBy: { name: "asc" } })
+    prisma.customerGroup.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
   ]);
 
   const filteredCustomers = customers
@@ -55,11 +55,6 @@ export default async function CustomersPage({
     });
 
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
-  const customerSuggestions = customers.map((customer) => ({
-    label: customer.name,
-    value: customer.name,
-    meta: [customer.code, customer.phone].filter(Boolean).join(" • ")
-  }));
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -71,7 +66,8 @@ export default async function CustomersPage({
             name="q"
             defaultValue={q}
             placeholder="Tìm theo tên, mã, SĐT..."
-            suggestions={customerSuggestions}
+            suggestions={[]}
+            fetchUrl="/api/customers/search?limit=20"
             className="sm:min-w-[280px]"
           />
           <select
