@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { ProductCreateForm } from "@/components/product-create-form";
@@ -7,21 +8,23 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 
-export default async function ProductsPage({
-  searchParams
+async function ProductsList({
+  q,
+  branchId,
+  canEditProducts,
+  canDeleteProducts,
+  canAdjustInventory,
+  categoryOptions,
+  brandOptions
 }: {
-  searchParams?: { q?: string };
+  q: string;
+  branchId: string;
+  canEditProducts: boolean;
+  canDeleteProducts: boolean;
+  canAdjustInventory: boolean;
+  categoryOptions: { id: string; name: string }[];
+  brandOptions: { id: string; name: string }[];
 }) {
-  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
-  const canCreateProducts = true;
-  const canEditProducts = session.role === "ADMIN" || session.role === "MANAGER";
-  const canDeleteProducts = session.role === "ADMIN";
-  const canAdjustInventory = session.role === "ADMIN" || session.role === "MANAGER";
-  const q = searchParams?.q ?? "";
-  const activeBranch = session.branchId
-    ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
-    : await prisma.branch.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { id: true } });
-  const branchId = activeBranch?.id ?? "";
   const productWhere = q
     ? {
         OR: [
@@ -33,70 +36,35 @@ export default async function ProductsPage({
       }
     : undefined;
 
-  const [products, productCount, categories, brands] = await Promise.all([
-    prisma.product.findMany({
-      where: productWhere,
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        barcode: true,
-        imageUrl: true,
-        categoryId: true,
-        brandId: true,
-        costPrice: true,
-        sellingPrice: true,
-        lowStockAlert: true,
-        status: true,
-        description: true,
-        category: true,
-        inventories: {
-          select: {
-            quantity: true
-          },
-          where: branchId ? { branchId } : undefined
-        }
-      },
-      orderBy: { sku: "asc" },
-      take: q ? 100 : 80
-    }),
-    prisma.product.count({ where: productWhere }),
-    prisma.category.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.brand.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
-  ]);
-
-  const categoryOptions = categories.map((item) => ({ id: item.id, name: item.name }));
-  const brandOptions = brands.map((item) => ({ id: item.id, name: item.name }));
-  const displayCount = productCount;
+  const products = await prisma.product.findMany({
+    where: productWhere,
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      barcode: true,
+      imageUrl: true,
+      categoryId: true,
+      brandId: true,
+      costPrice: true,
+      sellingPrice: true,
+      lowStockAlert: true,
+      status: true,
+      description: true,
+      category: true,
+      inventories: {
+        select: {
+          quantity: true
+        },
+        where: branchId ? { branchId } : undefined
+      }
+    },
+    orderBy: { sku: "asc" },
+    take: q ? 100 : 80
+  });
 
   return (
-    <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Hàng hóa" description={`${displayCount} đầu mục sản phẩm`} session={session} />
-
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-        <form className="w-full max-w-xl">
-          <AutocompleteSearchInput
-            name="q"
-            defaultValue={q}
-            placeholder="Tìm theo tên, mã, nhóm hàng..."
-            suggestions={[]}
-            fetchUrl="/api/products/search?limit=30"
-          />
-        </form>
-        {canCreateProducts ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <details className="relative">
-              <summary className="cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
-                + Thêm SP
-              </summary>
-              <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] sm:top-20">
-                <ProductCreateForm categories={categoryOptions} brands={brandOptions} />
-              </div>
-            </details>
-          </div>
-        ) : null}
-      </div>
-
+    <>
       <div className="grid gap-3 sm:hidden">
         {products.map((product) => {
           const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
@@ -255,6 +223,104 @@ export default async function ProductsPage({
           </tbody>
         </table>
       </div>
+    </>
+  );
+}
+
+function ProductsListFallback() {
+  return (
+    <div className="grid gap-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="flex gap-3">
+            <div className="h-20 w-20 animate-pulse rounded-2xl bg-slate-100" />
+            <div className="flex-1">
+              <div className="h-5 w-28 animate-pulse rounded bg-slate-100" />
+              <div className="mt-3 h-6 w-72 animate-pulse rounded bg-slate-100" />
+              <div className="mt-4 h-16 animate-pulse rounded-2xl bg-slate-50" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default async function ProductsPage({
+  searchParams
+}: {
+  searchParams?: { q?: string };
+}) {
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const canCreateProducts = true;
+  const canEditProducts = session.role === "ADMIN" || session.role === "MANAGER";
+  const canDeleteProducts = session.role === "ADMIN";
+  const canAdjustInventory = session.role === "ADMIN" || session.role === "MANAGER";
+  const q = searchParams?.q ?? "";
+  const activeBranch = session.branchId
+    ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
+    : await prisma.branch.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { id: true } });
+  const branchId = activeBranch?.id ?? "";
+  const productWhere = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" as const } },
+          { sku: { contains: q, mode: "insensitive" as const } },
+          { barcode: { contains: q, mode: "insensitive" as const } },
+          { category: { name: { contains: q, mode: "insensitive" as const } } }
+        ]
+      }
+    : undefined;
+
+  const [productCount, categories, brands] = await Promise.all([
+    prisma.product.count({ where: productWhere }),
+    prisma.category.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.brand.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
+  ]);
+
+  const categoryOptions = categories.map((item) => ({ id: item.id, name: item.name }));
+  const brandOptions = brands.map((item) => ({ id: item.id, name: item.name }));
+  const displayCount = productCount;
+
+  return (
+    <div className="space-y-5 sm:space-y-8">
+      <AppHeader title="Hàng hóa" description={`${displayCount} đầu mục sản phẩm`} session={session} />
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <form className="w-full max-w-xl">
+          <AutocompleteSearchInput
+            name="q"
+            defaultValue={q}
+            placeholder="Tìm theo tên, mã, nhóm hàng..."
+            suggestions={[]}
+            fetchUrl="/api/products/search?limit=30"
+          />
+        </form>
+        {canCreateProducts ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <details className="relative">
+              <summary className="cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
+                + Thêm SP
+              </summary>
+              <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] sm:top-20">
+                <ProductCreateForm categories={categoryOptions} brands={brandOptions} />
+              </div>
+            </details>
+          </div>
+        ) : null}
+      </div>
+
+      <Suspense fallback={<ProductsListFallback />}>
+        <ProductsList
+          q={q}
+          branchId={branchId}
+          canEditProducts={canEditProducts}
+          canDeleteProducts={canDeleteProducts}
+          canAdjustInventory={canAdjustInventory}
+          categoryOptions={categoryOptions}
+          brandOptions={brandOptions}
+        />
+      </Suspense>
     </div>
   );
 }

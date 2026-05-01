@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { CustomerCreateForm } from "@/components/customer-create-form";
@@ -7,18 +8,19 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 
-export default async function CustomersPage({
-  searchParams
+async function CustomersList({
+  q,
+  debtFilter,
+  canManageCustomers,
+  canSeeCustomerPrivateFields,
+  groupOptions
 }: {
-  searchParams?: { q?: string; debt?: string };
+  q: string;
+  debtFilter: string;
+  canManageCustomers: boolean;
+  canSeeCustomerPrivateFields: boolean;
+  groupOptions: { id: string; name: string }[];
 }) {
-  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
-  const canCreateCustomers = true;
-  const canManageCustomers = session.role !== "CASHIER";
-  const canSeeCustomerPrivateFields = session.role !== "CASHIER";
-  const q = searchParams?.q ?? "";
-  const debtFilter = searchParams?.debt ?? "default";
-
   const customerWhere = {
     NOT: { code: "KH000000" },
     ...(q
@@ -32,15 +34,11 @@ export default async function CustomersPage({
       : {})
   };
 
-  const [customers, customerCount, groups] = await Promise.all([
-    prisma.customer.findMany({
-      where: customerWhere,
-      orderBy: { code: "desc" },
-      take: q ? 100 : 80
-    }),
-    prisma.customer.count({ where: customerWhere }),
-    prisma.customerGroup.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
-  ]);
+  const customers = await prisma.customer.findMany({
+    where: customerWhere,
+    orderBy: { code: "desc" },
+    take: q ? 100 : 80
+  });
 
   const filteredCustomers = customers
     .map((customer) => ({
@@ -54,50 +52,8 @@ export default async function CustomersPage({
       return 0;
     });
 
-  const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
-
   return (
-    <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Khách hàng" description={`${customerCount} khách hàng`} session={session} />
-
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-        <form className="flex w-full max-w-4xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-          <AutocompleteSearchInput
-            name="q"
-            defaultValue={q}
-            placeholder="Tìm theo tên, mã, SĐT..."
-            suggestions={[]}
-            fetchUrl="/api/customers/search?limit=20"
-            className="sm:min-w-[280px]"
-          />
-          <select
-            name="debt"
-            defaultValue={debtFilter}
-            className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:text-lg"
-          >
-            <option value="default">Mặc định</option>
-            <option value="debt_desc">Nợ cao đến thấp</option>
-            <option value="debt_asc">Nợ thấp đến cao</option>
-            <option value="has_debt">Chỉ khách còn nợ</option>
-          </select>
-          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
-            Lọc
-          </button>
-        </form>
-        {canCreateCustomers ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <details className="relative">
-              <summary className="cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
-                + Thêm KH
-              </summary>
-              <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[460px] sm:top-20">
-                <CustomerCreateForm groups={groupOptions} />
-              </div>
-            </details>
-          </div>
-        ) : null}
-      </div>
-
+    <>
       <div className="grid gap-3 sm:hidden">
         {filteredCustomers.map((customer) => (
           <div key={customer.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
@@ -220,6 +176,107 @@ export default async function CustomersPage({
           </tbody>
         </table>
       </div>
+    </>
+  );
+}
+
+function CustomersListFallback() {
+  return (
+    <div className="grid gap-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="h-5 w-24 animate-pulse rounded bg-slate-100" />
+          <div className="mt-3 h-6 w-56 animate-pulse rounded bg-slate-100" />
+          <div className="mt-4 h-20 animate-pulse rounded-2xl bg-slate-50" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default async function CustomersPage({
+  searchParams
+}: {
+  searchParams?: { q?: string; debt?: string };
+}) {
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const canCreateCustomers = true;
+  const canManageCustomers = session.role !== "CASHIER";
+  const canSeeCustomerPrivateFields = session.role !== "CASHIER";
+  const q = searchParams?.q ?? "";
+  const debtFilter = searchParams?.debt ?? "default";
+
+  const customerWhere = {
+    NOT: { code: "KH000000" },
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { phone: { contains: q, mode: "insensitive" as const } },
+            { code: { contains: q, mode: "insensitive" as const } }
+          ]
+        }
+      : {})
+  };
+
+  const [customerCount, groups] = await Promise.all([
+    prisma.customer.count({ where: customerWhere }),
+    prisma.customerGroup.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
+  ]);
+
+  const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
+
+  return (
+    <div className="space-y-5 sm:space-y-8">
+      <AppHeader title="Khách hàng" description={`${customerCount} khách hàng`} session={session} />
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+        <form className="flex w-full max-w-4xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <AutocompleteSearchInput
+            name="q"
+            defaultValue={q}
+            placeholder="Tìm theo tên, mã, SĐT..."
+            suggestions={[]}
+            fetchUrl="/api/customers/search?limit=20"
+            className="sm:min-w-[280px]"
+          />
+          <select
+            name="debt"
+            defaultValue={debtFilter}
+            className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:text-lg"
+          >
+            <option value="default">Mặc định</option>
+            <option value="debt_desc">Nợ cao đến thấp</option>
+            <option value="debt_asc">Nợ thấp đến cao</option>
+            <option value="has_debt">Chỉ khách còn nợ</option>
+          </select>
+          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
+            Lọc
+          </button>
+        </form>
+        {canCreateCustomers ? (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <details className="relative">
+              <summary className="cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
+                + Thêm KH
+              </summary>
+              <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[460px] sm:top-20">
+                <CustomerCreateForm groups={groupOptions} />
+              </div>
+            </details>
+          </div>
+        ) : null}
+      </div>
+
+      <Suspense fallback={<CustomersListFallback />}>
+        <CustomersList
+          q={q}
+          debtFilter={debtFilter}
+          canManageCustomers={canManageCustomers}
+          canSeeCustomerPrivateFields={canSeeCustomerPrivateFields}
+          groupOptions={groupOptions}
+        />
+      </Suspense>
     </div>
   );
 }
