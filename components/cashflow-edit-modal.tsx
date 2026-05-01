@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { AsyncLookupInput } from "@/components/async-lookup-input";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
@@ -15,15 +16,15 @@ type Props = {
     purchaseOrderId: string | null;
     customerId: string | null;
     supplierId: string | null;
+    orderCode?: string | null;
+    purchaseOrderCode?: string | null;
+    customerName?: string | null;
+    supplierName?: string | null;
   };
   branchId: string;
-  orders: { id: string; code: string }[];
-  purchases: { id: string; code: string }[];
-  customers: { id: string; name: string }[];
-  suppliers: { id: string; name: string }[];
 };
 
-export function CashflowEditModal({ transaction, branchId, orders, purchases, customers, suppliers }: Props) {
+export function CashflowEditModal({ transaction, branchId }: Props) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"RECEIPT" | "PAYMENT">(transaction.type);
   const [amount, setAmount] = useState(transaction.amount);
@@ -96,25 +97,37 @@ export function CashflowEditModal({ transaction, branchId, orders, purchases, cu
               <input className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" type="number" min="0" value={amount} onChange={(e) => setAmount(Number(e.target.value))} placeholder="Số tiền" />
               {type === "RECEIPT" ? (
                 <>
-                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                    <option value="">Chọn khách hàng</option>
-                    {customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={orderId} onChange={(e) => setOrderId(e.target.value)}>
-                    <option value="">Chọn hóa đơn</option>
-                    {orders.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}
-                  </select>
+                  <AsyncLookupInput
+                    value={customerId}
+                    onChange={(nextValue) => setCustomerId(nextValue)}
+                    fetchUrl="/api/cashflow/options?kind=customer"
+                    placeholder="Chọn khách hàng"
+                    initialLabel={transaction.customerName ?? ""}
+                  />
+                  <AsyncLookupInput
+                    value={orderId}
+                    onChange={(nextValue) => setOrderId(nextValue)}
+                    fetchUrl="/api/cashflow/options?kind=order"
+                    placeholder="Chọn hóa đơn"
+                    initialLabel={transaction.orderCode ?? ""}
+                  />
                 </>
               ) : (
                 <>
-                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                    <option value="">Chọn NCC</option>
-                    {suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                  <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={purchaseOrderId} onChange={(e) => setPurchaseOrderId(e.target.value)}>
-                    <option value="">Chọn phiếu nhập</option>
-                    {purchases.map((item) => <option key={item.id} value={item.id}>{item.code}</option>)}
-                  </select>
+                  <AsyncLookupInput
+                    value={supplierId}
+                    onChange={(nextValue) => setSupplierId(nextValue)}
+                    fetchUrl="/api/cashflow/options?kind=supplier"
+                    placeholder="Chọn NCC"
+                    initialLabel={transaction.supplierName ?? ""}
+                  />
+                  <AsyncLookupInput
+                    value={purchaseOrderId}
+                    onChange={(nextValue) => setPurchaseOrderId(nextValue)}
+                    fetchUrl="/api/cashflow/options?kind=purchase"
+                    placeholder="Chọn phiếu nhập"
+                    initialLabel={transaction.purchaseOrderCode ?? ""}
+                  />
                 </>
               )}
               <textarea className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / ghi chú" />

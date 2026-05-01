@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { requireApiSession } from "@/lib/auth";
 import {
-  recalculateCustomerReceivableDebt,
-  recalculateOrderPaymentState,
-  recalculatePurchasePaymentState,
-  recalculateSupplierPayableDebt
+  recalculateCustomerReceivableDebtForCustomer,
+  recalculateOrderPaymentStateForOrder,
+  recalculatePurchasePaymentStateForPurchase,
+  recalculateSupplierPayableDebtForSupplier
 } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 import { cashTransactionSchema } from "@/lib/validations";
@@ -31,7 +31,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const payload = parsed.data;
 
     const transaction = await prisma.$transaction(async (tx) => {
-      const updated = await tx.cashTransaction.update({
+      return tx.cashTransaction.update({
         where: { id: params.id },
         data: {
           branchId: payload.branchId,
@@ -44,39 +44,28 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           purchaseOrderId: payload.purchaseOrderId || null
         }
       });
-
-      const orderIds = new Set<string>();
-      const purchaseIds = new Set<string>();
-      const customerIds = new Set<string>();
-      const supplierIds = new Set<string>();
-
-      if (existing.orderId) orderIds.add(existing.orderId);
-      if (payload.orderId) orderIds.add(payload.orderId);
-      if (existing.purchaseOrderId) purchaseIds.add(existing.purchaseOrderId);
-      if (payload.purchaseOrderId) purchaseIds.add(payload.purchaseOrderId);
-      if (existing.customerId) customerIds.add(existing.customerId);
-      if (payload.customerId) customerIds.add(payload.customerId);
-      if (existing.supplierId) supplierIds.add(existing.supplierId);
-      if (payload.supplierId) supplierIds.add(payload.supplierId);
-
-      for (const orderId of orderIds) {
-        await recalculateOrderPaymentState(tx, orderId);
-      }
-
-      for (const purchaseId of purchaseIds) {
-        await recalculatePurchasePaymentState(tx, purchaseId);
-      }
-
-      for (const customerId of customerIds) {
-        await recalculateCustomerReceivableDebt(tx, customerId);
-      }
-
-      for (const supplierId of supplierIds) {
-        await recalculateSupplierPayableDebt(tx, supplierId);
-      }
-
-      return updated;
     });
+
+    const orderIds = new Set<string>();
+    const purchaseIds = new Set<string>();
+    const customerIds = new Set<string>();
+    const supplierIds = new Set<string>();
+
+    if (existing.orderId) orderIds.add(existing.orderId);
+    if (payload.orderId) orderIds.add(payload.orderId);
+    if (existing.purchaseOrderId) purchaseIds.add(existing.purchaseOrderId);
+    if (payload.purchaseOrderId) purchaseIds.add(payload.purchaseOrderId);
+    if (existing.customerId) customerIds.add(existing.customerId);
+    if (payload.customerId) customerIds.add(payload.customerId);
+    if (existing.supplierId) supplierIds.add(existing.supplierId);
+    if (payload.supplierId) supplierIds.add(payload.supplierId);
+
+    await Promise.all([
+      ...Array.from(orderIds).map((orderId) => recalculateOrderPaymentStateForOrder(orderId)),
+      ...Array.from(purchaseIds).map((purchaseId) => recalculatePurchasePaymentStateForPurchase(purchaseId)),
+      ...Array.from(customerIds).map((customerId) => recalculateCustomerReceivableDebtForCustomer(customerId)),
+      ...Array.from(supplierIds).map((supplierId) => recalculateSupplierPayableDebtForSupplier(supplierId))
+    ]);
 
     return NextResponse.json({ ok: true, transaction });
   } catch (error) {
@@ -103,23 +92,14 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       await tx.cashTransaction.delete({
         where: { id: params.id }
       });
-
-      if (existing.orderId) {
-        await recalculateOrderPaymentState(tx, existing.orderId);
-      }
-
-      if (existing.purchaseOrderId) {
-        await recalculatePurchasePaymentState(tx, existing.purchaseOrderId);
-      }
-
-      if (existing.customerId) {
-        await recalculateCustomerReceivableDebt(tx, existing.customerId);
-      }
-
-      if (existing.supplierId) {
-        await recalculateSupplierPayableDebt(tx, existing.supplierId);
-      }
     });
+
+    await Promise.all([
+      existing.orderId ? recalculateOrderPaymentStateForOrder(existing.orderId) : Promise.resolve(),
+      existing.purchaseOrderId ? recalculatePurchasePaymentStateForPurchase(existing.purchaseOrderId) : Promise.resolve(),
+      existing.customerId ? recalculateCustomerReceivableDebtForCustomer(existing.customerId) : Promise.resolve(),
+      existing.supplierId ? recalculateSupplierPayableDebtForSupplier(existing.supplierId) : Promise.resolve()
+    ]);
 
     return NextResponse.json({ ok: true, code: existing.code });
   } catch (error) {

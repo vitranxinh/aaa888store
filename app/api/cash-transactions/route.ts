@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireApiSession, resolveActorUserId } from "@/lib/auth";
+import { requireApiSession } from "@/lib/auth";
 import {
-  recalculateCustomerReceivableDebt,
-  recalculateOrderPaymentState,
-  recalculatePurchasePaymentState,
-  recalculateSupplierPayableDebt
+  recalculateCustomerReceivableDebtForCustomer,
+  recalculateOrderPaymentStateForOrder,
+  recalculatePurchasePaymentStateForPurchase,
+  recalculateSupplierPayableDebtForSupplier
 } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
@@ -14,7 +14,6 @@ import { cashTransactionSchema } from "@/lib/validations";
 export async function POST(request: Request) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
-    const actorUserId = await resolveActorUserId(session);
     const body = await request.json();
     const parsed = cashTransactionSchema.safeParse(body);
     if (!parsed.success) {
@@ -25,7 +24,7 @@ export async function POST(request: Request) {
     const code = await nextCode(payload.type === "RECEIPT" ? "PT" : "PC", "cashTransaction");
 
     const transaction = await prisma.$transaction(async (tx) => {
-      const created = await tx.cashTransaction.create({
+      return tx.cashTransaction.create({
         data: {
           code,
           branchId: payload.branchId,
@@ -36,28 +35,26 @@ export async function POST(request: Request) {
           supplierId: payload.supplierId || null,
           orderId: payload.orderId || null,
           purchaseOrderId: payload.purchaseOrderId || null,
-          createdById: actorUserId
+          createdById: session.id
         }
       });
-
-      if (payload.type === "RECEIPT" && payload.orderId) {
-        await recalculateOrderPaymentState(tx, payload.orderId);
-      }
-
-      if (payload.customerId) {
-        await recalculateCustomerReceivableDebt(tx, payload.customerId);
-      }
-
-      if (payload.type === "PAYMENT" && payload.purchaseOrderId) {
-        await recalculatePurchasePaymentState(tx, payload.purchaseOrderId);
-      }
-
-      if (payload.supplierId) {
-        await recalculateSupplierPayableDebt(tx, payload.supplierId);
-      }
-
-      return created;
     });
+
+    if (payload.type === "RECEIPT" && payload.orderId) {
+      await recalculateOrderPaymentStateForOrder(payload.orderId);
+    }
+
+    if (payload.customerId) {
+      await recalculateCustomerReceivableDebtForCustomer(payload.customerId);
+    }
+
+    if (payload.type === "PAYMENT" && payload.purchaseOrderId) {
+      await recalculatePurchasePaymentStateForPurchase(payload.purchaseOrderId);
+    }
+
+    if (payload.supplierId) {
+      await recalculateSupplierPayableDebtForSupplier(payload.supplierId);
+    }
 
     return NextResponse.json({ ok: true, transaction });
   } catch (error) {

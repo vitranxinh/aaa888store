@@ -30,7 +30,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
     branchId: session.branchId ?? undefined,
     ...(createdAt ? { createdAt } : {})
   };
-  const [transactions, transactionCount, summaryByEmployee, orders, purchases, customers, suppliers, employeeUsers] = await Promise.all([
+  const [transactions, transactionCount, summaryByEmployee, employeeUsers] = await Promise.all([
     prisma.cashTransaction.findMany({
       where: cashflowWhere,
       select: {
@@ -67,10 +67,6 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
         _all: true
       }
     }),
-    prisma.order.findMany({ where: { branchId: session.branchId ?? undefined }, select: { id: true, code: true }, orderBy: { createdAt: "desc" }, take: 20 }),
-    prisma.purchaseOrder.findMany({ where: { branchId: session.branchId ?? undefined }, select: { id: true, code: true }, orderBy: { createdAt: "desc" }, take: 20 }),
-    prisma.customer.findMany({ select: { id: true, name: true }, orderBy: { code: "desc" }, take: 50 }),
-    prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { code: "asc" }, take: 50 }),
     prisma.user.findMany({
       where: {
         isActive: true,
@@ -177,7 +173,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
             </a>
           ) : null}
         </form>
-        <CashflowCreateModal branchId={session.branchId ?? ""} orders={orders} purchases={purchases} customers={customers} suppliers={suppliers} />
+        <CashflowCreateModal branchId={session.branchId ?? ""} />
       </div>
 
       {isBossAccount ? (
@@ -279,13 +275,13 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
                   orderId: item.orderId,
                   purchaseOrderId: item.purchaseOrderId,
                   customerId: item.customerId,
-                  supplierId: item.supplierId
+                  supplierId: item.supplierId,
+                  orderCode: item.order?.code,
+                  purchaseOrderCode: item.purchaseOrder?.code,
+                  customerName: item.customer?.name,
+                  supplierName: item.supplier?.name
                 }}
                 branchId={session.branchId ?? ""}
-                orders={orders}
-                purchases={purchases}
-                customers={customers}
-                suppliers={suppliers}
               />
             </div>
           </div>
@@ -324,19 +320,19 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
                       id: item.id,
                       code: item.code,
                       type: item.type,
-                      amount: Number(item.amount),
-                      note: item.note,
-                      orderId: item.orderId,
-                      purchaseOrderId: item.purchaseOrderId,
-                      customerId: item.customerId,
-                      supplierId: item.supplierId
-                    }}
-                    branchId={session.branchId ?? ""}
-                    orders={orders}
-                    purchases={purchases}
-                    customers={customers}
-                    suppliers={suppliers}
-                  />
+                    amount: Number(item.amount),
+                    note: item.note,
+                    orderId: item.orderId,
+                    purchaseOrderId: item.purchaseOrderId,
+                    customerId: item.customerId,
+                    supplierId: item.supplierId,
+                    orderCode: item.order?.code,
+                    purchaseOrderCode: item.purchaseOrder?.code,
+                    customerName: item.customer?.name,
+                    supplierName: item.supplier?.name
+                  }}
+                  branchId={session.branchId ?? ""}
+                />
                 </td>
               </tr>
             ))}

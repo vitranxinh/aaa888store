@@ -243,6 +243,9 @@ model Customer {
   group           CustomerGroup?         @relation(fields: [groupId], references: [id])
   orders          Order[]
   cashTxns        CashTransaction[]
+
+  @@index([updatedAt])
+  @@index([groupId])
 }
 
 model Supplier {
@@ -258,6 +261,8 @@ model Supplier {
   updatedAt       DateTime               @updatedAt
   purchaseOrders  PurchaseOrder[]
   cashTxns        CashTransaction[]
+
+  @@index([updatedAt])
 }
 
 model Promotion {
@@ -319,6 +324,11 @@ model Order {
   items           OrderItem[]
   cashTxns        CashTransaction[]
   deleteRequest   OrderDeleteRequest?
+
+  @@index([branchId, createdAt])
+  @@index([customerId])
+  @@index([createdById])
+  @@index([status])
 }
 
 model OrderDeleteRequest {
@@ -368,6 +378,11 @@ model PurchaseOrder {
   createdBy       User                   @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
   items           PurchaseOrderItem[]
   cashTxns        CashTransaction[]
+
+  @@index([branchId, createdAt])
+  @@index([supplierId])
+  @@index([createdById])
+  @@index([status])
 }
 
 model PurchaseOrderItem {
@@ -403,4 +418,12 @@ model CashTransaction {
   customer        Customer?              @relation(fields: [customerId], references: [id])
   supplier        Supplier?              @relation(fields: [supplierId], references: [id])
   createdBy       User?                  @relation("CashTxnCreatedBy", fields: [createdById], references: [id])
+
+  @@index([branchId, createdAt])
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([orderId])
+  @@index([purchaseOrderId])
+  @@index([createdById])
+  @@index([type])
 }

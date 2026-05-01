@@ -152,3 +152,11 @@ export async function recalculatePurchasePaymentState(tx: Prisma.TransactionClie
 
   await recalculateSupplierPayableDebt(tx, purchase.supplierId);
 }
+
+export async function recalculateOrderPaymentStateForOrder(orderId: string) {
+  return prisma.$transaction((tx) => recalculateOrderPaymentState(tx, orderId));
+}
+
+export async function recalculatePurchasePaymentStateForPurchase(purchaseOrderId: string) {
+  return prisma.$transaction((tx) => recalculatePurchasePaymentState(tx, purchaseOrderId));
+}
