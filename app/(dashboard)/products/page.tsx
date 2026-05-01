@@ -4,6 +4,7 @@ import { AutocompleteSearchInput } from "@/components/autocomplete-search-input"
 import { ProductCreateForm } from "@/components/product-create-form";
 import { ProductEditModal } from "@/components/product-edit-modal";
 import { ProductStockAdjustModal } from "@/components/product-stock-adjust-modal";
+import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getBrandOptions, getCategoryOptions, getDefaultBranchId } from "@/lib/reference-data";
@@ -12,6 +13,8 @@ import { formatCurrency } from "@/lib/utils";
 async function ProductsList({
   q,
   branchId,
+  page,
+  pageSize,
   canEditProducts,
   canDeleteProducts,
   canAdjustInventory,
@@ -20,6 +23,8 @@ async function ProductsList({
 }: {
   q: string;
   branchId: string;
+  page: number;
+  pageSize: number;
   canEditProducts: boolean;
   canDeleteProducts: boolean;
   canAdjustInventory: boolean;
@@ -61,7 +66,8 @@ async function ProductsList({
       }
     },
     orderBy: { sku: "asc" },
-    take: q ? 100 : 80
+    skip: (page - 1) * pageSize,
+    take: pageSize
   });
 
   return (
@@ -250,7 +256,7 @@ function ProductsListFallback() {
 export default async function ProductsPage({
   searchParams
 }: {
-  searchParams?: { q?: string };
+  searchParams?: { q?: string; page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canCreateProducts = true;
@@ -258,6 +264,8 @@ export default async function ProductsPage({
   const canDeleteProducts = session.role === "ADMIN";
   const canAdjustInventory = session.role === "ADMIN" || session.role === "MANAGER";
   const q = searchParams?.q ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
   const activeBranch = session.branchId
     ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
     : null;
@@ -315,6 +323,8 @@ export default async function ProductsPage({
         <ProductsList
           q={q}
           branchId={branchId}
+          page={page}
+          pageSize={pageSize}
           canEditProducts={canEditProducts}
           canDeleteProducts={canDeleteProducts}
           canAdjustInventory={canAdjustInventory}
@@ -322,6 +332,13 @@ export default async function ProductsPage({
           brandOptions={brandOptions}
         />
       </Suspense>
+      <ServerPagination
+        pathname="/products"
+        query={{ q }}
+        page={page}
+        pageSize={pageSize}
+        totalCount={productCount}
+      />
     </div>
   );
 }

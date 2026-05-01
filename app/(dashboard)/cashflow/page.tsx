@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/app-header";
 import { CashflowCreateModal } from "@/components/cashflow-create-modal";
 import { CashflowEditModal } from "@/components/cashflow-edit-modal";
+import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +12,7 @@ type CashflowPageProps = {
     range?: string;
     dateFrom?: string;
     dateTo?: string;
+    page?: string;
   };
 };
 
@@ -21,6 +23,8 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
   const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
   const cashflowWhere = {
     branchId: session.branchId ?? undefined,
@@ -47,7 +51,8 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
         createdBy: { select: { name: true } }
       },
       orderBy: { createdAt: "desc" },
-      take: 25
+      skip: (page - 1) * pageSize,
+      take: pageSize
     }),
     prisma.cashTransaction.count({
       where: cashflowWhere
@@ -338,6 +343,13 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
           </tbody>
         </table>
       </div>
+      <ServerPagination
+        pathname="/cashflow"
+        query={{ range, dateFrom, dateTo }}
+        page={page}
+        pageSize={pageSize}
+        totalCount={transactionCount}
+      />
     </div>
   );
 }

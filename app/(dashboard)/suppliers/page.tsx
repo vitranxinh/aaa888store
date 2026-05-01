@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/app-header";
+import { ServerPagination } from "@/components/server-pagination";
 import { SupplierCreateForm } from "@/components/supplier-create-form";
 import { SupplierEditModal } from "@/components/supplier-edit-modal";
 import { requireSession } from "@/lib/auth";
@@ -8,11 +9,13 @@ import { formatCurrency } from "@/lib/utils";
 export default async function SuppliersPage({
   searchParams
 }: {
-  searchParams?: { q?: string };
+  searchParams?: { q?: string; page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canManageSuppliers = true;
   const q = searchParams?.q ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
 
   const supplierWhere = q
     ? {
@@ -28,7 +31,8 @@ export default async function SuppliersPage({
     prisma.supplier.findMany({
       where: supplierWhere,
       orderBy: { code: "desc" },
-      take: 50
+      skip: (page - 1) * pageSize,
+      take: pageSize
     }),
     prisma.supplier.count({ where: supplierWhere })
   ]);
@@ -170,6 +174,13 @@ export default async function SuppliersPage({
           </tbody>
         </table>
       </div>
+      <ServerPagination
+        pathname="/suppliers"
+        query={{ q }}
+        page={page}
+        pageSize={pageSize}
+        totalCount={supplierCount}
+      />
     </div>
   );
 }

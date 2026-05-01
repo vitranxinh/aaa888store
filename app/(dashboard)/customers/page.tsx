@@ -4,6 +4,7 @@ import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { CustomerCreateForm } from "@/components/customer-create-form";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
+import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getCustomerGroupOptions } from "@/lib/reference-data";
@@ -12,12 +13,16 @@ import { formatCurrency } from "@/lib/utils";
 async function CustomersList({
   q,
   debtFilter,
+  page,
+  pageSize,
   canManageCustomers,
   canSeeCustomerPrivateFields,
   groupOptions
 }: {
   q: string;
   debtFilter: string;
+  page: number;
+  pageSize: number;
   canManageCustomers: boolean;
   canSeeCustomerPrivateFields: boolean;
   groupOptions: { id: string; name: string }[];
@@ -38,7 +43,8 @@ async function CustomersList({
   const customers = await prisma.customer.findMany({
     where: customerWhere,
     orderBy: { code: "desc" },
-    take: q ? 100 : 80
+    skip: (page - 1) * pageSize,
+    take: pageSize
   });
 
   const filteredCustomers = customers
@@ -198,7 +204,7 @@ function CustomersListFallback() {
 export default async function CustomersPage({
   searchParams
 }: {
-  searchParams?: { q?: string; debt?: string };
+  searchParams?: { q?: string; debt?: string; page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canCreateCustomers = true;
@@ -206,6 +212,8 @@ export default async function CustomersPage({
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
   const q = searchParams?.q ?? "";
   const debtFilter = searchParams?.debt ?? "default";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
 
   const customerWhere = {
     NOT: { code: "KH000000" },
@@ -273,11 +281,20 @@ export default async function CustomersPage({
         <CustomersList
           q={q}
           debtFilter={debtFilter}
+          page={page}
+          pageSize={pageSize}
           canManageCustomers={canManageCustomers}
           canSeeCustomerPrivateFields={canSeeCustomerPrivateFields}
           groupOptions={groupOptions}
         />
       </Suspense>
+      <ServerPagination
+        pathname="/customers"
+        query={{ q, debt: debtFilter }}
+        page={page}
+        pageSize={pageSize}
+        totalCount={customerCount}
+      />
     </div>
   );
 }

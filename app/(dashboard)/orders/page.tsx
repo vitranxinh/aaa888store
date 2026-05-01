@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/app-header";
 import { OrderDeleteRequestActions } from "@/components/order-delete-request-actions";
 import { OrderCreateModal } from "@/components/order-create-modal";
 import { OrdersFilterBar } from "@/components/orders-filter-bar";
+import { ServerPagination } from "@/components/server-pagination";
 import { OrderStatusActions } from "@/components/order-status-actions";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
@@ -14,9 +15,13 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 async function OrdersList({
   orderWhere,
+  page,
+  pageSize,
   role
 }: {
   orderWhere: Prisma.OrderWhereInput;
+  page: number;
+  pageSize: number;
   role: "ADMIN" | "MANAGER" | "CASHIER";
 }) {
   const orders = await prisma.order.findMany({
@@ -27,7 +32,8 @@ async function OrdersList({
       deleteRequest: { select: { id: true, status: true } }
     },
     orderBy: { createdAt: "desc" },
-    take: 30
+    skip: (page - 1) * pageSize,
+    take: pageSize
   });
 
   return (
@@ -141,7 +147,7 @@ function OrdersListFallback() {
 export default async function OrdersPage({
   searchParams
 }: {
-  searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string };
+  searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string; page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canExportExcel = session.role !== "CASHIER";
@@ -150,6 +156,8 @@ export default async function OrdersPage({
   const range = (searchParams?.range as TimeFilterRange) || "all";
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
 
   const orderWhere: Prisma.OrderWhereInput = {
@@ -266,8 +274,15 @@ export default async function OrdersPage({
       ) : null}
 
       <Suspense fallback={<OrdersListFallback />}>
-        <OrdersList orderWhere={orderWhere} role={session.role} />
+        <OrdersList orderWhere={orderWhere} page={page} pageSize={pageSize} role={session.role} />
       </Suspense>
+      <ServerPagination
+        pathname="/orders"
+        query={{ q, range, dateFrom, dateTo }}
+        page={page}
+        pageSize={pageSize}
+        totalCount={orderCount}
+      />
     </div>
   );
 }

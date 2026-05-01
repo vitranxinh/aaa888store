@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/app-header";
 import { PurchaseCreateModal } from "@/components/purchase-create-modal";
 import { PurchaseEditModal } from "@/components/purchase-edit-modal";
+import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
@@ -9,13 +10,15 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 export default async function InventoryPage({
   searchParams
 }: {
-  searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string };
+  searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string; page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const q = searchParams?.q ?? "";
   const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
   const purchaseWhere = {
     branchId: session.branchId ?? undefined,
@@ -46,7 +49,8 @@ export default async function InventoryPage({
         }
       },
       orderBy: { createdAt: "desc" },
-      take: 30
+      skip: (page - 1) * pageSize,
+      take: pageSize
     }),
     prisma.purchaseOrder.count({ where: purchaseWhere }),
     prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { code: "asc" }, take: 80 })
@@ -217,6 +221,13 @@ export default async function InventoryPage({
           </tbody>
         </table>
       </div>
+      <ServerPagination
+        pathname="/inventory"
+        query={{ q, range, dateFrom, dateTo }}
+        page={page}
+        pageSize={pageSize}
+        totalCount={purchaseCount}
+      />
     </div>
   );
 }
