@@ -213,7 +213,7 @@ export default async function CustomersPage({
   const q = searchParams?.q ?? "";
   const debtFilter = searchParams?.debt ?? "default";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 20;
+  const pageSize = 10;
 
   const customerWhere = {
     NOT: { code: "KH000000" },

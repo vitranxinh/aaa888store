@@ -265,7 +265,7 @@ export default async function ProductsPage({
   const canAdjustInventory = session.role === "ADMIN" || session.role === "MANAGER";
   const q = searchParams?.q ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 20;
+  const pageSize = 10;
   const activeBranch = session.branchId
     ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
     : null;

@@ -24,7 +24,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 20;
+  const pageSize = 15;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
   const cashflowWhere = {
     branchId: session.branchId ?? undefined,

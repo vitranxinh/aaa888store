@@ -157,7 +157,7 @@ export default async function OrdersPage({
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 20;
+  const pageSize = 10;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
 
   const orderWhere: Prisma.OrderWhereInput = {

@@ -15,7 +15,7 @@ export default async function SuppliersPage({
   const canManageSuppliers = true;
   const q = searchParams?.q ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 20;
+  const pageSize = 10;
 
   const supplierWhere = q
     ? {
