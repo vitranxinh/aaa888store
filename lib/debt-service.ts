@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionClient, customerId: string) {
   const [orderAggregate, standaloneReceiptAggregate] = await Promise.all([
@@ -30,6 +31,10 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
   });
 }
 
+export async function recalculateCustomerReceivableDebtForCustomer(customerId: string) {
+  return prisma.$transaction((tx) => recalculateCustomerReceivableDebt(tx, customerId));
+}
+
 export async function recalculateSupplierPayableDebt(tx: Prisma.TransactionClient, supplierId: string) {
   const [purchaseAggregate, standalonePaymentAggregate] = await Promise.all([
     tx.purchaseOrder.aggregate({
@@ -58,6 +63,10 @@ export async function recalculateSupplierPayableDebt(tx: Prisma.TransactionClien
       payableDebt: Math.max(purchaseDebt - standalonePayment, 0)
     }
   });
+}
+
+export async function recalculateSupplierPayableDebtForSupplier(supplierId: string) {
+  return prisma.$transaction((tx) => recalculateSupplierPayableDebt(tx, supplierId));
 }
 
 export async function recalculateOrderPaymentState(tx: Prisma.TransactionClient, orderId: string) {

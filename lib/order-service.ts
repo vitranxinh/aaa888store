@@ -1,5 +1,5 @@
 import { CashTxnType, OrderStatus, PaymentMethod, Prisma } from "@prisma/client";
-import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
+import { recalculateCustomerReceivableDebtForCustomer } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 import { calculateCartTotals } from "@/lib/pos";
 
@@ -55,13 +55,23 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
 }
 
 async function ensureInventorySufficient(tx: Prisma.TransactionClient, branchId: string, items: Awaited<ReturnType<typeof loadOrderPayloadItems>>) {
-  for (const item of items) {
-    const inventory = await tx.inventory.findFirst({
-      where: { branchId, productId: item.product.id },
-      select: { quantity: true }
-    });
+  const productIds = items.map((item) => item.product.id);
+  const inventories = await tx.inventory.findMany({
+    where: {
+      branchId,
+      productId: { in: productIds }
+    },
+    select: {
+      productId: true,
+      quantity: true
+    }
+  });
 
-    if (!inventory || inventory.quantity < item.quantity) {
+  const inventoryMap = new Map(inventories.map((inventory) => [inventory.productId, inventory.quantity]));
+
+  for (const item of items) {
+    const quantity = inventoryMap.get(item.product.id) ?? 0;
+    if (quantity < item.quantity) {
       throw new Error(`Tồn kho không đủ cho ${item.product.name}`);
     }
   }
@@ -138,7 +148,8 @@ async function applyOrderEffects(
   order: { id: string; code: string },
   payload: OrderPayload,
   items: Awaited<ReturnType<typeof loadOrderPayloadItems>>,
-  derived: ReturnType<typeof calculateOrderDerivedState>
+  derived: ReturnType<typeof calculateOrderDerivedState>,
+  receiptCode?: string | null
 ) {
   if (derived.finalStatus === "DRAFT") {
     return;
@@ -156,7 +167,7 @@ async function applyOrderEffects(
   if (derived.paidAmount > 0) {
     await tx.cashTransaction.create({
       data: {
-        code: await nextCode("PT", "cashTransaction"),
+        code: receiptCode ?? (await nextCode("PT", "cashTransaction")),
         branchId: payload.branchId,
         type: CashTxnType.RECEIPT,
         amount: new Prisma.Decimal(derived.paidAmount),
@@ -242,6 +253,7 @@ export async function createOrderFromPayload(payload: OrderPayload) {
   const items = await loadOrderPayloadItems(payload.items);
   const derived = calculateOrderDerivedState(items, payload);
   const code = await nextCode("DH", "order");
+  const receiptCode = derived.paidAmount > 0 ? await nextCode("PT", "cashTransaction") : null;
 
   const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
@@ -273,15 +285,13 @@ export async function createOrderFromPayload(payload: OrderPayload) {
       }
     });
 
-    await applyOrderEffects(tx, created, payload, items, derived);
-    if (derived.finalStatus !== "DRAFT") {
-      await recalculateCustomerReceivableDebt(tx, payload.customerId);
-    }
+    await applyOrderEffects(tx, created, payload, items, derived, receiptCode);
 
     return created;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 
   if (derived.finalStatus !== "DRAFT") {
+    await recalculateCustomerReceivableDebtForCustomer(payload.customerId);
     for (const item of items) {
       await allocateBatchesFEFO(payload.branchId, item.product.id, item.quantity, code, payload.createdById);
     }
@@ -310,6 +320,7 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   const items = await loadOrderPayloadItems(payload.items);
   const derived = calculateOrderDerivedState(items, payload);
   const nextCodeVersion = nextOrderRevisionCode(existing.code);
+  const receiptCode = derived.paidAmount > 0 ? await nextCode("PT", "cashTransaction") : null;
 
   const order = await prisma.$transaction(async (tx) => {
     await revertOrderEffects(tx, existing);
@@ -345,14 +356,15 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
       }
     });
 
-    await applyOrderEffects(tx, updated, payload, items, derived);
-    await recalculateCustomerReceivableDebt(tx, existing.customerId);
-    if (payload.customerId !== existing.customerId) {
-      await recalculateCustomerReceivableDebt(tx, payload.customerId);
-    }
+    await applyOrderEffects(tx, updated, payload, items, derived, receiptCode);
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
+
+  await recalculateCustomerReceivableDebtForCustomer(existing.customerId);
+  if (payload.customerId !== existing.customerId) {
+    await recalculateCustomerReceivableDebtForCustomer(payload.customerId);
+  }
 
   if (derived.finalStatus !== "DRAFT") {
     for (const item of items) {
