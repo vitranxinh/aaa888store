@@ -67,7 +67,7 @@ async function CustomersList({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[0.9rem] font-semibold uppercase tracking-wide text-slate-400">{customer.code}</p>
-                <Link href={`/customers/${customer.id}`} className="mt-1 block text-[1.2rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline">
+                <Link prefetch={false} href={`/customers/${customer.id}`} className="mt-1 block text-[1.2rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline">
                   {customer.name}
                 </Link>
               </div>
@@ -110,6 +110,7 @@ async function CustomersList({
 
             <div className="mt-3">
               <Link
+                prefetch={false}
                 href={`/customers/${customer.id}`}
                 className="inline-flex items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
               >
@@ -142,7 +143,7 @@ async function CustomersList({
               <tr key={customer.id} className="border-t border-slate-100 align-top text-[15px] text-slate-700 sm:text-2xl">
                 <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{customer.code}</td>
                 <td className="break-words px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">
-                  <Link href={`/customers/${customer.id}`} className="underline-offset-2 hover:underline">
+                  <Link prefetch={false} href={`/customers/${customer.id}`} className="underline-offset-2 hover:underline">
                     {customer.name}
                   </Link>
                 </td>
@@ -153,6 +154,7 @@ async function CustomersList({
                 </td>
                 <td className="px-3 py-3 sm:px-6 sm:py-4">
                   <Link
+                    prefetch={false}
                     href={`/customers/${customer.id}`}
                     className="inline-flex max-w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-center text-sm font-semibold leading-snug text-red-700"
                   >
