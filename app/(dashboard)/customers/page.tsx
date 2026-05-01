@@ -6,6 +6,7 @@ import { CustomerCreateForm } from "@/components/customer-create-form";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getCustomerGroupOptions } from "@/lib/reference-data";
 import { formatCurrency } from "@/lib/utils";
 
 async function CustomersList({
@@ -221,7 +222,7 @@ export default async function CustomersPage({
 
   const [customerCount, groups] = await Promise.all([
     prisma.customer.count({ where: customerWhere }),
-    prisma.customerGroup.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
+    getCustomerGroupOptions()
   ]);
 
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));

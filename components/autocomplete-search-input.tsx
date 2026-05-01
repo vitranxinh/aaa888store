@@ -50,7 +50,9 @@ export function AutocompleteSearchInput({
     const controller = new AbortController();
     const timeout = setTimeout(async () => {
       try {
-        const response = await fetch(`${fetchUrl}?q=${encodeURIComponent(query)}`, {
+        const url = new URL(fetchUrl, window.location.origin);
+        url.searchParams.set("q", query);
+        const response = await fetch(url.toString(), {
           signal: controller.signal,
           credentials: "same-origin"
         });

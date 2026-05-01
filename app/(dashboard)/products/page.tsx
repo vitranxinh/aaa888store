@@ -6,6 +6,7 @@ import { ProductEditModal } from "@/components/product-edit-modal";
 import { ProductStockAdjustModal } from "@/components/product-stock-adjust-modal";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getBrandOptions, getCategoryOptions, getDefaultBranchId } from "@/lib/reference-data";
 import { formatCurrency } from "@/lib/utils";
 
 async function ProductsList({
@@ -259,8 +260,8 @@ export default async function ProductsPage({
   const q = searchParams?.q ?? "";
   const activeBranch = session.branchId
     ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
-    : await prisma.branch.findFirst({ where: { isActive: true }, orderBy: { createdAt: "asc" }, select: { id: true } });
-  const branchId = activeBranch?.id ?? "";
+    : null;
+  const branchId = activeBranch?.id ?? (await getDefaultBranchId());
   const productWhere = q
     ? {
         OR: [
@@ -274,8 +275,8 @@ export default async function ProductsPage({
 
   const [productCount, categories, brands] = await Promise.all([
     prisma.product.count({ where: productWhere }),
-    prisma.category.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.brand.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } })
+    getCategoryOptions(),
+    getBrandOptions()
   ]);
 
   const categoryOptions = categories.map((item) => ({ id: item.id, name: item.name }));

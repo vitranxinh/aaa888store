@@ -9,6 +9,7 @@ import { OrderStatusActions } from "@/components/order-status-actions";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
+import { getDefaultBranchId } from "@/lib/reference-data";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 async function OrdersList({
@@ -178,14 +179,10 @@ export default async function OrdersPage({
     ]
   };
 
-  const [orderCount, customers, defaultBranch, pendingDeleteRequests] = await Promise.all([
+  const [orderCount, customers, defaultBranchId, pendingDeleteRequests] = await Promise.all([
     prisma.order.count({ where: orderWhere }),
     prisma.customer.findMany({ select: { id: true, name: true, code: true }, orderBy: { code: "desc" }, take: 120 }),
-    prisma.branch.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true }
-    }),
+    getDefaultBranchId(),
     isAdmin
       ? prisma.orderDeleteRequest.findMany({
           where: {
@@ -219,7 +216,7 @@ export default async function OrdersPage({
     return a.code.localeCompare(b.code);
   });
 
-  const branchId = session.branchId ?? defaultBranch?.id ?? "";
+  const branchId = session.branchId ?? defaultBranchId ?? "";
 
   return (
     <div className="space-y-5 sm:space-y-8">

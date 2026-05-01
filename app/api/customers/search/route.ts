@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { compareSearchResults, getSearchScore } from "@/lib/search";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,20 +32,34 @@ export async function GET(request: Request) {
         code: true,
         phone: true
       },
-      orderBy: { updatedAt: "desc" },
-      take: limit
+      orderBy: { name: "asc" },
+      take: 200
     });
 
-    return NextResponse.json(
-      customers.map((customer) => ({
-        id: customer.id,
-        label: customer.name,
-        value: customer.name,
-        meta: [customer.code, customer.phone].filter(Boolean).join(" • "),
-        accent: customer.code,
-        searchText: customer.name
+    const results = customers
+      .map((customer) => ({
+        customer,
+        score: getSearchScore(`${customer.name} ${customer.code} ${customer.phone ?? ""}`, query)
       }))
-    );
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) =>
+        compareSearchResults(
+          { label: a.customer.name, score: a.score, searchText: `${a.customer.name} ${a.customer.code} ${a.customer.phone ?? ""}` },
+          { label: b.customer.name, score: b.score, searchText: `${b.customer.name} ${b.customer.code} ${b.customer.phone ?? ""}` },
+          query
+        )
+      )
+      .slice(0, limit)
+      .map((entry) => ({
+        id: entry.customer.id,
+        label: entry.customer.name,
+        value: entry.customer.name,
+        meta: [entry.customer.code, entry.customer.phone].filter(Boolean).join(" • "),
+        accent: entry.customer.code,
+        searchText: entry.customer.name
+      }));
+
+    return NextResponse.json(results);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
