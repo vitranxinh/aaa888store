@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireApiSession, resolveActorUserId } from "@/lib/auth";
-import { recalculatePurchasePaymentState, recalculateSupplierPayableDebt } from "@/lib/debt-service";
+import { requireApiSession } from "@/lib/auth";
+import { recalculatePurchasePaymentStateForPurchase, recalculateSupplierPayableDebtForSupplier } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { purchaseSchema } from "@/lib/validations";
@@ -23,19 +23,26 @@ async function applyPurchaseInventory(
   createdById: string,
   direction: "increment" | "decrement"
 ) {
-  for (const item of purchase.items) {
-    const existingInventory = await tx.inventory.findFirst({
-      where: {
-        branchId: purchase.branchId,
-        productId: item.productId,
-        variantId: null
-      },
-      select: { id: true }
-    });
+  const existingInventories = await tx.inventory.findMany({
+    where: {
+      branchId: purchase.branchId,
+      variantId: null,
+      productId: { in: purchase.items.map((item) => item.productId) }
+    },
+    select: { id: true, productId: true }
+  });
+  const inventoryIdByProduct = new Map(
+    existingInventories
+      .filter((inventory): inventory is { id: string; productId: string } => Boolean(inventory.productId))
+      .map((inventory) => [inventory.productId, inventory.id])
+  );
 
-    if (existingInventory) {
+  for (const item of purchase.items) {
+    const inventoryId = inventoryIdByProduct.get(item.productId);
+
+    if (inventoryId) {
       await tx.inventory.update({
-        where: { id: existingInventory.id },
+        where: { id: inventoryId },
         data: {
           quantity: direction === "increment" ? { increment: item.quantity } : { decrement: item.quantity }
         }
@@ -81,7 +88,6 @@ async function applyPurchaseInventory(
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
-    const actorUserId = await resolveActorUserId(session);
     const body = await request.json();
     const parsed = purchaseSchema.safeParse(body);
 
@@ -107,6 +113,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const paidAmount = parsed.data.paidAmount;
     const debtAmount = Math.max(totalAmount - paidAmount, 0);
     const status = debtAmount > 0 ? "PARTIAL" : "COMPLETED";
+    const paymentCode = paidAmount > 0 ? await nextCode("PC", "cashTransaction") : null;
 
     const purchase = await prisma.$transaction(async (tx) => {
       await applyPurchaseInventory(
@@ -123,7 +130,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
             importPrice: item.importPrice
           }))
         },
-        actorUserId,
+        session.id,
         "decrement"
       );
 
@@ -153,7 +160,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         data: {
           branchId: parsed.data.branchId,
           supplierId: parsed.data.supplierId,
-          createdById: actorUserId,
+          createdById: session.id,
           status,
           totalAmount,
           paidAmount,
@@ -192,32 +199,33 @@ export async function PUT(request: Request, { params }: { params: { id: string }
             importPrice: item.importPrice
           }))
         },
-        actorUserId,
+        session.id,
         "increment"
       );
 
       if (paidAmount > 0) {
         await tx.cashTransaction.create({
           data: {
-            code: await nextCode("PC", "cashTransaction"),
+            code: paymentCode!,
             branchId: parsed.data.branchId,
             type: "PAYMENT",
             amount: new Prisma.Decimal(paidAmount),
             purchaseOrderId: existing.id,
             supplierId: parsed.data.supplierId,
-            createdById: actorUserId,
+            createdById: session.id,
             note: parsed.data.note ?? `Chi tiền phiếu nhập ${existing.code}`
           }
         });
       }
 
-      await recalculatePurchasePaymentState(tx, existing.id);
-      if (existing.supplierId !== parsed.data.supplierId) {
-        await recalculateSupplierPayableDebt(tx, existing.supplierId);
-      }
-
       return updated;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
+
+    await recalculatePurchasePaymentStateForPurchase(existing.id);
+    await recalculateSupplierPayableDebtForSupplier(parsed.data.supplierId);
+    if (existing.supplierId !== parsed.data.supplierId) {
+      await recalculateSupplierPayableDebtForSupplier(existing.supplierId);
+    }
 
     return NextResponse.json({ ok: true, purchase });
   } catch (error) {
@@ -274,9 +282,9 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       await tx.purchaseOrder.delete({
         where: { id: existing.id }
       });
+    }, { maxWait: 10000, timeout: 30000 });
 
-      await recalculateSupplierPayableDebt(tx, existing.supplierId);
-    });
+    await recalculateSupplierPayableDebtForSupplier(existing.supplierId);
 
     return NextResponse.json({ ok: true, code: existing.code });
   } catch (error) {

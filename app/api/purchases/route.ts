@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { requireApiSession, resolveActorUserId } from "@/lib/auth";
-import { recalculateSupplierPayableDebt } from "@/lib/debt-service";
+import { requireApiSession } from "@/lib/auth";
+import { recalculatePurchasePaymentStateForPurchase, recalculateSupplierPayableDebtForSupplier } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { purchaseSchema } from "@/lib/validations";
@@ -9,7 +9,6 @@ import { purchaseSchema } from "@/lib/validations";
 export async function POST(request: Request) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
-    const actorUserId = await resolveActorUserId(session);
     const body = await request.json();
     const parsed = purchaseSchema.safeParse(body);
     if (!parsed.success) {
@@ -25,14 +24,16 @@ export async function POST(request: Request) {
     const paidAmount = parsed.data.paidAmount;
     const debtAmount = Math.max(totalAmount - paidAmount, 0);
     const status = debtAmount > 0 ? "PARTIAL" : "COMPLETED";
+    const purchaseCode = await nextCode("PN", "purchaseOrder");
+    const paymentCode = paidAmount > 0 ? await nextCode("PC", "cashTransaction") : null;
 
     const purchase = await prisma.$transaction(async (tx) => {
       const created = await tx.purchaseOrder.create({
         data: {
-          code: await nextCode("PN", "purchaseOrder"),
+          code: purchaseCode,
           branchId: parsed.data.branchId,
           supplierId: parsed.data.supplierId,
-          createdById: actorUserId,
+          createdById: session.id,
           status,
           totalAmount: new Prisma.Decimal(totalAmount),
           paidAmount: new Prisma.Decimal(paidAmount),
@@ -52,77 +53,88 @@ export async function POST(request: Request) {
         include: { items: true }
       });
 
-      for (const item of created.items) {
-        const existingInventory = await tx.inventory.findFirst({
-          where: {
-            branchId: created.branchId,
-            productId: item.productId,
-            variantId: null
-          },
-          select: { id: true }
-        });
+      const existingInventories = await tx.inventory.findMany({
+        where: {
+          branchId: created.branchId,
+          variantId: null,
+          productId: { in: created.items.map((item) => item.productId) }
+        },
+        select: { id: true, productId: true }
+      });
+      const inventoryIdByProduct = new Map(
+        existingInventories
+          .filter((inventory): inventory is { id: string; productId: string } => Boolean(inventory.productId))
+          .map((inventory) => [inventory.productId, inventory.id])
+      );
 
-        if (existingInventory) {
-          await tx.inventory.update({
-            where: { id: existingInventory.id },
-            data: {
-              quantity: { increment: item.quantity }
-            }
-          });
-        } else {
-          await tx.inventory.create({
-            data: {
-              branchId: created.branchId,
-              productId: item.productId,
-              quantity: item.quantity
-            }
-          });
-        }
+      await Promise.all(
+        created.items.map(async (item) => {
+          const inventoryId = inventoryIdByProduct.get(item.productId);
 
-        await tx.productBatch.create({
-          data: {
-            branchId: created.branchId,
-            productId: item.productId,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate,
-            quantity: item.quantity,
-            importPrice: item.importPrice,
-            purchaseItemId: item.id
+          if (inventoryId) {
+            await tx.inventory.update({
+              where: { id: inventoryId },
+              data: {
+                quantity: { increment: item.quantity }
+              }
+            });
+          } else {
+            await tx.inventory.create({
+              data: {
+                branchId: created.branchId,
+                productId: item.productId,
+                quantity: item.quantity
+              }
+            });
           }
-        });
 
-        await tx.inventoryTransaction.create({
-          data: {
-            branchId: created.branchId,
-            productId: item.productId,
-            type: "IMPORT",
-            quantity: item.quantity,
-            referenceCode: created.code,
-            createdById: actorUserId,
-            note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
-          }
-        });
-      }
-
-      await recalculateSupplierPayableDebt(tx, created.supplierId);
+          await Promise.all([
+            tx.productBatch.create({
+              data: {
+                branchId: created.branchId,
+                productId: item.productId,
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate,
+                quantity: item.quantity,
+                importPrice: item.importPrice,
+                purchaseItemId: item.id
+              }
+            }),
+            tx.inventoryTransaction.create({
+              data: {
+                branchId: created.branchId,
+                productId: item.productId,
+                type: "IMPORT",
+                quantity: item.quantity,
+                referenceCode: created.code,
+                createdById: session.id,
+                note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
+              }
+            })
+          ]);
+        })
+      );
 
       if (paidAmount > 0) {
         await tx.cashTransaction.create({
           data: {
-            code: await nextCode("PC", "cashTransaction"),
+            code: paymentCode!,
             branchId: created.branchId,
             type: "PAYMENT",
             amount: new Prisma.Decimal(paidAmount),
             purchaseOrderId: created.id,
             supplierId: created.supplierId,
-            createdById: actorUserId,
+            createdById: session.id,
             note: parsed.data.note ?? `Chi tiền phiếu nhập ${created.code}`
           }
         });
       }
 
       return created;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
+
+    await recalculatePurchasePaymentStateForPurchase(purchase.id);
+    await recalculateSupplierPayableDebtForSupplier(purchase.supplierId);
 
     return NextResponse.json({ ok: true, purchase });
   } catch (error) {
