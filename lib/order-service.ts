@@ -17,13 +17,17 @@ type OrderPayload = {
 };
 
 async function loadOrderPayloadItems(items: OrderPayload["items"]) {
-  return Promise.all(
-    items.map(async (item) => {
-      const product = await prisma.product.findUnique({ where: { id: item.productId } });
-      if (!product) throw new Error(`Không tìm thấy sản phẩm ${item.productId}`);
-      return { ...item, product };
-    })
-  );
+  const productIds = Array.from(new Set(items.map((item) => item.productId)));
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } }
+  });
+  const productMap = new Map(products.map((product) => [product.id, product]));
+
+  return items.map((item) => {
+    const product = productMap.get(item.productId);
+    if (!product) throw new Error(`Không tìm thấy sản phẩm ${item.productId}`);
+    return { ...item, product };
+  });
 }
 
 function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPayloadItems>>, payload: OrderPayload) {
@@ -157,35 +161,38 @@ async function applyOrderEffects(
 
   await ensureInventorySufficient(tx, payload.branchId, items);
 
-  for (const item of items) {
-    await tx.inventory.updateMany({
-      where: { branchId: payload.branchId, productId: item.product.id },
-      data: { quantity: { decrement: item.quantity } }
-    });
-  }
+  await Promise.all(
+    items.map((item) =>
+      tx.inventory.updateMany({
+        where: { branchId: payload.branchId, productId: item.product.id },
+        data: { quantity: { decrement: item.quantity } }
+      })
+    )
+  );
 
-  if (derived.paidAmount > 0) {
-    await tx.cashTransaction.create({
+  await Promise.all([
+    derived.paidAmount > 0
+      ? tx.cashTransaction.create({
+          data: {
+            code: receiptCode ?? (await nextCode("PT", "cashTransaction")),
+            branchId: payload.branchId,
+            type: CashTxnType.RECEIPT,
+            amount: new Prisma.Decimal(derived.paidAmount),
+            customerId: payload.customerId,
+            orderId: order.id,
+            createdById: payload.createdById,
+            note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
+          }
+        })
+      : Promise.resolve(),
+    tx.customer.update({
+      where: { id: payload.customerId },
       data: {
-        code: receiptCode ?? (await nextCode("PT", "cashTransaction")),
-        branchId: payload.branchId,
-        type: CashTxnType.RECEIPT,
-        amount: new Prisma.Decimal(derived.paidAmount),
-        customerId: payload.customerId,
-        orderId: order.id,
-        createdById: payload.createdById,
-        note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
+        totalSpend: { increment: derived.grandTotal },
+        loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) }
       }
-    });
-  }
-
-  await tx.customer.update({
-    where: { id: payload.customerId },
-    data: {
-      totalSpend: { increment: derived.grandTotal },
-      loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) }
-    }
-  });
+    })
+  ]);
 }
 
 export async function allocateBatchesFEFO(branchId: string, productId: string, quantity: number, referenceCode: string, createdById: string) {
@@ -288,7 +295,7 @@ export async function createOrderFromPayload(payload: OrderPayload) {
     await applyOrderEffects(tx, created, payload, items, derived, receiptCode);
 
     return created;
-  }, { maxWait: 10000, timeout: 20000 });
+  }, { maxWait: 10000, timeout: 30000 });
 
   if (derived.finalStatus !== "DRAFT") {
     await recalculateCustomerReceivableDebtForCustomer(payload.customerId);
@@ -359,7 +366,7 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
     await applyOrderEffects(tx, updated, payload, items, derived, receiptCode);
 
     return updated;
-  }, { maxWait: 10000, timeout: 20000 });
+  }, { maxWait: 10000, timeout: 30000 });
 
   await recalculateCustomerReceivableDebtForCustomer(existing.customerId);
   if (payload.customerId !== existing.customerId) {
@@ -376,28 +383,24 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
 }
 
 export async function nextCode(prefix: string, model: "order" | "purchaseOrder" | "cashTransaction" | "supplier" | "customer") {
-  let rows: Array<{ code: string }> = [];
+  let row: { code: string } | null = null;
   switch (model) {
     case "order":
-      rows = await prisma.order.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+      row = await prisma.order.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
       break;
     case "purchaseOrder":
-      rows = await prisma.purchaseOrder.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+      row = await prisma.purchaseOrder.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
       break;
     case "cashTransaction":
-      rows = await prisma.cashTransaction.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+      row = await prisma.cashTransaction.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
       break;
     case "supplier":
-      rows = await prisma.supplier.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+      row = await prisma.supplier.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
       break;
     case "customer":
-      rows = await prisma.customer.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+      row = await prisma.customer.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
       break;
   }
-  let max = 0;
-  for (const row of rows) {
-    const num = Number(row.code.slice(prefix.length));
-    if (!Number.isNaN(num)) max = Math.max(max, num);
-  }
+  const max = row ? Number(row.code.slice(prefix.length)) || 0 : 0;
   return `${prefix}${String(max + 1).padStart(6, "0")}`;
 }

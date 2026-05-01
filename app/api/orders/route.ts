@@ -8,20 +8,6 @@ export async function POST(request: Request) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const body = await request.json();
-    const actor =
-      (await prisma.user.findUnique({
-        where: { email: session.email },
-        select: { id: true }
-      })) ??
-      (await prisma.user.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: "asc" },
-        select: { id: true }
-      }));
-
-    if (!actor) {
-      return NextResponse.json({ error: "Chưa có người dùng hợp lệ trong hệ thống để tạo hóa đơn" }, { status: 500 });
-    }
 
     let branchId = typeof body?.branchId === "string" ? body.branchId.trim() : "";
 
@@ -50,7 +36,7 @@ export async function POST(request: Request) {
 
     const order = await createOrderFromPayload({
       ...parsed.data,
-      createdById: actor.id
+      createdById: session.id
     });
     return NextResponse.json({ ok: true, order });
   } catch (error) {
