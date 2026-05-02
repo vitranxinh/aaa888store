@@ -49,6 +49,7 @@ export function ServerPagination({ pathname, query, page, pageSize, totalCount, 
         {prevPage ? (
           <Link
             href={buildHref(prevPage)}
+            prefetch={false}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
           >
             Trước
@@ -61,6 +62,7 @@ export function ServerPagination({ pathname, query, page, pageSize, totalCount, 
         {nextPage ? (
           <Link
             href={buildHref(nextPage)}
+            prefetch={false}
             className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
           >
             Sau

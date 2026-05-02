@@ -1,9 +1,9 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Prisma } from "@prisma/client";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { OrderDeleteRequestActions } from "@/components/order-delete-request-actions";
-import { OrderCreateModal } from "@/components/order-create-modal";
 import { OrdersFilterBar } from "@/components/orders-filter-bar";
 import { ServerPagination } from "@/components/server-pagination";
 import { OrderStatusActions } from "@/components/order-status-actions";
@@ -12,6 +12,21 @@ import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range"
 import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
 import { formatCurrency, formatDate } from "@/lib/utils";
+
+const OrderCreateModal = dynamic(
+  () => import("@/components/order-create-modal").then((module) => module.OrderCreateModal),
+  {
+    ssr: false,
+    loading: () => (
+      <button
+        disabled
+        className="rounded-2xl bg-emerald-600/80 px-4 py-2.5 text-base font-semibold text-white shadow-soft sm:px-5 sm:py-3 sm:text-xl"
+      >
+        + Tạo HĐ
+      </button>
+    )
+  }
+);
 
 async function OrdersList({
   orderWhere,
@@ -240,6 +255,15 @@ async function PendingDeleteRequestsSection({
   );
 }
 
+function PendingDeleteRequestsFallback() {
+  return (
+    <section className="rounded-3xl border border-amber-200 bg-amber-50/50 p-4 shadow-soft sm:p-6">
+      <div className="h-6 w-56 animate-pulse rounded bg-amber-100" />
+      <div className="mt-2 h-4 w-72 animate-pulse rounded bg-amber-100" />
+    </section>
+  );
+}
+
 export default async function OrdersPage({
   searchParams
 }: {
@@ -283,17 +307,7 @@ export default async function OrdersPage({
     ]
   };
 
-  const [defaultCustomer, defaultBranchId] = await Promise.all([
-    prisma.customer.findFirst({
-      where: {
-        code: "KH000000"
-      },
-      select: { id: true, name: true }
-    }),
-    getDefaultBranchId()
-  ]);
-
-  const branchId = session.branchId ?? defaultBranchId ?? "";
+  const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -301,11 +315,11 @@ export default async function OrdersPage({
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <OrdersFilterBar q={q} range={range} dateFrom={dateFrom} dateTo={dateTo} canExport={canExportExcel} />
-        <OrderCreateModal branchId={branchId} defaultCustomer={defaultCustomer} />
+        <OrderCreateModal branchId={branchId} />
       </div>
 
       {isAdmin ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<PendingDeleteRequestsFallback />}>
           <PendingDeleteRequestsSection branchId={session.branchId} createdAt={createdAt} />
         </Suspense>
       ) : null}

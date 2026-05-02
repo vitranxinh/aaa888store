@@ -7,7 +7,6 @@ import { useToastStore } from "@/store/toast-store";
 
 type Props = {
   branchId: string;
-  defaultCustomer: { id: string; name: string } | null;
 };
 
 type ProductSuggestion = {
@@ -25,7 +24,7 @@ type OrderLine = {
   discountValue: number;
 };
 
-export function OrderCreateModal({ branchId, defaultCustomer }: Props) {
+export function OrderCreateModal({ branchId }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -293,15 +292,6 @@ export function OrderCreateModal({ branchId, defaultCustomer }: Props) {
                   placeholder="Tìm khách hàng..."
                   className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-lg"
                 />
-                {defaultCustomer ? (
-                  <button
-                    type="button"
-                    className="mt-2 text-sm font-medium text-emerald-700 underline-offset-2 hover:underline"
-                    onClick={() => selectCustomer({ id: defaultCustomer.id, label: defaultCustomer.name })}
-                  >
-                    Chọn {defaultCustomer.name}
-                  </button>
-                ) : null}
                 {customerQuery ? (
                   <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white">
                     {isSearchingCustomers ? (

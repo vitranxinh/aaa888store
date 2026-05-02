@@ -72,6 +72,7 @@ export default async function DashboardPage({
           <Link
             key={item.href}
             href={item.href}
+            prefetch={false}
             className={`rounded-3xl border p-4 shadow-soft ${item.tone}`}
           >
             <div className="text-2xl">{item.icon}</div>
