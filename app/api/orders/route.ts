@@ -40,6 +40,14 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, order });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Không thể tạo hóa đơn" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "";
+    return NextResponse.json(
+      {
+        error: /prisma|transaction|timed out|already closed/i.test(message)
+          ? "Tạo hóa đơn đang chậm hơn bình thường, vui lòng thử lại."
+          : message || "Không thể tạo hóa đơn"
+      },
+      { status: 500 }
+    );
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { requireApiSession } from "@/lib/auth";
-import { recalculatePurchasePaymentStateForPurchase, recalculateSupplierPayableDebtForSupplier } from "@/lib/debt-service";
+import { recalculatePurchasePaymentStateForPurchase } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { runTransactionWithRetry } from "@/lib/transaction-retry";
@@ -144,10 +144,17 @@ export async function POST(request: Request) {
     }, { maxWait: 10000, timeout: 30000 });
 
     await recalculatePurchasePaymentStateForPurchase(purchase.id);
-    await recalculateSupplierPayableDebtForSupplier(purchase.supplierId);
 
     return NextResponse.json({ ok: true, purchase });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Không thể tạo phiếu nhập" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "";
+    return NextResponse.json(
+      {
+        error: /prisma|transaction|timed out|already closed/i.test(message)
+          ? "Tạo phiếu nhập đang chậm hơn bình thường, vui lòng thử lại."
+          : message || "Không thể tạo phiếu nhập"
+      },
+      { status: 500 }
+    );
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
@@ -25,6 +26,7 @@ type OrderLine = {
 };
 
 export function OrderCreateModal({ customers, branchId }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
@@ -172,7 +174,8 @@ export function OrderCreateModal({ customers, branchId }: Props) {
         setOtherCharge(0);
         setPaidAmount(0);
         setPaymentTouched(false);
-        window.location.href = `/orders/${payload.order.id}?created=1`;
+        router.push(`/orders/${payload.order.id}?created=1`);
+        router.refresh();
       } catch (error) {
         pushToast({
           title: "Không thể tạo hóa đơn",

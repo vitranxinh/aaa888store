@@ -230,15 +230,19 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }, { maxWait: 10000, timeout: 30000 });
 
     await recalculatePurchasePaymentStateForPurchase(existing.id);
-    await recalculateSupplierPayableDebtForSupplier(parsed.data.supplierId);
     if (existing.supplierId !== parsed.data.supplierId) {
       await recalculateSupplierPayableDebtForSupplier(existing.supplierId);
     }
 
     return NextResponse.json({ ok: true, purchase });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Không thể cập nhật phiếu nhập" },
+      {
+        error: /prisma|transaction|timed out|already closed/i.test(message)
+          ? "Cập nhật phiếu nhập đang chậm hơn bình thường, vui lòng thử lại."
+          : message || "Không thể cập nhật phiếu nhập"
+      },
       { status: 500 }
     );
   }
@@ -296,8 +300,13 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
 
     return NextResponse.json({ ok: true, code: existing.code });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Không thể xóa phiếu nhập" },
+      {
+        error: /prisma|transaction|timed out|already closed/i.test(message)
+          ? "Xóa phiếu nhập đang chậm hơn bình thường, vui lòng thử lại."
+          : message || "Không thể xóa phiếu nhập"
+      },
       { status: 500 }
     );
   }

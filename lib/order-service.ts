@@ -318,10 +318,12 @@ export async function createOrderFromPayload(payload: OrderPayload) {
   }, { maxWait: 10000, timeout: 30000 });
 
   if (derived.finalStatus !== "DRAFT") {
-    await recalculateCustomerReceivableDebtForCustomer(payload.customerId);
-    for (const [productId, quantity] of aggregateQuantityByProduct(items).entries()) {
-      await allocateBatchesFEFO(payload.branchId, productId, quantity, code, payload.createdById);
-    }
+    await Promise.all([
+      recalculateCustomerReceivableDebtForCustomer(payload.customerId),
+      ...Array.from(aggregateQuantityByProduct(items).entries()).map(([productId, quantity]) =>
+        allocateBatchesFEFO(payload.branchId, productId, quantity, code, payload.createdById)
+      )
+    ]);
   }
 
   return order;
@@ -394,9 +396,11 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   }
 
   if (derived.finalStatus !== "DRAFT") {
-    for (const [productId, quantity] of aggregateQuantityByProduct(items).entries()) {
-      await allocateBatchesFEFO(payload.branchId, productId, quantity, nextCodeVersion, payload.createdById);
-    }
+    await Promise.all(
+      Array.from(aggregateQuantityByProduct(items).entries()).map(([productId, quantity]) =>
+        allocateBatchesFEFO(payload.branchId, productId, quantity, nextCodeVersion, payload.createdById)
+      )
+    );
   }
 
   return order;
