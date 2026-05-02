@@ -137,9 +137,16 @@ export function PurchaseCreateModal({
 
   function submit() {
     if (isSubmitting) return;
+    const clickStartedAt = performance.now();
     setIsSubmitting(true);
     startTransition(async () => {
       try {
+        console.info("[perf][purchase-create-modal][submit-start]", {
+          itemCount: items.length,
+          supplierId,
+          t: 0
+        });
+        const requestStartedAt = performance.now();
         const response = await fetch("/api/purchases", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -158,6 +165,11 @@ export function PurchaseCreateModal({
           })
         });
         const payload = await response.json();
+        console.info("[perf][purchase-create-modal][response]", {
+          requestMs: Math.round(performance.now() - requestStartedAt),
+          totalMs: Math.round(performance.now() - clickStartedAt),
+          status: response.status
+        });
         if (!response.ok) {
           pushToast({ title: "Không thể tạo phiếu nhập", description: payload.error, variant: "error" });
           setIsSubmitting(false);
@@ -166,6 +178,9 @@ export function PurchaseCreateModal({
         pushToast({ title: "Đã tạo phiếu nhập", description: payload.purchase.code });
         resetForm();
         setOpen(false);
+        console.info("[perf][purchase-create-modal][refresh]", {
+          totalMs: Math.round(performance.now() - clickStartedAt)
+        });
         router.refresh();
       } catch (error) {
         pushToast({

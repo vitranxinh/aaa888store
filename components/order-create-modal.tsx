@@ -183,9 +183,15 @@ export function OrderCreateModal({ branchId }: Props) {
 
   function submit() {
     if (isSubmitting) return;
+    const clickStartedAt = performance.now();
     setIsSubmitting(true);
     startTransition(async () => {
       try {
+        console.info("[perf][order-create-modal][submit-start]", {
+          lineCount: lines.length,
+          customerId,
+          t: 0
+        });
         if (!customerId) {
           pushToast({
             title: "Thiếu khách hàng",
@@ -196,6 +202,7 @@ export function OrderCreateModal({ branchId }: Props) {
           return;
         }
 
+        const requestStartedAt = performance.now();
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -217,8 +224,18 @@ export function OrderCreateModal({ branchId }: Props) {
             }))
           })
         });
+        console.info("[perf][order-create-modal][response]", {
+          requestMs: Math.round(performance.now() - requestStartedAt),
+          totalMs: Math.round(performance.now() - clickStartedAt),
+          redirected: response.redirected,
+          status: response.status
+        });
 
         if (response.redirected) {
+          console.info("[perf][order-create-modal][redirect]", {
+            totalMs: Math.round(performance.now() - clickStartedAt),
+            mode: "server-redirect"
+          });
           window.location.href = response.url;
           return;
         }
@@ -245,8 +262,11 @@ export function OrderCreateModal({ branchId }: Props) {
         setOtherCharge(0);
         setPaidAmount(0);
         setPaymentTouched(false);
+        console.info("[perf][order-create-modal][navigate]", {
+          totalMs: Math.round(performance.now() - clickStartedAt),
+          target: `/orders/${payload.order.id}?created=1`
+        });
         router.push(`/orders/${payload.order.id}?created=1`);
-        router.refresh();
       } catch (error) {
         pushToast({
           title: "Không thể tạo hóa đơn",
