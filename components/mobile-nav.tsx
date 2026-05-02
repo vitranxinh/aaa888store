@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
+import { PrefetchNavLink } from "@/components/prefetch-nav-link";
 import { Button } from "@/components/ui/button";
 import { navigationItems } from "@/components/app-sidebar";
 import type { SessionUser } from "@/lib/auth";
@@ -65,7 +66,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
                   const Icon = item.icon;
                   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                   return (
-                    <Link
+                    <PrefetchNavLink
                       key={item.href}
                       href={item.href}
                       prefetch={false}
@@ -77,7 +78,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
                     >
                       <Icon className="h-5 w-5" />
                       {item.title}
-                    </Link>
+                    </PrefetchNavLink>
                   );
                 })}
             </nav>
@@ -104,7 +105,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <Link
+              <PrefetchNavLink
                 key={item.href}
                 href={item.href}
                 prefetch={false}
@@ -115,7 +116,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
               >
                 <Icon className="h-6 w-6" />
                 <span className="line-clamp-1">{item.title}</span>
-              </Link>
+              </PrefetchNavLink>
             );
           })}
         </div>

@@ -37,6 +37,7 @@ const getCachedProductsPageData = unstable_cache(
     page: number;
     pageSize: number;
   }) => {
+    const startedAt = Date.now();
     const productWhere = q
       ? {
           OR: [
@@ -68,6 +69,7 @@ const getCachedProductsPageData = unstable_cache(
       skip: (page - 1) * pageSize,
       take: pageSize + 1
     });
+    const baseQueryMs = Date.now() - startedAt;
 
     const hasNext = products.length > pageSize;
     const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
@@ -76,6 +78,7 @@ const getCachedProductsPageData = unstable_cache(
       new Set(visibleProducts.map((product) => product.categoryId).filter((value): value is string => Boolean(value)))
     );
 
+    const relationStartedAt = Date.now();
     const [inventories, categories] = await Promise.all([
       productIds.length
         ? prisma.inventory.findMany({
@@ -97,6 +100,7 @@ const getCachedProductsPageData = unstable_cache(
           })
         : Promise.resolve([])
     ]);
+    const relationQueryMs = Date.now() - relationStartedAt;
 
     const quantityByProductId = new Map<string, number>();
     for (const inventory of inventories) {
@@ -106,6 +110,17 @@ const getCachedProductsPageData = unstable_cache(
     }
 
     const categoryById = new Map(categories.map((category) => [category.id, category.name]));
+
+    const totalMs = Date.now() - startedAt;
+    console.info("[perf][products-page]", {
+      q,
+      page,
+      pageSize,
+      rowCount: visibleProducts.length,
+      baseQueryMs,
+      relationQueryMs,
+      totalMs
+    });
 
     return {
       hasNext,

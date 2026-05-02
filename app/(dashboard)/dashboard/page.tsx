@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PrefetchNavLink } from "@/components/prefetch-nav-link";
 import { AppHeader } from "@/components/app-header";
 import { ChartCard } from "@/components/chart-card";
 import { requireSession } from "@/lib/auth";
@@ -69,7 +70,7 @@ export default async function DashboardPage({
 
       <section className="grid grid-cols-3 gap-3 sm:hidden">
         {mobileQuickLinks.map((item) => (
-          <Link
+          <PrefetchNavLink
             key={item.href}
             href={item.href}
             prefetch={false}
@@ -77,7 +78,7 @@ export default async function DashboardPage({
           >
             <div className="text-2xl">{item.icon}</div>
             <p className="mt-3 text-sm font-bold leading-snug">{item.label}</p>
-          </Link>
+          </PrefetchNavLink>
         ))}
       </section>
 

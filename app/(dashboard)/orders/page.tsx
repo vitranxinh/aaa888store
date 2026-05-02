@@ -45,6 +45,7 @@ const getCachedOrdersPageData = unstable_cache(
     role: "ADMIN" | "MANAGER" | "CASHIER";
     createdAt?: Prisma.DateTimeFilter;
   }) => {
+    const startedAt = Date.now();
     const orderWhere: Prisma.OrderWhereInput = {
       AND: [
         { branchId: branchId ?? undefined },
@@ -86,6 +87,7 @@ const getCachedOrdersPageData = unstable_cache(
       skip: (page - 1) * pageSize,
       take: pageSize + 1
     });
+    const baseQueryMs = Date.now() - startedAt;
 
     const hasNext = orders.length > pageSize;
     const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
@@ -93,6 +95,7 @@ const getCachedOrdersPageData = unstable_cache(
     const customerIds = Array.from(new Set(visibleOrders.map((order) => order.customerId)));
     const createdByIds = Array.from(new Set(visibleOrders.map((order) => order.createdById)));
 
+    const relationStartedAt = Date.now();
     const [customers, users, deleteRequests] = await Promise.all([
       customerIds.length
         ? prisma.customer.findMany({
@@ -113,10 +116,23 @@ const getCachedOrdersPageData = unstable_cache(
           })
         : Promise.resolve([])
     ]);
+    const relationQueryMs = Date.now() - relationStartedAt;
 
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
     const userById = new Map(users.map((user) => [user.id, user]));
     const deleteRequestByOrderId = new Map(deleteRequests.map((request) => [request.orderId, request]));
+
+    const totalMs = Date.now() - startedAt;
+    console.info("[perf][orders-page]", {
+      q,
+      page,
+      pageSize,
+      role,
+      rowCount: visibleOrders.length,
+      baseQueryMs,
+      relationQueryMs,
+      totalMs
+    });
 
     return {
       hasNext,

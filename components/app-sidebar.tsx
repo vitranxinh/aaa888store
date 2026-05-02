@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Boxes, LayoutDashboard, ReceiptText, ShoppingBag, Truck, Users, Wallet } from "lucide-react";
+import { PrefetchNavLink } from "@/components/prefetch-nav-link";
 import type { SessionUser } from "@/lib/auth";
 import { canAccess } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,7 @@ export function AppSidebar({ session }: { session: SessionUser }) {
             const Icon = item.icon;
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <Link
+              <PrefetchNavLink
                 key={item.href}
                 href={item.href}
                 prefetch={false}
@@ -50,7 +50,7 @@ export function AppSidebar({ session }: { session: SessionUser }) {
               >
                 <Icon className="h-6 w-6" />
                 {item.title}
-              </Link>
+              </PrefetchNavLink>
             );
           })}
       </nav>

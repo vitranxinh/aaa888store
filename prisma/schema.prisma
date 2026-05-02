@@ -151,6 +151,7 @@ model Product {
   @@index([categoryId])
   @@index([brandId])
   @@index([status])
+  @@index([name])
 }
 
 model ProductVariant {
@@ -256,6 +257,7 @@ model Customer {
 
   @@index([updatedAt])
   @@index([groupId])
+  @@index([name])
 }
 
 model Supplier {
