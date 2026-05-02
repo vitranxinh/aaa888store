@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { unstable_cache } from "next/cache";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { CustomerCreateForm } from "@/components/customer-create-form";
@@ -9,6 +10,66 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getCustomerGroupOptions } from "@/lib/reference-data";
 import { formatCurrency } from "@/lib/utils";
+
+const getCachedCustomersPageData = unstable_cache(
+  async ({
+    q,
+    page,
+    pageSize
+  }: {
+    q: string;
+    page: number;
+    pageSize: number;
+  }) => {
+    const startedAt = Date.now();
+    const customerWhere = {
+      NOT: { code: "KH000000" },
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" as const } },
+              { phone: { contains: q, mode: "insensitive" as const } },
+              { code: { contains: q, mode: "insensitive" as const } }
+            ]
+          }
+        : {})
+    };
+
+    const customers = await prisma.customer.findMany({
+      where: customerWhere,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        phone: true,
+        email: true,
+        address: true,
+        note: true,
+        groupId: true,
+        openingDebt: true,
+        receivableDebt: true
+      },
+      orderBy: { code: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize + 1
+    });
+
+    const totalMs = Date.now() - startedAt;
+    const hasNext = customers.length > pageSize;
+    const visibleCustomers = hasNext ? customers.slice(0, pageSize) : customers;
+    console.info("[perf][customers-page]", {
+      q,
+      page,
+      pageSize,
+      rowCount: visibleCustomers.length,
+      totalMs
+    });
+
+    return { customers: visibleCustomers, hasNext };
+  },
+  ["customers-page-data"],
+  { revalidate: 15 }
+);
 
 async function CustomersList({
   q,
@@ -27,24 +88,10 @@ async function CustomersList({
   canSeeCustomerPrivateFields: boolean;
   groupOptions: { id: string; name: string }[];
 }) {
-  const customerWhere = {
-    NOT: { code: "KH000000" },
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { phone: { contains: q, mode: "insensitive" as const } },
-            { code: { contains: q, mode: "insensitive" as const } }
-          ]
-        }
-      : {})
-  };
-
-  const customers = await prisma.customer.findMany({
-    where: customerWhere,
-    orderBy: { code: "desc" },
-    skip: (page - 1) * pageSize,
-    take: pageSize
+  const { customers, hasNext } = await getCachedCustomersPageData({
+    q,
+    page,
+    pageSize
   });
 
   const filteredCustomers = customers
@@ -185,6 +232,13 @@ async function CustomersList({
           </tbody>
         </table>
       </div>
+      <ServerPagination
+        pathname="/customers"
+        query={{ q, debt: debtFilter }}
+        page={page}
+        pageSize={pageSize}
+        hasNext={hasNext}
+      />
     </>
   );
 }
@@ -215,31 +269,15 @@ export default async function CustomersPage({
   const q = searchParams?.q ?? "";
   const debtFilter = searchParams?.debt ?? "default";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 10;
+  const pageSize = 20;
 
-  const customerWhere = {
-    NOT: { code: "KH000000" },
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { phone: { contains: q, mode: "insensitive" as const } },
-            { code: { contains: q, mode: "insensitive" as const } }
-          ]
-        }
-      : {})
-  };
-
-  const [customerCount, groups] = await Promise.all([
-    prisma.customer.count({ where: customerWhere }),
-    getCustomerGroupOptions()
-  ]);
+  const groups = await getCustomerGroupOptions();
 
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
 
   return (
     <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Khách hàng" description={`${customerCount} khách hàng`} session={session} />
+      <AppHeader title="Khách hàng" description="Quản lý danh sách khách hàng và công nợ" session={session} />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <form className="flex w-full max-w-4xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -249,6 +287,7 @@ export default async function CustomersPage({
             placeholder="Tìm theo tên, mã, SĐT..."
             suggestions={[]}
             fetchUrl="/api/customers/search?limit=20"
+            autoSubmitDelayMs={300}
             className="sm:min-w-[280px]"
           />
           <select
@@ -290,13 +329,6 @@ export default async function CustomersPage({
           groupOptions={groupOptions}
         />
       </Suspense>
-      <ServerPagination
-        pathname="/customers"
-        query={{ q, debt: debtFilter }}
-        page={page}
-        pageSize={pageSize}
-        totalCount={customerCount}
-      />
     </div>
   );
 }

@@ -1,27 +1,44 @@
+import dynamic from "next/dynamic";
+import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
-import { PurchaseCreateModal } from "@/components/purchase-create-modal";
-import { PurchaseEditModal } from "@/components/purchase-edit-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-export default async function InventoryPage({
-  searchParams
+const PurchaseCreateModal = dynamic(
+  () => import("@/components/purchase-create-modal").then((module) => module.PurchaseCreateModal),
+  { ssr: false }
+);
+
+const PurchaseEditModal = dynamic(
+  () => import("@/components/purchase-edit-modal").then((module) => module.PurchaseEditModal),
+  { ssr: false }
+);
+
+async function InventoryContent({
+  branchId,
+  q,
+  createdAt,
+  page,
+  pageSize,
+  range,
+  dateFrom,
+  dateTo
 }: {
-  searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string; page?: string };
+  branchId?: string;
+  q: string;
+  createdAt?: { gte?: Date; lte?: Date };
+  page: number;
+  pageSize: number;
+  range: string;
+  dateFrom: string;
+  dateTo: string;
 }) {
-  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
-  const q = searchParams?.q ?? "";
-  const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
-  const dateFrom = searchParams?.dateFrom ?? "";
-  const dateTo = searchParams?.dateTo ?? "";
-  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 15;
-  const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
+  const startedAt = Date.now();
   const purchaseWhere = {
-    branchId: session.branchId ?? undefined,
+    branchId,
     ...(createdAt ? { createdAt } : {}),
     ...(q
       ? {
@@ -32,83 +49,47 @@ export default async function InventoryPage({
         }
       : {})
   };
-  const [purchases, purchaseCount, suppliers] = await Promise.all([
-    prisma.purchaseOrder.findMany({
-      where: purchaseWhere,
-      include: {
-        supplier: { select: { name: true } },
-        items: {
-          select: {
-            productId: true,
-            quantity: true,
-            importPrice: true,
-            batchNumber: true,
-            expiryDate: true,
-            product: { select: { name: true } }
-          }
+
+  const purchases = await prisma.purchaseOrder.findMany({
+    where: purchaseWhere,
+    include: {
+      supplier: { select: { name: true } },
+      items: {
+        select: {
+          productId: true,
+          quantity: true,
+          importPrice: true,
+          batchNumber: true,
+          expiryDate: true,
+          product: { select: { name: true } }
         }
-      },
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize
-    }),
-    prisma.purchaseOrder.count({ where: purchaseWhere }),
-    prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { code: "asc" }, take: 80 })
-  ]);
+      }
+    },
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * pageSize,
+    take: pageSize + 1
+  });
+
+  const totalMs = Date.now() - startedAt;
+  const hasNext = purchases.length > pageSize;
+  const visiblePurchases = hasNext ? purchases.slice(0, pageSize) : purchases;
+  console.info("[perf][inventory-page]", {
+    q,
+    page,
+    pageSize,
+    rowCount: visiblePurchases.length,
+    totalMs
+  });
 
   return (
-    <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Phiếu nhập hàng" description={`${purchaseCount} phiếu nhập`} session={session} />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <form className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-          <input
-            name="q"
-            defaultValue={q}
-            placeholder="Tìm theo mã phiếu, NCC..."
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:max-w-sm sm:text-lg"
-          />
-          <select
-            name="range"
-            defaultValue={range}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
-          >
-            <option value="all">Tất cả thời gian</option>
-            <option value="today">Hôm nay</option>
-            <option value="7d">7 ngày</option>
-            <option value="30d">30 ngày</option>
-            <option value="month">Tháng này</option>
-            <option value="custom">Tùy chọn ngày</option>
-          </select>
-          <input
-            type="date"
-            name="dateFrom"
-            defaultValue={dateFrom}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
-          />
-          <input
-            type="date"
-            name="dateTo"
-            defaultValue={dateTo}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
-          />
-          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
-            Lọc
-          </button>
-        </form>
-        <PurchaseCreateModal
-          branchId={session.branchId ?? ""}
-          suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
-        />
-      </div>
-
+    <>
       <div className="grid gap-3 sm:hidden">
-        {purchases.length === 0 ? (
+        {visiblePurchases.length === 0 ? (
           <div className="rounded-[28px] border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500 shadow-soft">
             Chưa có phiếu nhập trong khung lọc này.
           </div>
         ) : (
-          purchases.map((item) => (
+          visiblePurchases.map((item) => (
             <div key={item.id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-soft">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -148,19 +129,18 @@ export default async function InventoryPage({
                     supplierId: item.supplierId,
                     paidAmount: Number(item.paidAmount),
                     note: item.note,
-                        items: item.items.map((purchaseItem) => ({
-                          productId: purchaseItem.productId,
-                          productName: purchaseItem.product.name,
-                          quantity: purchaseItem.quantity,
-                          importPrice: Number(purchaseItem.importPrice),
-                          batchNumber: purchaseItem.batchNumber,
-                          expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
-                        }))
-                      }}
-                      suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
-                    />
-                  </div>
-                </div>
+                    items: item.items.map((purchaseItem) => ({
+                      productId: purchaseItem.productId,
+                      productName: purchaseItem.product.name,
+                      quantity: purchaseItem.quantity,
+                      importPrice: Number(purchaseItem.importPrice),
+                      batchNumber: purchaseItem.batchNumber,
+                      expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
+                    }))
+                  }}
+                />
+              </div>
+            </div>
           ))
         )}
       </div>
@@ -179,12 +159,12 @@ export default async function InventoryPage({
             </tr>
           </thead>
           <tbody>
-            {purchases.length === 0 ? (
+            {visiblePurchases.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-400 sm:px-6 sm:py-12 sm:text-2xl">Chưa có phiếu nhập</td>
               </tr>
             ) : (
-              purchases.map((item) => (
+              visiblePurchases.map((item) => (
                 <tr key={item.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                   <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">{item.code}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{formatDate(item.createdAt)}</td>
@@ -212,7 +192,6 @@ export default async function InventoryPage({
                           expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
                         }))
                       }}
-                      suppliers={suppliers.map((supplier) => ({ id: supplier.id, name: supplier.name }))}
                     />
                   </td>
                 </tr>
@@ -226,8 +205,95 @@ export default async function InventoryPage({
         query={{ q, range, dateFrom, dateTo }}
         page={page}
         pageSize={pageSize}
-        totalCount={purchaseCount}
+        hasNext={hasNext}
       />
+    </>
+  );
+}
+
+function InventoryContentFallback() {
+  return (
+    <div className="grid min-h-[620px] gap-3">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="min-h-[160px] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="h-5 w-24 animate-pulse rounded bg-slate-100" />
+          <div className="mt-3 h-6 w-56 animate-pulse rounded bg-slate-100" />
+          <div className="mt-4 h-16 animate-pulse rounded-2xl bg-slate-50" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default async function InventoryPage({
+  searchParams
+}: {
+  searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string; page?: string };
+}) {
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const q = searchParams?.q ?? "";
+  const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
+  const dateFrom = searchParams?.dateFrom ?? "";
+  const dateTo = searchParams?.dateTo ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
+  const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
+
+  return (
+    <div className="space-y-5 sm:space-y-8">
+      <AppHeader title="Phiếu nhập hàng" description="Theo dõi nhập hàng, thanh toán và công nợ nhà cung cấp" session={session} />
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <form className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="Tìm theo mã phiếu, NCC..."
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:max-w-sm sm:text-lg"
+          />
+          <select
+            name="range"
+            defaultValue={range}
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
+          >
+            <option value="all">Tất cả thời gian</option>
+            <option value="today">Hôm nay</option>
+            <option value="7d">7 ngày</option>
+            <option value="30d">30 ngày</option>
+            <option value="month">Tháng này</option>
+            <option value="custom">Tùy chọn ngày</option>
+          </select>
+          <input
+            type="date"
+            name="dateFrom"
+            defaultValue={dateFrom}
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
+          />
+          <input
+            type="date"
+            name="dateTo"
+            defaultValue={dateTo}
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
+          />
+          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
+            Lọc
+          </button>
+        </form>
+        <PurchaseCreateModal branchId={session.branchId ?? ""} />
+      </div>
+
+      <Suspense fallback={<InventoryContentFallback />}>
+        <InventoryContent
+          branchId={session.branchId ?? undefined}
+          q={q}
+          createdAt={createdAt ?? undefined}
+          page={page}
+          pageSize={pageSize}
+          range={range}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
+      </Suspense>
     </div>
   );
 }

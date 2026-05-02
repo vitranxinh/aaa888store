@@ -19,6 +19,7 @@ type Props = {
   suggestions: SuggestionItem[];
   className?: string;
   fetchUrl?: string;
+  autoSubmitDelayMs?: number;
 };
 
 export function AutocompleteSearchInput({
@@ -27,16 +28,33 @@ export function AutocompleteSearchInput({
   placeholder,
   suggestions,
   className,
-  fetchUrl
+  fetchUrl,
+  autoSubmitDelayMs
 }: Props) {
   const [query, setQuery] = useState(defaultValue);
   const [open, setOpen] = useState(false);
   const [remoteSuggestions, setRemoteSuggestions] = useState<SuggestionItem[]>([]);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const isFirstRenderRef = useRef(true);
 
   useEffect(() => {
     setQuery(defaultValue);
   }, [defaultValue]);
+
+  useEffect(() => {
+    if (!autoSubmitDelayMs) return;
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const form = rootRef.current?.closest("form");
+      form?.requestSubmit();
+    }, autoSubmitDelayMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [autoSubmitDelayMs, query]);
 
   useEffect(() => {
     if (!fetchUrl) return;

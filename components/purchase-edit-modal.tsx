@@ -24,7 +24,6 @@ type Props = {
     note: string | null;
     items: PurchaseItemValue[];
   };
-  suppliers: { id: string; name: string }[];
 };
 
 type ProductSuggestion = {
@@ -33,8 +32,9 @@ type ProductSuggestion = {
   meta?: string;
 };
 
-export function PurchaseEditModal({ purchase, suppliers }: Props) {
+export function PurchaseEditModal({ purchase }: Props) {
   const [open, setOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [supplierId, setSupplierId] = useState(purchase.supplierId);
   const [note, setNote] = useState(purchase.note ?? "");
   const [search, setSearch] = useState("");
@@ -46,6 +46,27 @@ export function PurchaseEditModal({ purchase, suppliers }: Props) {
   const pushToast = useToastStore((state) => state.push);
   const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
   const debtAmount = Math.max(totalAmount - paidAmount, 0);
+
+  useEffect(() => {
+    if (!open || suppliers.length > 0) return;
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/suppliers?limit=80", {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as Array<{ id: string; name: string }>;
+        setSuppliers(payload);
+      } catch {
+        // Ignore transient modal bootstrap failures
+      }
+    })();
+
+    return () => controller.abort();
+  }, [open, suppliers.length]);
 
   useEffect(() => {
     if (!open) return;

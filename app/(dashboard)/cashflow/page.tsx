@@ -1,36 +1,47 @@
+import dynamic from "next/dynamic";
+import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
-import { CashflowCreateModal } from "@/components/cashflow-create-modal";
-import { CashflowEditModal } from "@/components/cashflow-edit-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-type CashflowPageProps = {
-  searchParams?: {
-    range?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    page?: string;
-  };
-};
+const CashflowCreateModal = dynamic(
+  () => import("@/components/cashflow-create-modal").then((module) => module.CashflowCreateModal),
+  { ssr: false }
+);
 
-export default async function CashflowPage({ searchParams }: CashflowPageProps) {
-  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
-  const isBossAccount = session.role === "ADMIN";
-  const canExportExcel = session.role !== "CASHIER";
-  const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
-  const dateFrom = searchParams?.dateFrom ?? "";
-  const dateTo = searchParams?.dateTo ?? "";
-  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 15;
-  const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
+const CashflowEditModal = dynamic(
+  () => import("@/components/cashflow-edit-modal").then((module) => module.CashflowEditModal),
+  { ssr: false }
+);
+
+async function CashflowContent({
+  branchId,
+  isBossAccount,
+  range,
+  dateFrom,
+  dateTo,
+  page,
+  pageSize,
+  createdAt
+}: {
+  branchId?: string;
+  isBossAccount: boolean;
+  range: string;
+  dateFrom: string;
+  dateTo: string;
+  page: number;
+  pageSize: number;
+  createdAt?: { gte?: Date; lte?: Date };
+}) {
+  const startedAt = Date.now();
   const cashflowWhere = {
-    branchId: session.branchId ?? undefined,
+    branchId,
     ...(createdAt ? { createdAt } : {})
   };
-  const [transactions, transactionCount, summaryByEmployee, employeeUsers] = await Promise.all([
+  const [transactions, summaryByEmployee, employeeUsers] = await Promise.all([
     prisma.cashTransaction.findMany({
       where: cashflowWhere,
       select: {
@@ -52,25 +63,18 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
-      take: pageSize
-    }),
-    prisma.cashTransaction.count({
-      where: cashflowWhere
+      take: pageSize + 1
     }),
     prisma.cashTransaction.groupBy({
       where: cashflowWhere,
       by: ["createdById", "type"],
-      _sum: {
-        amount: true
-      },
-      _count: {
-        _all: true
-      }
+      _sum: { amount: true },
+      _count: { _all: true }
     }),
     prisma.user.findMany({
       where: {
         isActive: true,
-        branchId: session.branchId ?? undefined
+        branchId
       },
       select: {
         id: true,
@@ -79,6 +83,17 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
       orderBy: { name: "asc" }
     })
   ]);
+
+  const hasNext = transactions.length > pageSize;
+  const visibleTransactions = hasNext ? transactions.slice(0, pageSize) : transactions;
+  const totalMs = Date.now() - startedAt;
+  console.info("[perf][cashflow-page]", {
+    page,
+    pageSize,
+    range,
+    rowCount: visibleTransactions.length,
+    totalMs
+  });
 
   const employeeSummaryMap = employeeUsers.reduce<
     Map<
@@ -129,53 +144,10 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
   });
 
   const employeeCashSummary = Array.from(employeeSummaryMap.values());
-
   employeeCashSummary.sort((a, b) => (b.receiptTotal - b.paymentTotal) - (a.receiptTotal - a.paymentTotal));
 
   return (
-    <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Thu / Chi" description={`${transactionCount} giao dịch`} session={session} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <form action="/cashflow" className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-          <select
-            name="range"
-            defaultValue={range}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
-          >
-            <option value="all">Tất cả thời gian</option>
-            <option value="today">Hôm nay</option>
-            <option value="7d">7 ngày</option>
-            <option value="30d">30 ngày</option>
-            <option value="month">Tháng này</option>
-            <option value="custom">Tùy chọn ngày</option>
-          </select>
-          <input
-            type="date"
-            name="dateFrom"
-            defaultValue={dateFrom}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
-          />
-          <input
-            type="date"
-            name="dateTo"
-            defaultValue={dateTo}
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
-          />
-          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
-            Lọc
-          </button>
-          {canExportExcel ? (
-            <a
-              href={`/api/cash-transactions/export?range=${encodeURIComponent(range)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`}
-              className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg"
-            >
-              Xuất Excel
-            </a>
-          ) : null}
-        </form>
-        <CashflowCreateModal branchId={session.branchId ?? ""} />
-      </div>
-
+    <>
       {isBossAccount ? (
         <section className="space-y-3">
           <div>
@@ -223,7 +195,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
       ) : null}
 
       <div className="grid gap-3 sm:hidden">
-        {transactions.map((item) => (
+        {visibleTransactions.map((item) => (
           <div key={item.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -281,7 +253,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
                   customerName: item.customer?.name,
                   supplierName: item.supplier?.name
                 }}
-                branchId={session.branchId ?? ""}
+                branchId={branchId ?? ""}
               />
             </div>
           </div>
@@ -303,7 +275,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
             </tr>
           </thead>
           <tbody>
-            {transactions.map((item) => (
+            {visibleTransactions.map((item) => (
               <tr key={item.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                 <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">{item.code}</td>
                 <td className="px-3 py-3 sm:px-6 sm:py-4">{formatDate(item.createdAt)}</td>
@@ -320,19 +292,19 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
                       id: item.id,
                       code: item.code,
                       type: item.type,
-                    amount: Number(item.amount),
-                    note: item.note,
-                    orderId: item.orderId,
-                    purchaseOrderId: item.purchaseOrderId,
-                    customerId: item.customerId,
-                    supplierId: item.supplierId,
-                    orderCode: item.order?.code,
-                    purchaseOrderCode: item.purchaseOrder?.code,
-                    customerName: item.customer?.name,
-                    supplierName: item.supplier?.name
-                  }}
-                  branchId={session.branchId ?? ""}
-                />
+                      amount: Number(item.amount),
+                      note: item.note,
+                      orderId: item.orderId,
+                      purchaseOrderId: item.purchaseOrderId,
+                      customerId: item.customerId,
+                      supplierId: item.supplierId,
+                      orderCode: item.order?.code,
+                      purchaseOrderCode: item.purchaseOrder?.code,
+                      customerName: item.customer?.name,
+                      supplierName: item.supplier?.name
+                    }}
+                    branchId={branchId ?? ""}
+                  />
                 </td>
               </tr>
             ))}
@@ -344,8 +316,102 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
         query={{ range, dateFrom, dateTo }}
         page={page}
         pageSize={pageSize}
-        totalCount={transactionCount}
+        hasNext={hasNext}
       />
+    </>
+  );
+}
+
+function CashflowContentFallback() {
+  return (
+    <div className="grid min-h-[620px] gap-3">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="min-h-[160px] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="h-5 w-24 animate-pulse rounded bg-slate-100" />
+          <div className="mt-3 h-6 w-56 animate-pulse rounded bg-slate-100" />
+          <div className="mt-4 h-16 animate-pulse rounded-2xl bg-slate-50" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type CashflowPageProps = {
+  searchParams?: {
+    range?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: string;
+  };
+};
+
+export default async function CashflowPage({ searchParams }: CashflowPageProps) {
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const isBossAccount = session.role === "ADMIN";
+  const canExportExcel = session.role !== "CASHIER";
+  const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
+  const dateFrom = searchParams?.dateFrom ?? "";
+  const dateTo = searchParams?.dateTo ?? "";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
+  const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
+
+  return (
+    <div className="space-y-5 sm:space-y-8">
+      <AppHeader title="Thu / Chi" description="Quản lý phiếu thu chi, đối tượng và công nợ liên quan" session={session} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <form action="/cashflow" className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <select
+            name="range"
+            defaultValue={range}
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
+          >
+            <option value="all">Tất cả thời gian</option>
+            <option value="today">Hôm nay</option>
+            <option value="7d">7 ngày</option>
+            <option value="30d">30 ngày</option>
+            <option value="month">Tháng này</option>
+            <option value="custom">Tùy chọn ngày</option>
+          </select>
+          <input
+            type="date"
+            name="dateFrom"
+            defaultValue={dateFrom}
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
+          />
+          <input
+            type="date"
+            name="dateTo"
+            defaultValue={dateTo}
+            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
+          />
+          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
+            Lọc
+          </button>
+          {canExportExcel ? (
+            <a
+              href={`/api/cash-transactions/export?range=${encodeURIComponent(range)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`}
+              className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg"
+            >
+              Xuất Excel
+            </a>
+          ) : null}
+        </form>
+        <CashflowCreateModal branchId={session.branchId ?? ""} />
+      </div>
+
+      <Suspense fallback={<CashflowContentFallback />}>
+        <CashflowContent
+          branchId={session.branchId ?? undefined}
+          isBossAccount={isBossAccount}
+          range={range}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          page={page}
+          pageSize={pageSize}
+          createdAt={createdAt ?? undefined}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -6,11 +6,9 @@ import { formatCurrency } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
 
 export function PurchaseCreateModal({
-  branchId,
-  suppliers
+  branchId
 }: {
   branchId: string;
-  suppliers: { id: string; name: string }[];
 }) {
   type ProductSuggestion = {
     id: string;
@@ -29,6 +27,7 @@ export function PurchaseCreateModal({
   };
 
   const [open, setOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [note, setNote] = useState("");
   const [search, setSearch] = useState("");
@@ -38,6 +37,28 @@ export function PurchaseCreateModal({
   const [items, setItems] = useState<PurchaseLine[]>([]);
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
+
+  useEffect(() => {
+    if (!open || suppliers.length > 0) return;
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/suppliers?limit=80", {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as Array<{ id: string; name: string }>;
+        setSuppliers(payload);
+        setSupplierId((current) => current || payload[0]?.id || "");
+      } catch {
+        // Ignore transient modal bootstrap failures
+      }
+    })();
+
+    return () => controller.abort();
+  }, [open, suppliers.length]);
 
   useEffect(() => {
     if (!open) return;

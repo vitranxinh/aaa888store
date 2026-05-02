@@ -439,6 +439,7 @@ model CashTransaction {
   createdBy       User?                  @relation("CashTxnCreatedBy", fields: [createdById], references: [id])
 
   @@index([branchId, createdAt])
+  @@index([createdAt])
   @@index([customerId])
   @@index([supplierId])
   @@index([orderId])

@@ -6,11 +6,30 @@ import { supplierSchema } from "@/lib/validations";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("q")?.trim() ?? "";
+    const limit = Math.min(Number(searchParams.get("limit") ?? "80") || 80, 200);
     const suppliers = await prisma.supplier.findMany({
-      orderBy: { updatedAt: "desc" }
+      where: query
+        ? {
+            OR: [
+              { name: { contains: query, mode: "insensitive" } },
+              { code: { contains: query, mode: "insensitive" } },
+              { phone: { contains: query, mode: "insensitive" } }
+            ]
+          }
+        : undefined,
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        phone: true
+      },
+      orderBy: { code: "asc" },
+      take: limit
     });
     return NextResponse.json(suppliers);
   } catch {

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   q: string;
@@ -15,16 +15,32 @@ export function OrdersFilterBar({ q, range, dateFrom, dateTo, canExport = true }
   const pathname = usePathname();
   const formRef = useRef<HTMLFormElement>(null);
   const [rangeValue, setRangeValue] = useState(range);
+  const [queryValue, setQueryValue] = useState(q);
 
   function submitForm() {
     formRef.current?.requestSubmit();
   }
 
+  useEffect(() => {
+    setQueryValue(q);
+  }, [q]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (queryValue !== q) {
+        submitForm();
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [q, queryValue]);
+
   return (
     <form ref={formRef} action={pathname} className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
       <input
         name="q"
-        defaultValue={q}
+        value={queryValue}
+        onChange={(event) => setQueryValue(event.target.value)}
         placeholder="Tìm theo mã HĐ, tên khách..."
         className="h-11 w-full min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-base shadow-soft outline-none sm:h-14 sm:min-w-[280px] sm:px-5 sm:text-xl"
       />
