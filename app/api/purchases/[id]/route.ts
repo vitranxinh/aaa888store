@@ -4,6 +4,7 @@ import { requireApiSession } from "@/lib/auth";
 import { recalculatePurchasePaymentStateForPurchase, recalculateSupplierPayableDebtForSupplier } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
+import { runTransactionWithRetry } from "@/lib/transaction-retry";
 import { purchaseSchema } from "@/lib/validations";
 
 async function applyPurchaseInventory(
@@ -23,11 +24,16 @@ async function applyPurchaseInventory(
   createdById: string,
   direction: "increment" | "decrement"
 ) {
+  const quantityByProduct = new Map<string, number>();
+  for (const item of purchase.items) {
+    quantityByProduct.set(item.productId, (quantityByProduct.get(item.productId) ?? 0) + item.quantity);
+  }
+
   const existingInventories = await tx.inventory.findMany({
     where: {
       branchId: purchase.branchId,
       variantId: null,
-      productId: { in: purchase.items.map((item) => item.productId) }
+      productId: { in: Array.from(quantityByProduct.keys()) }
     },
     select: { id: true, productId: true }
   });
@@ -37,27 +43,29 @@ async function applyPurchaseInventory(
       .map((inventory) => [inventory.productId, inventory.id])
   );
 
-  for (const item of purchase.items) {
-    const inventoryId = inventoryIdByProduct.get(item.productId);
+  for (const [productId, quantity] of quantityByProduct.entries()) {
+    const inventoryId = inventoryIdByProduct.get(productId);
 
     if (inventoryId) {
       await tx.inventory.update({
         where: { id: inventoryId },
         data: {
-          quantity: direction === "increment" ? { increment: item.quantity } : { decrement: item.quantity }
+          quantity: direction === "increment" ? { increment: quantity } : { decrement: quantity }
         }
       });
     } else {
       await tx.inventory.create({
         data: {
           branchId: purchase.branchId,
-          productId: item.productId,
-          quantity: direction === "increment" ? item.quantity : -item.quantity
+          productId,
+          quantity: direction === "increment" ? quantity : -quantity
         }
       });
     }
+  }
 
-    if (direction === "increment") {
+  if (direction === "increment") {
+    for (const item of purchase.items) {
       await tx.productBatch.create({
         data: {
           branchId: purchase.branchId,
@@ -81,7 +89,7 @@ async function applyPurchaseInventory(
             note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
           }
         });
-      }
+    }
   }
 }
 
@@ -115,7 +123,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const status = debtAmount > 0 ? "PARTIAL" : "COMPLETED";
     const paymentCode = paidAmount > 0 ? await nextCode("PC", "cashTransaction") : null;
 
-    const purchase = await prisma.$transaction(async (tx) => {
+    const purchase = await runTransactionWithRetry(async (tx) => {
       await applyPurchaseInventory(
         tx,
         {
@@ -249,7 +257,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Không tìm thấy phiếu nhập" }, { status: 404 });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await runTransactionWithRetry(async (tx) => {
       for (const item of existing.items) {
         await tx.inventory.updateMany({
           where: {

@@ -4,6 +4,7 @@ import { requireApiSession } from "@/lib/auth";
 import { recalculatePurchasePaymentStateForPurchase, recalculateSupplierPayableDebtForSupplier } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
+import { runTransactionWithRetry } from "@/lib/transaction-retry";
 import { purchaseSchema } from "@/lib/validations";
 
 export async function POST(request: Request) {
@@ -26,8 +27,13 @@ export async function POST(request: Request) {
     const status = debtAmount > 0 ? "PARTIAL" : "COMPLETED";
     const purchaseCode = await nextCode("PN", "purchaseOrder");
     const paymentCode = paidAmount > 0 ? await nextCode("PC", "cashTransaction") : null;
+    const quantityByProduct = new Map<string, number>();
 
-    const purchase = await prisma.$transaction(async (tx) => {
+    for (const item of normalizedItems) {
+      quantityByProduct.set(item.productId, (quantityByProduct.get(item.productId) ?? 0) + item.quantity);
+    }
+
+    const purchase = await runTransactionWithRetry(async (tx) => {
       const created = await tx.purchaseOrder.create({
         data: {
           code: purchaseCode,
@@ -68,27 +74,31 @@ export async function POST(request: Request) {
       );
 
       await Promise.all(
-        created.items.map(async (item) => {
-          const inventoryId = inventoryIdByProduct.get(item.productId);
+        Array.from(quantityByProduct.entries()).map(async ([productId, quantity]) => {
+          const inventoryId = inventoryIdByProduct.get(productId);
 
           if (inventoryId) {
             await tx.inventory.update({
               where: { id: inventoryId },
               data: {
-                quantity: { increment: item.quantity }
+                quantity: { increment: quantity }
               }
             });
           } else {
             await tx.inventory.create({
               data: {
                 branchId: created.branchId,
-                productId: item.productId,
-                quantity: item.quantity
+                productId,
+                quantity
               }
             });
           }
+        })
+      );
 
-          await Promise.all([
+      await Promise.all(
+        created.items.map((item) =>
+          Promise.all([
             tx.productBatch.create({
               data: {
                 branchId: created.branchId,
@@ -111,8 +121,8 @@ export async function POST(request: Request) {
                 note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
               }
             })
-          ]);
-        })
+          ])
+        )
       );
 
       if (paidAmount > 0) {

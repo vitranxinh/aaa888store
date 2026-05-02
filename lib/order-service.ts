@@ -2,6 +2,7 @@ import { CashTxnType, OrderStatus, PaymentMethod, Prisma } from "@prisma/client"
 import { recalculateCustomerReceivableDebtForCustomer } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 import { calculateCartTotals } from "@/lib/pos";
+import { runTransactionWithRetry } from "@/lib/transaction-retry";
 
 type OrderPayload = {
   branchId: string;
@@ -19,7 +20,13 @@ type OrderPayload = {
 async function loadOrderPayloadItems(items: OrderPayload["items"]) {
   const productIds = Array.from(new Set(items.map((item) => item.productId)));
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds } }
+    where: { id: { in: productIds } },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      costPrice: true
+    }
   });
   const productMap = new Map(products.map((product) => [product.id, product]));
 
@@ -28,6 +35,16 @@ async function loadOrderPayloadItems(items: OrderPayload["items"]) {
     if (!product) throw new Error(`Không tìm thấy sản phẩm ${item.productId}`);
     return { ...item, product };
   });
+}
+
+function aggregateQuantityByProduct(items: Array<{ product: { id: string }; quantity: number }>) {
+  const quantityByProduct = new Map<string, number>();
+
+  for (const item of items) {
+    quantityByProduct.set(item.product.id, (quantityByProduct.get(item.product.id) ?? 0) + item.quantity);
+  }
+
+  return quantityByProduct;
 }
 
 function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPayloadItems>>, payload: OrderPayload) {
@@ -59,7 +76,8 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
 }
 
 async function ensureInventorySufficient(tx: Prisma.TransactionClient, branchId: string, items: Awaited<ReturnType<typeof loadOrderPayloadItems>>) {
-  const productIds = items.map((item) => item.product.id);
+  const quantityByProduct = aggregateQuantityByProduct(items);
+  const productIds = Array.from(quantityByProduct.keys());
   const inventories = await tx.inventory.findMany({
     where: {
       branchId,
@@ -74,8 +92,9 @@ async function ensureInventorySufficient(tx: Prisma.TransactionClient, branchId:
   const inventoryMap = new Map(inventories.map((inventory) => [inventory.productId, inventory.quantity]));
 
   for (const item of items) {
+    const requiredQuantity = quantityByProduct.get(item.product.id) ?? 0;
     const quantity = inventoryMap.get(item.product.id) ?? 0;
-    if (quantity < item.quantity) {
+    if (quantity < requiredQuantity) {
       throw new Error(`Tồn kho không đủ cho ${item.product.name}`);
     }
   }
@@ -161,11 +180,12 @@ async function applyOrderEffects(
 
   await ensureInventorySufficient(tx, payload.branchId, items);
 
+  const quantityByProduct = aggregateQuantityByProduct(items);
   await Promise.all(
-    items.map((item) =>
+    Array.from(quantityByProduct.entries()).map(([productId, quantity]) =>
       tx.inventory.updateMany({
-        where: { branchId: payload.branchId, productId: item.product.id },
-        data: { quantity: { decrement: item.quantity } }
+        where: { branchId: payload.branchId, productId },
+        data: { quantity: { decrement: quantity } }
       })
     )
   );
@@ -262,7 +282,7 @@ export async function createOrderFromPayload(payload: OrderPayload) {
   const code = await nextCode("DH", "order");
   const receiptCode = derived.paidAmount > 0 ? await nextCode("PT", "cashTransaction") : null;
 
-  const order = await prisma.$transaction(async (tx) => {
+  const order = await runTransactionWithRetry(async (tx) => {
     const created = await tx.order.create({
       data: {
         code,
@@ -299,8 +319,8 @@ export async function createOrderFromPayload(payload: OrderPayload) {
 
   if (derived.finalStatus !== "DRAFT") {
     await recalculateCustomerReceivableDebtForCustomer(payload.customerId);
-    for (const item of items) {
-      await allocateBatchesFEFO(payload.branchId, item.product.id, item.quantity, code, payload.createdById);
+    for (const [productId, quantity] of aggregateQuantityByProduct(items).entries()) {
+      await allocateBatchesFEFO(payload.branchId, productId, quantity, code, payload.createdById);
     }
   }
 
@@ -329,7 +349,7 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   const nextCodeVersion = nextOrderRevisionCode(existing.code);
   const receiptCode = derived.paidAmount > 0 ? await nextCode("PT", "cashTransaction") : null;
 
-  const order = await prisma.$transaction(async (tx) => {
+  const order = await runTransactionWithRetry(async (tx) => {
     await revertOrderEffects(tx, existing);
 
     const updated = await tx.order.update({
@@ -374,8 +394,8 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   }
 
   if (derived.finalStatus !== "DRAFT") {
-    for (const item of items) {
-      await allocateBatchesFEFO(payload.branchId, item.product.id, item.quantity, nextCodeVersion, payload.createdById);
+    for (const [productId, quantity] of aggregateQuantityByProduct(items).entries()) {
+      await allocateBatchesFEFO(payload.branchId, productId, quantity, nextCodeVersion, payload.createdById);
     }
   }
 
