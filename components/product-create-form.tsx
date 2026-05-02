@@ -1,17 +1,17 @@
 "use client";
 
-import { ChangeEvent, useState, useTransition } from "react";
+import { ChangeEvent, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToastStore } from "@/store/toast-store";
 
 type Props = {
-  categories: { id: string; name: string }[];
-  brands: { id: string; name: string }[];
+  categories?: { id: string; name: string }[];
+  brands?: { id: string; name: string }[];
 };
 
-export function ProductCreateForm({ categories, brands }: Props) {
+export function ProductCreateForm({ categories = [], brands = [] }: Props) {
   const [isPending, startTransition] = useTransition();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isAddingBrand, setIsAddingBrand] = useState(false);
@@ -34,6 +34,41 @@ export function ProductCreateForm({ categories, brands }: Props) {
   const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
   const [description, setDescription] = useState("");
   const pushToast = useToastStore((state) => state.push);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadOptions() {
+      try {
+        const [categoriesResponse, brandsResponse] = await Promise.all([
+          fetch("/api/categories", { credentials: "same-origin" }),
+          fetch("/api/brands", { credentials: "same-origin" })
+        ]);
+
+        if (!categoriesResponse.ok || !brandsResponse.ok || ignore) return;
+
+        const [categoriesPayload, brandsPayload] = await Promise.all([
+          categoriesResponse.json(),
+          brandsResponse.json()
+        ]);
+
+        if (!ignore) {
+          setCategoryOptions(Array.isArray(categoriesPayload) ? categoriesPayload : []);
+          setBrandOptions(Array.isArray(brandsPayload) ? brandsPayload : []);
+        }
+      } catch {
+        // keep existing options
+      }
+    }
+
+    if (categories.length === 0 || brands.length === 0) {
+      loadOptions();
+    }
+
+    return () => {
+      ignore = true;
+    };
+  }, [brands.length, categories.length]);
 
   function resetForm() {
     setName("");

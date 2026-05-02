@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState, useTransition } from "react";
+import { ChangeEvent, useEffect, useMemo, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,12 +26,12 @@ type Props = {
     status: "ACTIVE" | "INACTIVE";
     description: string | null;
   };
-  categories: { id: string; name: string }[];
-  brands: { id: string; name: string }[];
+  categories?: { id: string; name: string }[];
+  brands?: { id: string; name: string }[];
   canDelete?: boolean;
 };
 
-export function ProductEditModal({ product, categories, brands, canDelete = false }: Props) {
+export function ProductEditModal({ product, categories = [], brands = [], canDelete = false }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -66,6 +66,42 @@ export function ProductEditModal({ product, categories, brands, canDelete = fals
     resolver: zodResolver(productSchema),
     defaultValues
   });
+
+  useEffect(() => {
+    if (!open) return;
+    let ignore = false;
+
+    async function loadOptions() {
+      try {
+        const [categoriesResponse, brandsResponse] = await Promise.all([
+          fetch("/api/categories", { credentials: "same-origin" }),
+          fetch("/api/brands", { credentials: "same-origin" })
+        ]);
+
+        if (!categoriesResponse.ok || !brandsResponse.ok || ignore) return;
+
+        const [categoriesPayload, brandsPayload] = await Promise.all([
+          categoriesResponse.json(),
+          brandsResponse.json()
+        ]);
+
+        if (!ignore) {
+          setCategoryOptions(Array.isArray(categoriesPayload) ? categoriesPayload : []);
+          setBrandOptions(Array.isArray(brandsPayload) ? brandsPayload : []);
+        }
+      } catch {
+        // keep existing options
+      }
+    }
+
+    if (categoryOptions.length === 0 || brandOptions.length === 0) {
+      loadOptions();
+    }
+
+    return () => {
+      ignore = true;
+    };
+  }, [open, categoryOptions.length, brandOptions.length]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];

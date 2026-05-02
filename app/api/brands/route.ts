@@ -31,6 +31,19 @@ async function generateUniqueBrandSlug(name: string) {
   return `${baseSlug}-${Date.now()}`;
 }
 
+export async function GET() {
+  try {
+    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const brands = await prisma.brand.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: "asc" }
+    });
+    return NextResponse.json(brands);
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);

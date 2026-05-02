@@ -145,6 +145,12 @@ model Product {
   purchaseItems   PurchaseOrderItem[]
   batches         ProductBatch[]
   promoProducts   PromotionProduct[]
+
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
 }
 
 model ProductVariant {
@@ -197,6 +203,7 @@ model Inventory {
   variant         ProductVariant?        @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([branchId, productId, variantId])
+  @@index([branchId, productId])
 }
 
 model InventoryTransaction {
@@ -216,6 +223,9 @@ model InventoryTransaction {
   variant         ProductVariant?        @relation(fields: [variantId], references: [id], onDelete: Cascade)
   batch           ProductBatch?          @relation(fields: [batchId], references: [id])
   createdBy       User?                  @relation("InventoryTxnCreatedBy", fields: [createdById], references: [id])
+
+  @@index([branchId, productId, createdAt])
+  @@index([productId])
 }
 
 model CustomerGroup {
@@ -359,6 +369,9 @@ model OrderItem {
   order           Order                  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product         Product                @relation(fields: [productId], references: [id])
   variant         ProductVariant?        @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model PurchaseOrder {
@@ -398,6 +411,9 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   product         Product                @relation(fields: [productId], references: [id])
   batches         ProductBatch[]
+
+  @@index([purchaseOrderId])
+  @@index([productId])
 }
 
 model CashTransaction {

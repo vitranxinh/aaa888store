@@ -1,14 +1,28 @@
+import dynamic from "next/dynamic";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
-import { ProductCreateForm } from "@/components/product-create-form";
 import { ProductEditModal } from "@/components/product-edit-modal";
 import { ProductStockAdjustModal } from "@/components/product-stock-adjust-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getBrandOptions, getCategoryOptions, getDefaultBranchId } from "@/lib/reference-data";
+import { getDefaultBranchId } from "@/lib/reference-data";
 import { formatCurrency } from "@/lib/utils";
+
+const ProductCreateFormLazy = dynamic(
+  () => import("@/components/product-create-form").then((module) => module.ProductCreateForm),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="h-6 w-40 animate-pulse rounded bg-slate-100" />
+        <div className="mt-4 h-10 animate-pulse rounded bg-slate-100" />
+        <div className="mt-3 h-10 animate-pulse rounded bg-slate-100" />
+      </div>
+    )
+  }
+);
 
 async function ProductsList({
   q,
@@ -18,8 +32,6 @@ async function ProductsList({
   canEditProducts,
   canDeleteProducts,
   canAdjustInventory,
-  categoryOptions,
-  brandOptions
 }: {
   q: string;
   branchId: string;
@@ -28,8 +40,6 @@ async function ProductsList({
   canEditProducts: boolean;
   canDeleteProducts: boolean;
   canAdjustInventory: boolean;
-  categoryOptions: { id: string; name: string }[];
-  brandOptions: { id: string; name: string }[];
 }) {
   const productWhere = q
     ? {
@@ -57,23 +67,30 @@ async function ProductsList({
       lowStockAlert: true,
       status: true,
       description: true,
-      category: true,
+      category: {
+        select: {
+          name: true
+        }
+      },
       inventories: {
         select: {
           quantity: true
         },
-        where: branchId ? { branchId } : undefined
+        where: branchId ? { branchId, variantId: null } : { variantId: null },
+        take: 1
       }
     },
     orderBy: { sku: "asc" },
     skip: (page - 1) * pageSize,
-    take: pageSize
+    take: pageSize + 1
   });
+  const hasNext = products.length > pageSize;
+  const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
 
   return (
     <>
       <div className="grid gap-3 sm:hidden">
-        {products.map((product) => {
+        {visibleProducts.map((product) => {
           const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
 
           return (
@@ -106,12 +123,10 @@ async function ProductsList({
                               brandId: product.brandId,
                               costPrice: Number(product.costPrice),
                               sellingPrice: Number(product.sellingPrice),
-                              lowStockAlert: product.lowStockAlert,
-                              status: product.status,
-                              description: product.description
-                            }}
-                            categories={categoryOptions}
-                            brands={brandOptions}
+                            lowStockAlert: product.lowStockAlert,
+                            status: product.status,
+                            description: product.description
+                          }}
                             canDelete={canDeleteProducts}
                           />
                         ) : null}
@@ -167,7 +182,7 @@ async function ProductsList({
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => {
+            {visibleProducts.map((product) => {
               const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
 
               return (
@@ -216,8 +231,6 @@ async function ProductsList({
                               status: product.status,
                               description: product.description
                             }}
-                            categories={categoryOptions}
-                            brands={brandOptions}
                             canDelete={canDeleteProducts}
                           />
                         ) : null}
@@ -230,6 +243,7 @@ async function ProductsList({
           </tbody>
         </table>
       </div>
+      <ServerPagination pathname="/products" query={{ q }} page={page} pageSize={pageSize} hasNext={hasNext} />
     </>
   );
 }
@@ -266,10 +280,7 @@ export default async function ProductsPage({
   const q = searchParams?.q ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 10;
-  const activeBranch = session.branchId
-    ? await prisma.branch.findUnique({ where: { id: session.branchId }, select: { id: true } })
-    : null;
-  const branchId = activeBranch?.id ?? (await getDefaultBranchId());
+  const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
   const productWhere = q
     ? {
         OR: [
@@ -281,19 +292,9 @@ export default async function ProductsPage({
       }
     : undefined;
 
-  const [productCount, categories, brands] = await Promise.all([
-    prisma.product.count({ where: productWhere }),
-    getCategoryOptions(),
-    getBrandOptions()
-  ]);
-
-  const categoryOptions = categories.map((item) => ({ id: item.id, name: item.name }));
-  const brandOptions = brands.map((item) => ({ id: item.id, name: item.name }));
-  const displayCount = productCount;
-
   return (
     <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Hàng hóa" description={`${displayCount} đầu mục sản phẩm`} session={session} />
+      <AppHeader title="Hàng hóa" description="Quản lý danh mục sản phẩm" session={session} />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <form className="w-full max-w-xl">
@@ -312,7 +313,7 @@ export default async function ProductsPage({
                 + Thêm SP
               </summary>
               <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] sm:top-20">
-                <ProductCreateForm categories={categoryOptions} brands={brandOptions} />
+                <ProductCreateFormLazy />
               </div>
             </details>
           </div>
@@ -328,17 +329,8 @@ export default async function ProductsPage({
           canEditProducts={canEditProducts}
           canDeleteProducts={canDeleteProducts}
           canAdjustInventory={canAdjustInventory}
-          categoryOptions={categoryOptions}
-          brandOptions={brandOptions}
         />
       </Suspense>
-      <ServerPagination
-        pathname="/products"
-        query={{ q }}
-        page={page}
-        pageSize={pageSize}
-        totalCount={productCount}
-      />
     </div>
   );
 }
