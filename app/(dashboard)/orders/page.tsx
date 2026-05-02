@@ -260,9 +260,9 @@ async function OrdersList({
 
 function OrdersListFallback() {
   return (
-    <div className="grid gap-3">
+    <div className="grid min-h-[620px] gap-3">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+        <div key={index} className="min-h-[144px] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
           <div className="flex items-start justify-between">
             <div>
               <div className="h-4 w-24 animate-pulse rounded bg-slate-100" />
@@ -354,7 +354,7 @@ async function PendingDeleteRequestsSection({
 
 function PendingDeleteRequestsFallback() {
   return (
-    <section className="rounded-3xl border border-amber-200 bg-amber-50/50 p-4 shadow-soft sm:p-6">
+    <section className="min-h-[96px] rounded-3xl border border-amber-200 bg-amber-50/50 p-4 shadow-soft sm:p-6">
       <div className="h-6 w-56 animate-pulse rounded bg-amber-100" />
       <div className="mt-2 h-4 w-72 animate-pulse rounded bg-amber-100" />
     </section>
@@ -383,7 +383,7 @@ export default async function OrdersPage({
     <div className="space-y-5 sm:space-y-8">
       <AppHeader title="Hóa đơn" description="Quản lý hóa đơn bán hàng" session={session} />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+      <div className="flex min-h-[56px] flex-col gap-3 lg:min-h-[64px] lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <OrdersFilterBar q={q} range={range} dateFrom={dateFrom} dateTo={dateTo} canExport={canExportExcel} />
         <OrderCreateModal branchId={branchId} />
       </div>

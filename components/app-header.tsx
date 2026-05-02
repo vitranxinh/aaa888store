@@ -4,12 +4,16 @@ import type { SessionUser } from "@/lib/auth";
 
 export function AppHeader({ title, description, session }: { title: string; description: string; session: SessionUser }) {
   return (
-    <header className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-      <div>
-        <h2 className="text-[2.25rem] font-bold leading-tight text-slate-900 sm:text-4xl lg:text-5xl">{title}</h2>
-        <p className="mt-2 text-base text-slate-500 sm:text-lg lg:text-2xl">{description}</p>
+    <header className="mb-6 flex min-h-[120px] flex-col justify-between gap-4 md:min-h-[112px] md:flex-row md:items-start lg:min-h-[132px]">
+      <div className="min-h-[84px] flex-1 sm:min-h-[96px] lg:min-h-[112px]">
+        <h2 className="min-h-[40px] text-[2rem] font-bold leading-[1.05] tracking-tight text-slate-900 sm:min-h-[48px] sm:text-[2.75rem] lg:min-h-[60px] lg:text-[3.5rem]">
+          {title}
+        </h2>
+        <p className="mt-2 min-h-[24px] max-w-3xl text-base leading-6 text-slate-500 sm:min-h-[28px] sm:text-lg lg:min-h-[32px] lg:text-[1.35rem] lg:leading-8">
+          {description}
+        </p>
       </div>
-      <div className="hidden items-center gap-3 lg:flex">
+      <div className="hidden min-h-[52px] items-center gap-3 lg:flex lg:self-start">
         <div className="text-right">
           <p className="text-sm font-medium text-slate-900">{session.name}</p>
           <p className="text-xs uppercase tracking-wide text-slate-500">{session.role}</p>

@@ -307,9 +307,9 @@ async function ProductsList({
 
 function ProductsListFallback() {
   return (
-    <div className="grid gap-3">
+    <div className="grid min-h-[720px] gap-3">
       {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+        <div key={index} className="min-h-[168px] rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
           <div className="flex gap-3">
             <div className="h-20 w-20 animate-pulse rounded-2xl bg-slate-100" />
             <div className="flex-1">
@@ -353,7 +353,7 @@ export default async function ProductsPage({
     <div className="space-y-5 sm:space-y-8">
       <AppHeader title="Hàng hóa" description="Quản lý danh mục sản phẩm" session={session} />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+      <div className="flex min-h-[56px] flex-col gap-3 lg:min-h-[64px] lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <form className="w-full max-w-xl">
           <AutocompleteSearchInput
             name="q"
