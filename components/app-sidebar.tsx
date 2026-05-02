@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Boxes, LayoutDashboard, ReceiptText, ShoppingBag, Truck, Users, Wallet } from "lucide-react";
+import { Boxes, LayoutDashboard, ReceiptText, ShoppingBag, Users, Wallet } from "lucide-react";
 import { PrefetchNavLink } from "@/components/prefetch-nav-link";
 import type { SessionUser } from "@/lib/auth";
 import { canAccess } from "@/lib/permissions";
@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 export const navigationItems = [
   { title: "Tổng quan", href: "/dashboard", key: "dashboard", icon: LayoutDashboard },
   { title: "Khách hàng", href: "/customers", key: "customers", icon: Users },
-  { title: "Nhà cung cấp", href: "/suppliers", key: "suppliers", icon: Truck },
   { title: "Hàng hóa", href: "/products", key: "products", icon: Boxes },
   { title: "Hóa đơn", href: "/orders", key: "orders", icon: ReceiptText },
   { title: "Nhập hàng", href: "/inventory", key: "inventory", icon: ShoppingBag },

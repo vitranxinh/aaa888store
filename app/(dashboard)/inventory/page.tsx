@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { ServerPagination } from "@/components/server-pagination";
@@ -120,7 +121,14 @@ async function InventoryContent({
                 </div>
               </div>
 
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Link
+                  href={`/inventory/${item.id}`}
+                  prefetch={false}
+                  className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm"
+                >
+                  Xem chi tiết
+                </Link>
                 <PurchaseEditModal
                   purchase={{
                     id: item.id,
@@ -175,24 +183,33 @@ async function InventoryContent({
                     {formatCurrency(Number(item.debtAmount))}
                   </td>
                   <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
-                    <PurchaseEditModal
-                      purchase={{
-                        id: item.id,
-                        code: item.code,
-                        branchId: item.branchId,
-                        supplierId: item.supplierId,
-                        paidAmount: Number(item.paidAmount),
-                        note: item.note,
-                        items: item.items.map((purchaseItem) => ({
-                          productId: purchaseItem.productId,
-                          productName: purchaseItem.product.name,
-                          quantity: purchaseItem.quantity,
-                          importPrice: Number(purchaseItem.importPrice),
-                          batchNumber: purchaseItem.batchNumber,
-                          expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
-                        }))
-                      }}
-                    />
+                    <div className="flex justify-end gap-2">
+                      <Link
+                        href={`/inventory/${item.id}`}
+                        prefetch={false}
+                        className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm"
+                      >
+                        Xem chi tiết
+                      </Link>
+                      <PurchaseEditModal
+                        purchase={{
+                          id: item.id,
+                          code: item.code,
+                          branchId: item.branchId,
+                          supplierId: item.supplierId,
+                          paidAmount: Number(item.paidAmount),
+                          note: item.note,
+                          items: item.items.map((purchaseItem) => ({
+                            productId: purchaseItem.productId,
+                            productName: purchaseItem.product.name,
+                            quantity: purchaseItem.quantity,
+                            importPrice: Number(purchaseItem.importPrice),
+                            batchNumber: purchaseItem.batchNumber,
+                            expiryDate: purchaseItem.expiryDate ? purchaseItem.expiryDate.toISOString().slice(0, 10) : ""
+                          }))
+                        }}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))
@@ -241,14 +258,14 @@ export default async function InventoryPage({
 
   return (
     <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Phiếu nhập hàng" description="Theo dõi nhập hàng, thanh toán và công nợ nhà cung cấp" session={session} />
+      <AppHeader title="Phiếu nhập hàng" description="Theo dõi đơn nhập, số lượng đã nhận và thanh toán" session={session} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <form className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <input
             name="q"
             defaultValue={q}
-            placeholder="Tìm theo mã phiếu, NCC..."
+            placeholder="Tìm theo mã phiếu, đơn nhập..."
             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:max-w-sm sm:text-lg"
           />
           <select

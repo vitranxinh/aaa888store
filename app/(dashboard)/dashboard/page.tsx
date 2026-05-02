@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PrefetchNavLink } from "@/components/prefetch-nav-link";
 import { AppHeader } from "@/components/app-header";
 import { ChartCard } from "@/components/chart-card";
@@ -40,7 +39,6 @@ export default async function DashboardPage({
   ];
 
   const mobileQuickLinks = [
-    { href: "/suppliers", label: "Nhà cung cấp", icon: "🏭", tone: "bg-sky-50 text-sky-700 border-sky-100" },
     { href: "/cashflow", label: "Thu / Chi", icon: "💸", tone: "bg-amber-50 text-amber-700 border-amber-100" },
     { href: "/inventory", label: "Nhập hàng", icon: "📥", tone: "bg-violet-50 text-violet-700 border-violet-100" }
   ];
