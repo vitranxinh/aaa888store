@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
+import { unstable_cache } from "next/cache";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { ProductEditModal } from "@/components/product-edit-modal";
@@ -24,6 +25,101 @@ const ProductCreateFormLazy = dynamic(
   }
 );
 
+const getCachedProductsPageData = unstable_cache(
+  async ({
+    q,
+    branchId,
+    page,
+    pageSize
+  }: {
+    q: string;
+    branchId: string;
+    page: number;
+    pageSize: number;
+  }) => {
+    const productWhere = q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { sku: { contains: q, mode: "insensitive" as const } },
+            { barcode: { contains: q, mode: "insensitive" as const } },
+            { category: { name: { contains: q, mode: "insensitive" as const } } }
+          ]
+        }
+      : undefined;
+
+    const products = await prisma.product.findMany({
+      where: productWhere,
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        barcode: true,
+        imageUrl: true,
+        categoryId: true,
+        brandId: true,
+        costPrice: true,
+        sellingPrice: true,
+        lowStockAlert: true,
+        status: true,
+        description: true
+      },
+      orderBy: { sku: "asc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize + 1
+    });
+
+    const hasNext = products.length > pageSize;
+    const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
+    const productIds = visibleProducts.map((product) => product.id);
+    const categoryIds = Array.from(
+      new Set(visibleProducts.map((product) => product.categoryId).filter((value): value is string => Boolean(value)))
+    );
+
+    const [inventories, categories] = await Promise.all([
+      productIds.length
+        ? prisma.inventory.findMany({
+            where: {
+              branchId,
+              variantId: null,
+              productId: { in: productIds }
+            },
+            select: {
+              productId: true,
+              quantity: true
+            }
+          })
+        : Promise.resolve([]),
+      categoryIds.length
+        ? prisma.category.findMany({
+            where: { id: { in: categoryIds } },
+            select: { id: true, name: true }
+          })
+        : Promise.resolve([])
+    ]);
+
+    const quantityByProductId = new Map<string, number>();
+    for (const inventory of inventories) {
+      const key = inventory.productId;
+      if (!key) continue;
+      quantityByProductId.set(key, (quantityByProductId.get(key) ?? 0) + inventory.quantity);
+    }
+
+    const categoryById = new Map(categories.map((category) => [category.id, category.name]));
+
+    return {
+      hasNext,
+      products: visibleProducts.map((product) => ({
+        ...product,
+        categoryName: product.categoryId ? categoryById.get(product.categoryId) ?? null : null,
+        quantity: quantityByProductId.get(product.id) ?? 0
+      }))
+    };
+  },
+  ["products-page-data"],
+  { revalidate: 15 }
+);
+
 async function ProductsList({
   q,
   branchId,
@@ -41,57 +137,18 @@ async function ProductsList({
   canDeleteProducts: boolean;
   canAdjustInventory: boolean;
 }) {
-  const productWhere = q
-    ? {
-        OR: [
-          { name: { contains: q, mode: "insensitive" as const } },
-          { sku: { contains: q, mode: "insensitive" as const } },
-          { barcode: { contains: q, mode: "insensitive" as const } },
-          { category: { name: { contains: q, mode: "insensitive" as const } } }
-        ]
-      }
-    : undefined;
-
-  const products = await prisma.product.findMany({
-    where: productWhere,
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      barcode: true,
-      imageUrl: true,
-      categoryId: true,
-      brandId: true,
-      costPrice: true,
-      sellingPrice: true,
-      lowStockAlert: true,
-      status: true,
-      description: true,
-      category: {
-        select: {
-          name: true
-        }
-      },
-      inventories: {
-        select: {
-          quantity: true
-        },
-        where: branchId ? { branchId, variantId: null } : { variantId: null },
-        take: 1
-      }
-    },
-    orderBy: { sku: "asc" },
-    skip: (page - 1) * pageSize,
-    take: pageSize + 1
+  const { products, hasNext } = await getCachedProductsPageData({
+    q,
+    branchId,
+    page,
+    pageSize
   });
-  const hasNext = products.length > pageSize;
-  const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
 
   return (
     <>
       <div className="grid gap-3 sm:hidden">
-        {visibleProducts.map((product) => {
-          const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
+        {products.map((product) => {
+          const totalQuantity = product.quantity;
 
           return (
             <div key={product.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
@@ -142,7 +199,7 @@ async function ProductsList({
                     ) : null}
                   </div>
 
-                  <p className="mt-2 text-[0.95rem] text-slate-500">{product.category?.name ?? "Chưa có nhóm"}</p>
+                  <p className="mt-2 text-[0.95rem] text-slate-500">{product.categoryName ?? "Chưa có nhóm"}</p>
                 </div>
               </div>
 
@@ -182,8 +239,8 @@ async function ProductsList({
             </tr>
           </thead>
           <tbody>
-            {visibleProducts.map((product) => {
-              const totalQuantity = product.inventories.reduce((sum, item) => sum + item.quantity, 0);
+            {products.map((product) => {
+              const totalQuantity = product.quantity;
 
               return (
                 <tr key={product.id} className="border-t border-slate-100 text-[15px] text-slate-700 sm:text-2xl">
@@ -197,7 +254,7 @@ async function ProductsList({
                   </td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{product.sku}</td>
                   <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">{product.name}</td>
-                  <td className="px-3 py-3 sm:px-6 sm:py-4">{product.category?.name ?? "-"}</td>
+                  <td className="px-3 py-3 sm:px-6 sm:py-4">{product.categoryName ?? "-"}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{product.barcode ?? "-"}</td>
                   <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(product.sellingPrice))}</td>
                   <td className={`px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${totalQuantity <= product.lowStockAlert ? "text-red-500" : "text-slate-900"}`}>

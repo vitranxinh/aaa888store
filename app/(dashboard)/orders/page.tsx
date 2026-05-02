@@ -1,6 +1,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Prisma } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { OrderDeleteRequestActions } from "@/components/order-delete-request-actions";
@@ -28,46 +29,142 @@ const OrderCreateModal = dynamic(
   }
 );
 
+const getCachedOrdersPageData = unstable_cache(
+  async ({
+    branchId,
+    q,
+    page,
+    pageSize,
+    role,
+    createdAt
+  }: {
+    branchId?: string;
+    q: string;
+    page: number;
+    pageSize: number;
+    role: "ADMIN" | "MANAGER" | "CASHIER";
+    createdAt?: Prisma.DateTimeFilter;
+  }) => {
+    const orderWhere: Prisma.OrderWhereInput = {
+      AND: [
+        { branchId: branchId ?? undefined },
+        ...(createdAt ? [{ createdAt }] : []),
+        ...(role !== "ADMIN"
+          ? [
+              {
+                OR: [
+                  { deleteRequest: { is: null } },
+                  { deleteRequest: { is: { status: "REJECTED" as const } } }
+                ]
+              }
+            ]
+          : []),
+        ...(q
+          ? [
+              {
+                OR: [
+                  { code: { contains: q, mode: "insensitive" as const } },
+                  { customer: { name: { contains: q, mode: "insensitive" as const } } }
+                ]
+              }
+            ]
+          : [])
+      ]
+    };
+
+    const orders = await prisma.order.findMany({
+      where: orderWhere,
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        grandTotal: true,
+        customerId: true,
+        createdById: true
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize + 1
+    });
+
+    const hasNext = orders.length > pageSize;
+    const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
+    const orderIds = visibleOrders.map((order) => order.id);
+    const customerIds = Array.from(new Set(visibleOrders.map((order) => order.customerId)));
+    const createdByIds = Array.from(new Set(visibleOrders.map((order) => order.createdById)));
+
+    const [customers, users, deleteRequests] = await Promise.all([
+      customerIds.length
+        ? prisma.customer.findMany({
+            where: { id: { in: customerIds } },
+            select: { id: true, name: true, receivableDebt: true }
+          })
+        : Promise.resolve([]),
+      createdByIds.length
+        ? prisma.user.findMany({
+            where: { id: { in: createdByIds } },
+            select: { id: true, name: true }
+          })
+        : Promise.resolve([]),
+      orderIds.length
+        ? prisma.orderDeleteRequest.findMany({
+            where: { orderId: { in: orderIds } },
+            select: { orderId: true, status: true }
+          })
+        : Promise.resolve([])
+    ]);
+
+    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+    const userById = new Map(users.map((user) => [user.id, user]));
+    const deleteRequestByOrderId = new Map(deleteRequests.map((request) => [request.orderId, request]));
+
+    return {
+      hasNext,
+      orders: visibleOrders.map((order) => ({
+        id: order.id,
+        code: order.code,
+        createdAt: order.createdAt,
+        grandTotal: order.grandTotal,
+        customer: customerById.get(order.customerId) ?? { id: order.customerId, name: "-", receivableDebt: 0 },
+        createdBy: userById.get(order.createdById) ?? null,
+        deleteRequest: deleteRequestByOrderId.get(order.id) ?? null
+      }))
+    };
+  },
+  ["orders-page-data"],
+  { revalidate: 15 }
+);
+
 async function OrdersList({
-  orderWhere,
+  branchId,
+  q,
+  createdAt,
   page,
   pageSize,
   role,
   query
 }: {
-  orderWhere: Prisma.OrderWhereInput;
+  branchId?: string;
+  q: string;
+  createdAt?: Prisma.DateTimeFilter;
   page: number;
   pageSize: number;
   role: "ADMIN" | "MANAGER" | "CASHIER";
   query: Record<string, string | undefined>;
 }) {
-  const orders = await prisma.order.findMany({
-    where: orderWhere,
-    select: {
-      id: true,
-      code: true,
-      createdAt: true,
-      grandTotal: true,
-      customer: {
-        select: {
-          name: true,
-          receivableDebt: true
-        }
-      },
-      createdBy: { select: { name: true } },
-      deleteRequest: { select: { id: true, status: true } }
-    },
-    orderBy: { createdAt: "desc" },
-    skip: (page - 1) * pageSize,
-    take: pageSize + 1
+  const { orders, hasNext } = await getCachedOrdersPageData({
+    branchId,
+    q,
+    page,
+    pageSize,
+    role,
+    createdAt
   });
-  const hasNext = orders.length > pageSize;
-  const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
 
   return (
     <>
       <div className="grid gap-3 sm:hidden">
-        {visibleOrders.map((order) => (
+        {orders.map((order) => (
           <div key={order.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -124,7 +221,7 @@ async function OrdersList({
             </tr>
           </thead>
           <tbody>
-            {visibleOrders.map((order) => (
+            {orders.map((order) => (
               <tr key={order.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                 <td className="px-3 py-3 font-semibold text-emerald-600 sm:px-6 sm:py-4">
                   <Link href={`/orders/${order.id}`} prefetch={false} className="underline-offset-2 hover:underline">
@@ -280,33 +377,6 @@ export default async function OrdersPage({
   const pageSize = 10;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
 
-  const orderWhere: Prisma.OrderWhereInput = {
-    AND: [
-      { branchId: session.branchId ?? undefined },
-      ...(createdAt ? [{ createdAt }] : []),
-      ...(!isAdmin
-        ? [
-            {
-              OR: [
-                { deleteRequest: { is: null } },
-                { deleteRequest: { is: { status: "REJECTED" as const } } }
-              ]
-            }
-          ]
-        : []),
-      ...(q
-        ? [
-            {
-              OR: [
-                { code: { contains: q, mode: "insensitive" as const } },
-                { customer: { name: { contains: q, mode: "insensitive" as const } } }
-              ]
-            }
-          ]
-        : [])
-    ]
-  };
-
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
 
   return (
@@ -326,7 +396,9 @@ export default async function OrdersPage({
 
       <Suspense fallback={<OrdersListFallback />}>
         <OrdersList
-          orderWhere={orderWhere}
+          branchId={session.branchId ?? undefined}
+          q={q}
+          createdAt={createdAt}
           page={page}
           pageSize={pageSize}
           role={session.role}
