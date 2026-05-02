@@ -42,6 +42,7 @@ export function AppSidebar({ session }: { session: SessionUser }) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={cn(
                   "flex items-center gap-4 rounded-2xl px-5 py-4 text-[18px] font-semibold transition",
                   active ? "bg-[#132c31] text-emerald-500" : "text-slate-400 hover:bg-[#10272d] hover:text-white"

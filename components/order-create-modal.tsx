@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
 type Props = {
-  customers: { id: string; name: string }[];
   branchId: string;
+  defaultCustomer: { id: string; name: string } | null;
 };
 
 type ProductSuggestion = {
@@ -25,11 +25,14 @@ type OrderLine = {
   discountValue: number;
 };
 
-export function OrderCreateModal({ customers, branchId }: Props) {
+export function OrderCreateModal({ branchId, defaultCustomer }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  const [customerId, setCustomerId] = useState(defaultCustomer?.id ?? "");
+  const [customerQuery, setCustomerQuery] = useState(defaultCustomer?.name ?? "");
+  const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string }>>([]);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   const [productQuery, setProductQuery] = useState("");
   const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
@@ -42,11 +45,60 @@ export function OrderCreateModal({ customers, branchId }: Props) {
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
+
+  useEffect(() => {
+    if (!open) return;
+    setCustomerId(defaultCustomer?.id ?? "");
+    setCustomerQuery(defaultCustomer?.name ?? "");
+    setCustomerResults([]);
+    setProductQuery("");
+  }, [defaultCustomer?.id, defaultCustomer?.name, open]);
+
   useEffect(() => {
     if (!paymentTouched) {
       setPaidAmount(orderTotal);
     }
   }, [orderTotal, paymentTouched]);
+
+  useEffect(() => {
+    if (!open) return;
+    const query = customerQuery.trim();
+
+    if (!query || customerId) {
+      setCustomerResults([]);
+      setIsSearchingCustomers(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearchingCustomers(true);
+      try {
+        const response = await fetch(`/api/customers/search?q=${encodeURIComponent(query)}&limit=20`, {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          setCustomerResults([]);
+          return;
+        }
+
+        const payload = (await response.json()) as Array<{ id: string; label: string; meta?: string }>;
+        setCustomerResults(payload);
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setCustomerResults([]);
+        }
+      } finally {
+        setIsSearchingCustomers(false);
+      }
+    }, 180);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, customerQuery, customerId]);
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +167,12 @@ export function OrderCreateModal({ customers, branchId }: Props) {
     setProductResults([]);
   }
 
+  function selectCustomer(customer: { id: string; label: string }) {
+    setCustomerId(customer.id);
+    setCustomerQuery(customer.label);
+    setCustomerResults([]);
+  }
+
   function updateLine(index: number, key: "quantity" | "unitPrice", value: number) {
     setLines((prev) => prev.map((line, idx) => (idx === index ? { ...line, [key]: value } : line)));
   }
@@ -126,6 +184,15 @@ export function OrderCreateModal({ customers, branchId }: Props) {
   function submit() {
     startTransition(async () => {
       try {
+        if (!customerId) {
+          pushToast({
+            title: "Thiếu khách hàng",
+            description: "Hãy chọn khách hàng từ gợi ý trước khi tạo hóa đơn",
+            variant: "error"
+          });
+          return;
+        }
+
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -217,17 +284,47 @@ export function OrderCreateModal({ customers, branchId }: Props) {
             <div className="mt-4 space-y-4 sm:mt-6 sm:space-y-5">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-900 sm:text-lg">Khách hàng</label>
-                <select
+                <input
+                  value={customerQuery}
+                  onChange={(e) => {
+                    setCustomerQuery(e.target.value);
+                    setCustomerId("");
+                  }}
+                  placeholder="Tìm khách hàng..."
                   className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-lg"
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                >
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
+                />
+                {defaultCustomer ? (
+                  <button
+                    type="button"
+                    className="mt-2 text-sm font-medium text-emerald-700 underline-offset-2 hover:underline"
+                    onClick={() => selectCustomer({ id: defaultCustomer.id, label: defaultCustomer.name })}
+                  >
+                    Chọn {defaultCustomer.name}
+                  </button>
+                ) : null}
+                {customerQuery ? (
+                  <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                    {isSearchingCustomers ? (
+                      <div className="px-3 py-3 text-sm text-slate-500 sm:px-4">Đang tìm khách hàng...</div>
+                    ) : customerResults.length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-slate-500 sm:px-4">
+                        {customerId ? "Đã chọn khách hàng." : "Không tìm thấy khách hàng phù hợp."}
+                      </div>
+                    ) : (
+                      customerResults.map((customer) => (
+                        <button
+                          key={customer.id}
+                          type="button"
+                          className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50 sm:px-4 sm:py-2.5 sm:text-base"
+                          onClick={() => selectCustomer(customer)}
+                        >
+                          <div className="font-semibold text-slate-900">{customer.label}</div>
+                          {customer.meta ? <div className="mt-0.5 text-xs text-slate-500 sm:text-sm">{customer.meta}</div> : null}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-900 sm:text-lg">Sản phẩm</label>

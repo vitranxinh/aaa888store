@@ -26,8 +26,17 @@ async function OrdersList({
 }) {
   const orders = await prisma.order.findMany({
     where: orderWhere,
-    include: {
-      customer: true,
+    select: {
+      id: true,
+      code: true,
+      createdAt: true,
+      grandTotal: true,
+      customer: {
+        select: {
+          name: true,
+          receivableDebt: true
+        }
+      },
       createdBy: { select: { name: true } },
       deleteRequest: { select: { id: true, status: true } }
     },
@@ -43,7 +52,11 @@ async function OrdersList({
           <div key={order.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <Link href={`/orders/${order.id}`} className="text-[0.9rem] font-semibold uppercase tracking-wide text-emerald-600 underline-offset-2 hover:underline">
+                <Link
+                  href={`/orders/${order.id}`}
+                  prefetch={false}
+                  className="text-[0.9rem] font-semibold uppercase tracking-wide text-emerald-600 underline-offset-2 hover:underline"
+                >
                   {order.code}
                 </Link>
                 <p className="mt-1 text-[0.95rem] text-slate-500">{formatDate(order.createdAt)}</p>
@@ -54,7 +67,11 @@ async function OrdersList({
             </div>
 
             <div className="mt-3">
-              <Link href={`/orders/${order.id}`} className="text-[1.15rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline">
+              <Link
+                href={`/orders/${order.id}`}
+                prefetch={false}
+                className="text-[1.15rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline"
+              >
                 {order.customer.name}
               </Link>
               <p className="mt-1 text-[0.92rem] text-slate-500">Lập bởi: {order.createdBy?.name ?? "Không rõ"}</p>
@@ -91,13 +108,13 @@ async function OrdersList({
             {orders.map((order) => (
               <tr key={order.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                 <td className="px-3 py-3 font-semibold text-emerald-600 sm:px-6 sm:py-4">
-                  <Link href={`/orders/${order.id}`} className="underline-offset-2 hover:underline">
+                  <Link href={`/orders/${order.id}`} prefetch={false} className="underline-offset-2 hover:underline">
                     {order.code}
                   </Link>
                 </td>
                 <td className="px-3 py-3 sm:px-6 sm:py-4">{formatDate(order.createdAt)}</td>
                 <td className="px-3 py-3 font-medium text-slate-900 sm:px-6 sm:py-4">
-                  <Link href={`/orders/${order.id}`} className="underline-offset-2 hover:underline">
+                  <Link href={`/orders/${order.id}`} prefetch={false} className="underline-offset-2 hover:underline">
                     {order.customer.name}
                   </Link>
                 </td>
@@ -187,9 +204,14 @@ export default async function OrdersPage({
     ]
   };
 
-  const [orderCount, customers, defaultBranchId, pendingDeleteRequests] = await Promise.all([
+  const [orderCount, defaultCustomer, defaultBranchId, pendingDeleteRequests] = await Promise.all([
     prisma.order.count({ where: orderWhere }),
-    prisma.customer.findMany({ select: { id: true, name: true, code: true }, orderBy: { code: "desc" }, take: 120 }),
+    prisma.customer.findFirst({
+      where: {
+        code: "KH000000"
+      },
+      select: { id: true, name: true }
+    }),
     getDefaultBranchId(),
     isAdmin
       ? prisma.orderDeleteRequest.findMany({
@@ -218,11 +240,6 @@ export default async function OrdersPage({
     })
       : Promise.resolve([])
   ]);
-  customers.sort((a, b) => {
-    if (a.code === "KH000000") return -1;
-    if (b.code === "KH000000") return 1;
-    return a.code.localeCompare(b.code);
-  });
 
   const branchId = session.branchId ?? defaultBranchId ?? "";
 
@@ -232,10 +249,7 @@ export default async function OrdersPage({
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <OrdersFilterBar q={q} range={range} dateFrom={dateFrom} dateTo={dateTo} canExport={canExportExcel} />
-        <OrderCreateModal
-          branchId={branchId}
-          customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
-        />
+        <OrderCreateModal branchId={branchId} defaultCustomer={defaultCustomer} />
       </div>
 
       {isAdmin && pendingDeleteRequests.length > 0 ? (
@@ -254,7 +268,11 @@ export default async function OrdersPage({
               <div key={request.id} className="rounded-3xl border border-amber-200 bg-white p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
-                    <Link href={`/orders/${request.order.id}`} className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-xl">
+                    <Link
+                      href={`/orders/${request.order.id}`}
+                      prefetch={false}
+                      className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-xl"
+                    >
                       {request.order.code}
                     </Link>
                     <p className="text-sm text-slate-600 sm:text-base">Khách hàng: {request.order.customer.name}</p>

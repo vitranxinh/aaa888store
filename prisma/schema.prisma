@@ -326,6 +326,7 @@ model Order {
   deleteRequest   OrderDeleteRequest?
 
   @@index([branchId, createdAt])
+  @@index([createdAt])
   @@index([customerId])
   @@index([createdById])
   @@index([status])

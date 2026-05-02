@@ -68,6 +68,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
                     <Link
                       key={item.href}
                       href={item.href}
+                      prefetch={false}
                       onClick={() => setOpen(false)}
                       className={cn(
                         "flex items-center gap-3 rounded-2xl px-4 py-3.5 text-lg font-semibold transition",
@@ -106,6 +107,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className={cn(
                   "flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-2 text-[14px] font-semibold",
                   active ? "bg-emerald-50 text-emerald-600" : "text-slate-500"
