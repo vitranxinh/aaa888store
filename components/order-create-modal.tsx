@@ -28,6 +28,7 @@ export function OrderCreateModal({ branchId }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string }>>([]);
@@ -181,6 +182,8 @@ export function OrderCreateModal({ branchId }: Props) {
   }
 
   function submit() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     startTransition(async () => {
       try {
         if (!customerId) {
@@ -189,6 +192,7 @@ export function OrderCreateModal({ branchId }: Props) {
             description: "Hãy chọn khách hàng từ gợi ý trước khi tạo hóa đơn",
             variant: "error"
           });
+          setIsSubmitting(false);
           return;
         }
 
@@ -230,6 +234,7 @@ export function OrderCreateModal({ branchId }: Props) {
             description: payload.error ?? "Có lỗi xảy ra khi tạo hóa đơn",
             variant: "error"
           });
+          setIsSubmitting(false);
           return;
         }
 
@@ -248,6 +253,7 @@ export function OrderCreateModal({ branchId }: Props) {
           description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",
           variant: "error"
         });
+        setIsSubmitting(false);
       }
     });
   }
@@ -437,8 +443,8 @@ export function OrderCreateModal({ branchId }: Props) {
                   <p className="mt-1 text-lg font-bold text-slate-900 sm:text-xl">{orderTotal.toLocaleString("vi-VN")} đ</p>
                 </div>
               </div>
-              <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} disabled={isPending || lines.length === 0}>
-                {isPending ? "Đang tạo..." : "Tạo hóa đơn"}
+              <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} disabled={isPending || isSubmitting || lines.length === 0}>
+                {isPending || isSubmitting ? "Đang tạo..." : "Tạo hóa đơn"}
               </Button>
             </div>
           </div>

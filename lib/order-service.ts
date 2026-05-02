@@ -17,6 +17,15 @@ type OrderPayload = {
   items: Array<{ productId: string; quantity: number; unitPrice: number; discountValue: number }>;
 };
 
+type PerfSteps = Record<string, number>;
+
+async function measureStep<T>(steps: PerfSteps, key: string, task: () => Promise<T>) {
+  const startedAt = Date.now();
+  const result = await task();
+  steps[key] = Date.now() - startedAt;
+  return result;
+}
+
 async function loadOrderPayloadItems(items: OrderPayload["items"]) {
   const productIds = Array.from(new Set(items.map((item) => item.productId)));
   const products = await prisma.product.findMany({
@@ -100,6 +109,60 @@ async function ensureInventorySufficient(tx: Prisma.TransactionClient, branchId:
   }
 }
 
+async function applyInventoryQuantityChanges(
+  tx: Prisma.TransactionClient,
+  branchId: string,
+  quantityByProduct: Map<string, number>,
+  direction: "increment" | "decrement"
+) {
+  const productIds = Array.from(quantityByProduct.keys());
+  if (productIds.length === 0) return;
+
+  const existingInventories = await tx.inventory.findMany({
+    where: {
+      branchId,
+      variantId: null,
+      productId: { in: productIds }
+    },
+    select: { productId: true }
+  });
+
+  const existingProductIds = new Set(
+    existingInventories
+      .map((inventory) => inventory.productId)
+      .filter((productId): productId is string => Boolean(productId))
+  );
+  const missingProductIds = productIds.filter((productId) => !existingProductIds.has(productId));
+
+  if (missingProductIds.length > 0) {
+    await Promise.all(
+      missingProductIds.map((productId) =>
+        tx.inventory.create({
+          data: {
+            branchId,
+            productId,
+            quantity: 0
+          }
+        })
+      )
+    );
+  }
+
+  const caseClauses = Prisma.join(
+    productIds.map((productId) => Prisma.sql`WHEN ${productId} THEN ${quantityByProduct.get(productId) ?? 0}`),
+    " "
+  );
+  const directionSql = direction === "increment" ? Prisma.sql`+` : Prisma.sql`-`;
+
+  await tx.$executeRaw`
+    UPDATE "Inventory"
+    SET "quantity" = "quantity" ${directionSql} (CASE "productId" ${caseClauses} ELSE 0 END)
+    WHERE "branchId" = ${branchId}
+      AND "variantId" IS NULL
+      AND "productId" IN (${Prisma.join(productIds)})
+  `;
+}
+
 async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
   id: string;
   code: string;
@@ -172,47 +235,135 @@ async function applyOrderEffects(
   payload: OrderPayload,
   items: Awaited<ReturnType<typeof loadOrderPayloadItems>>,
   derived: ReturnType<typeof calculateOrderDerivedState>,
-  receiptCode?: string | null
+  receiptCode?: string | null,
+  steps?: PerfSteps
 ) {
   if (derived.finalStatus === "DRAFT") {
     return;
   }
 
-  await ensureInventorySufficient(tx, payload.branchId, items);
-
-  const quantityByProduct = aggregateQuantityByProduct(items);
-  await Promise.all(
-    Array.from(quantityByProduct.entries()).map(([productId, quantity]) =>
-      tx.inventory.updateMany({
-        where: { branchId: payload.branchId, productId },
-        data: { quantity: { decrement: quantity } }
-      })
-    )
+  await measureStep(steps ?? {}, "inventoryValidationMs", () =>
+    ensureInventorySufficient(tx, payload.branchId, items)
   );
 
-  await Promise.all([
-    derived.paidAmount > 0
-      ? tx.cashTransaction.create({
-          data: {
-            code: receiptCode ?? (await nextCode("PT", "cashTransaction")),
-            branchId: payload.branchId,
-            type: CashTxnType.RECEIPT,
-            amount: new Prisma.Decimal(derived.paidAmount),
-            customerId: payload.customerId,
-            orderId: order.id,
-            createdById: payload.createdById,
-            note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
-          }
-        })
-      : Promise.resolve(),
-    tx.customer.update({
-      where: { id: payload.customerId },
-      data: {
-        totalSpend: { increment: derived.grandTotal },
-        loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) }
+  const quantityByProduct = aggregateQuantityByProduct(items);
+  await measureStep(steps ?? {}, "inventoryUpdateMs", () =>
+    applyInventoryQuantityChanges(tx, payload.branchId, quantityByProduct, "decrement")
+  );
+
+  await measureStep(steps ?? {}, "cashAndDebtUpdateMs", () =>
+    Promise.all([
+      derived.paidAmount > 0
+        ? tx.cashTransaction.create({
+            data: {
+              code: receiptCode ?? "",
+              branchId: payload.branchId,
+              type: CashTxnType.RECEIPT,
+              amount: new Prisma.Decimal(derived.paidAmount),
+              customerId: payload.customerId,
+              orderId: order.id,
+              createdById: payload.createdById,
+              note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
+            }
+          })
+        : Promise.resolve(),
+      tx.customer.update({
+        where: { id: payload.customerId },
+        data: {
+          totalSpend: { increment: derived.grandTotal },
+          loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
+          receivableDebt: { increment: derived.debtAmount }
+        }
+      })
+    ]).then(() => undefined)
+  );
+}
+
+async function allocateOrderBatchesFEFO(
+  branchId: string,
+  items: Awaited<ReturnType<typeof loadOrderPayloadItems>>,
+  referenceCode: string,
+  createdById: string,
+  steps?: PerfSteps
+) {
+  const quantityByProduct = aggregateQuantityByProduct(items);
+  const productIds = Array.from(quantityByProduct.keys());
+  if (productIds.length === 0) return;
+
+  const batches = await measureStep(steps ?? {}, "batchFetchMs", () =>
+    prisma.productBatch.findMany({
+      where: { branchId, productId: { in: productIds }, quantity: { gt: 0 } },
+      orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        productId: true,
+        batchNumber: true,
+        quantity: true
       }
     })
-  ]);
+  );
+
+  const batchesByProduct = new Map<string, typeof batches>();
+  for (const batch of batches) {
+    const productBatches = batchesByProduct.get(batch.productId) ?? [];
+    productBatches.push(batch);
+    batchesByProduct.set(batch.productId, productBatches);
+  }
+
+  const batchUpdates: Array<{ id: string; quantity: number }> = [];
+  const inventoryTransactions: Prisma.InventoryTransactionCreateManyInput[] = [];
+
+  for (const [productId, requestedQuantity] of quantityByProduct.entries()) {
+    let remaining = requestedQuantity;
+    const productBatches = batchesByProduct.get(productId) ?? [];
+
+    for (const batch of productBatches) {
+      if (remaining <= 0) break;
+      const used = Math.min(batch.quantity, remaining);
+      remaining -= used;
+      batchUpdates.push({ id: batch.id, quantity: used });
+      inventoryTransactions.push({
+        branchId,
+        productId,
+        batchId: batch.id,
+        type: "SALE",
+        quantity: -used,
+        referenceCode,
+        createdById,
+        note: `Xuất theo lô ${batch.batchNumber}`
+      });
+    }
+
+    if (remaining > 0) {
+      inventoryTransactions.push({
+        branchId,
+        productId,
+        type: "SALE",
+        quantity: -remaining,
+        referenceCode,
+        createdById,
+        note: "Xuất phần tồn kho chưa gắn lô"
+      });
+    }
+  }
+
+  await measureStep(steps ?? {}, "batchPersistMs", async () => {
+    await Promise.all([
+      batchUpdates.length > 0
+        ? Promise.all(
+            batchUpdates.map((batch) =>
+              prisma.productBatch.update({
+                where: { id: batch.id },
+                data: { quantity: { decrement: batch.quantity } }
+              })
+            )
+          )
+        : Promise.resolve(),
+      inventoryTransactions.length > 0
+        ? prisma.inventoryTransaction.createMany({ data: inventoryTransactions })
+        : Promise.resolve()
+    ]);
+  });
 }
 
 export async function allocateBatchesFEFO(branchId: string, productId: string, quantity: number, referenceCode: string, createdById: string) {
@@ -277,30 +428,49 @@ export async function allocateBatchesFEFO(branchId: string, productId: string, q
 }
 
 export async function createOrderFromPayload(payload: OrderPayload) {
-  const items = await loadOrderPayloadItems(payload.items);
-  const derived = calculateOrderDerivedState(items, payload);
-  const code = await nextCode("DH", "order");
-  const receiptCode = derived.paidAmount > 0 ? await nextCode("PT", "cashTransaction") : null;
+  const steps: PerfSteps = {};
+  const totalStartedAt = Date.now();
+  const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
+  const derived = await measureStep(steps, "deriveStateMs", async () => calculateOrderDerivedState(items, payload));
+  const [code, receiptCode] = await measureStep(steps, "codeGenMs", () =>
+    Promise.all([
+      nextCode("DH", "order"),
+      derived.paidAmount > 0 ? nextCode("PT", "cashTransaction") : Promise.resolve(null)
+    ])
+  );
 
-  const order = await runTransactionWithRetry(async (tx) => {
-    const created = await tx.order.create({
-      data: {
-        code,
-        branchId: payload.branchId,
-        customerId: payload.customerId,
-        createdById: payload.createdById,
-        status: derived.finalStatus,
-        subtotal: new Prisma.Decimal(derived.totals.subtotal),
-        discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
-        otherCharge: new Prisma.Decimal(payload.otherCharge),
-        grandTotal: new Prisma.Decimal(derived.grandTotal),
-        profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate),
-        paymentMethod: payload.paymentMethod,
-        paidAmount: new Prisma.Decimal(derived.paidAmount),
-        debtAmount: new Prisma.Decimal(derived.debtAmount),
-        note: payload.note,
-        items: {
-          create: items.map((item) => ({
+  const order = await measureStep(steps, "transactionMs", () =>
+    runTransactionWithRetry(async (tx) => {
+      const transactionSteps: PerfSteps = {};
+      const created = await measureStep(transactionSteps, "createOrderMs", () =>
+        tx.order.create({
+          data: {
+            code,
+            branchId: payload.branchId,
+            customerId: payload.customerId,
+            createdById: payload.createdById,
+            status: derived.finalStatus,
+            subtotal: new Prisma.Decimal(derived.totals.subtotal),
+            discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
+            otherCharge: new Prisma.Decimal(payload.otherCharge),
+            grandTotal: new Prisma.Decimal(derived.grandTotal),
+            profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate),
+            paymentMethod: payload.paymentMethod,
+            paidAmount: new Prisma.Decimal(derived.paidAmount),
+            debtAmount: new Prisma.Decimal(derived.debtAmount),
+            note: payload.note
+          },
+          select: {
+            id: true,
+            code: true
+          }
+        })
+      );
+
+      await measureStep(transactionSteps, "createOrderItemsMs", () =>
+        tx.orderItem.createMany({
+          data: items.map((item) => ({
+            orderId: created.id,
             productId: item.product.id,
             quantity: item.quantity,
             unitPrice: new Prisma.Decimal(item.unitPrice),
@@ -308,24 +478,33 @@ export async function createOrderFromPayload(payload: OrderPayload) {
             discountValue: new Prisma.Decimal(item.discountValue),
             total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
           }))
-        }
-      }
-    });
+        })
+      );
 
-    await applyOrderEffects(tx, created, payload, items, derived, receiptCode);
+      await applyOrderEffects(tx, created, payload, items, derived, receiptCode, transactionSteps);
+      console.info("[perf][create-order][transaction]", {
+        code,
+        itemCount: items.length,
+        ...transactionSteps
+      });
 
-    return created;
-  }, { maxWait: 10000, timeout: 30000 });
+      return created;
+    }, { maxWait: 10000, timeout: 15000 })
+  );
 
   if (derived.finalStatus !== "DRAFT") {
-    await Promise.all([
-      recalculateCustomerReceivableDebtForCustomer(payload.customerId),
-      ...Array.from(aggregateQuantityByProduct(items).entries()).map(([productId, quantity]) =>
-        allocateBatchesFEFO(payload.branchId, productId, quantity, code, payload.createdById)
-      )
-    ]);
+    await measureStep(steps, "batchAllocationMs", () =>
+      allocateOrderBatchesFEFO(payload.branchId, items, code, payload.createdById, steps)
+    );
   }
 
+  console.info("[perf][create-order]", {
+    code,
+    itemCount: items.length,
+    customerId: payload.customerId,
+    ...steps,
+    totalMs: Date.now() - totalStartedAt
+  });
   return order;
 }
 

@@ -1,16 +1,77 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { requireApiSession } from "@/lib/auth";
-import { recalculatePurchasePaymentStateForPurchase } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { runTransactionWithRetry } from "@/lib/transaction-retry";
 import { purchaseSchema } from "@/lib/validations";
 
+type PerfSteps = Record<string, number>;
+
+async function measureStep<T>(steps: PerfSteps, key: string, task: () => Promise<T>) {
+  const startedAt = Date.now();
+  const result = await task();
+  steps[key] = Date.now() - startedAt;
+  return result;
+}
+
+async function applyInventoryQuantityChanges(
+  tx: Prisma.TransactionClient,
+  branchId: string,
+  quantityByProduct: Map<string, number>
+) {
+  const productIds = Array.from(quantityByProduct.keys());
+  if (productIds.length === 0) return;
+
+  const existingInventories = await tx.inventory.findMany({
+    where: {
+      branchId,
+      variantId: null,
+      productId: { in: productIds }
+    },
+    select: { productId: true }
+  });
+  const existingProductIds = new Set(
+    existingInventories
+      .map((inventory) => inventory.productId)
+      .filter((productId): productId is string => Boolean(productId))
+  );
+  const missingProductIds = productIds.filter((productId) => !existingProductIds.has(productId));
+
+  if (missingProductIds.length > 0) {
+    await Promise.all(
+      missingProductIds.map((productId) =>
+        tx.inventory.create({
+          data: {
+            branchId,
+            productId,
+            quantity: 0
+          }
+        })
+      )
+    );
+  }
+
+  const caseClauses = Prisma.join(
+    productIds.map((productId) => Prisma.sql`WHEN ${productId} THEN ${quantityByProduct.get(productId) ?? 0}`),
+    " "
+  );
+
+  await tx.$executeRaw`
+    UPDATE "Inventory"
+    SET "quantity" = "quantity" + (CASE "productId" ${caseClauses} ELSE 0 END)
+    WHERE "branchId" = ${branchId}
+      AND "variantId" IS NULL
+      AND "productId" IN (${Prisma.join(productIds)})
+  `;
+}
+
 export async function POST(request: Request) {
   try {
+    const steps: PerfSteps = {};
+    const totalStartedAt = Date.now();
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
-    const body = await request.json();
+    const body = await measureStep(steps, "requestBodyMs", () => request.json());
     const parsed = purchaseSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Dữ liệu phiếu nhập không hợp lệ" }, { status: 400 });
@@ -25,82 +86,79 @@ export async function POST(request: Request) {
     const paidAmount = parsed.data.paidAmount;
     const debtAmount = Math.max(totalAmount - paidAmount, 0);
     const status = debtAmount > 0 ? "PARTIAL" : "COMPLETED";
-    const purchaseCode = await nextCode("PN", "purchaseOrder");
-    const paymentCode = paidAmount > 0 ? await nextCode("PC", "cashTransaction") : null;
+    steps.validationMs = Date.now() - totalStartedAt - (steps.requestBodyMs ?? 0);
+    const [purchaseCode, paymentCode] = await measureStep(steps, "codeGenMs", () =>
+      Promise.all([
+        nextCode("PN", "purchaseOrder"),
+        paidAmount > 0 ? nextCode("PC", "cashTransaction") : Promise.resolve(null)
+      ])
+    );
     const quantityByProduct = new Map<string, number>();
 
     for (const item of normalizedItems) {
       quantityByProduct.set(item.productId, (quantityByProduct.get(item.productId) ?? 0) + item.quantity);
     }
 
-    const purchase = await runTransactionWithRetry(async (tx) => {
-      const created = await tx.purchaseOrder.create({
-        data: {
-          code: purchaseCode,
-          branchId: parsed.data.branchId,
-          supplierId: parsed.data.supplierId,
-          createdById: session.id,
-          status,
-          totalAmount: new Prisma.Decimal(totalAmount),
-          paidAmount: new Prisma.Decimal(paidAmount),
-          debtAmount: new Prisma.Decimal(debtAmount),
-          note: parsed.data.note,
-          items: {
-            create: normalizedItems.map((item) => ({
+    const purchase = await measureStep(steps, "transactionMs", () =>
+      runTransactionWithRetry(async (tx) => {
+        const transactionSteps: PerfSteps = {};
+        const created = await measureStep(transactionSteps, "createPurchaseMs", () =>
+          tx.purchaseOrder.create({
+            data: {
+              code: purchaseCode,
+              branchId: parsed.data.branchId,
+              supplierId: parsed.data.supplierId,
+              createdById: session.id,
+              status,
+              totalAmount: new Prisma.Decimal(totalAmount),
+              paidAmount: new Prisma.Decimal(paidAmount),
+              debtAmount: new Prisma.Decimal(debtAmount),
+              note: parsed.data.note
+            },
+            select: {
+              id: true,
+              code: true,
+              branchId: true,
+              supplierId: true,
+              totalAmount: true,
+              paidAmount: true,
+              debtAmount: true,
+              note: true,
+              status: true
+            }
+          })
+        );
+
+        const createdItems = await measureStep(transactionSteps, "createPurchaseItemsMs", () =>
+          tx.purchaseOrderItem.createManyAndReturn({
+            data: normalizedItems.map((item) => ({
+              purchaseOrderId: created.id,
               productId: item.productId,
               quantity: item.quantity,
               importPrice: new Prisma.Decimal(item.importPrice),
               total: new Prisma.Decimal(item.quantity * item.importPrice),
               batchNumber: item.batchNumber,
               expiryDate: item.expiryDate ? new Date(item.expiryDate) : null
-            }))
-          }
-        },
-        include: { items: true }
-      });
+            })),
+            select: {
+              id: true,
+              productId: true,
+              quantity: true,
+              batchNumber: true,
+              expiryDate: true,
+              importPrice: true
+            }
+          })
+        );
 
-      const existingInventories = await tx.inventory.findMany({
-        where: {
-          branchId: created.branchId,
-          variantId: null,
-          productId: { in: created.items.map((item) => item.productId) }
-        },
-        select: { id: true, productId: true }
-      });
-      const inventoryIdByProduct = new Map(
-        existingInventories
-          .filter((inventory): inventory is { id: string; productId: string } => Boolean(inventory.productId))
-          .map((inventory) => [inventory.productId, inventory.id])
-      );
+        await measureStep(transactionSteps, "inventoryUpdateMs", () =>
+          applyInventoryQuantityChanges(tx, created.branchId, quantityByProduct)
+        );
 
-      await Promise.all(
-        Array.from(quantityByProduct.entries()).map(async ([productId, quantity]) => {
-          const inventoryId = inventoryIdByProduct.get(productId);
-
-          if (inventoryId) {
-            await tx.inventory.update({
-              where: { id: inventoryId },
-              data: {
-                quantity: { increment: quantity }
-              }
-            });
-          } else {
-            await tx.inventory.create({
-              data: {
-                branchId: created.branchId,
-                productId,
-                quantity
-              }
-            });
-          }
-        })
-      );
-
-      await Promise.all(
-        created.items.map((item) =>
+        await measureStep(transactionSteps, "batchAndInventoryLogMs", () =>
           Promise.all([
-            tx.productBatch.create({
-              data: {
+            tx.productBatch.createMany({
+              data: createdItems.map((item) => ({
                 branchId: created.branchId,
                 productId: item.productId,
                 batchNumber: item.batchNumber,
@@ -108,10 +166,10 @@ export async function POST(request: Request) {
                 quantity: item.quantity,
                 importPrice: item.importPrice,
                 purchaseItemId: item.id
-              }
+              }))
             }),
-            tx.inventoryTransaction.create({
-              data: {
+            tx.inventoryTransaction.createMany({
+              data: createdItems.map((item) => ({
                 branchId: created.branchId,
                 productId: item.productId,
                 type: "IMPORT",
@@ -119,31 +177,53 @@ export async function POST(request: Request) {
                 referenceCode: created.code,
                 createdById: session.id,
                 note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
+              }))
+            })
+          ]).then(() => undefined)
+        );
+
+        await measureStep(transactionSteps, "cashAndDebtUpdateMs", () =>
+          Promise.all([
+            paidAmount > 0
+              ? tx.cashTransaction.create({
+                  data: {
+                    code: paymentCode!,
+                    branchId: created.branchId,
+                    type: "PAYMENT",
+                    amount: new Prisma.Decimal(paidAmount),
+                    purchaseOrderId: created.id,
+                    supplierId: created.supplierId,
+                    createdById: session.id,
+                    note: parsed.data.note ?? `Chi tiền phiếu nhập ${created.code}`
+                  }
+                })
+              : Promise.resolve(),
+            tx.supplier.update({
+              where: { id: created.supplierId },
+              data: {
+                payableDebt: { increment: debtAmount }
               }
             })
-          ])
-        )
-      );
+          ]).then(() => undefined)
+        );
 
-      if (paidAmount > 0) {
-        await tx.cashTransaction.create({
-          data: {
-            code: paymentCode!,
-            branchId: created.branchId,
-            type: "PAYMENT",
-            amount: new Prisma.Decimal(paidAmount),
-            purchaseOrderId: created.id,
-            supplierId: created.supplierId,
-            createdById: session.id,
-            note: parsed.data.note ?? `Chi tiền phiếu nhập ${created.code}`
-          }
+        console.info("[perf][create-purchase][transaction]", {
+          code: created.code,
+          itemCount: normalizedItems.length,
+          ...transactionSteps
         });
-      }
 
-      return created;
-    }, { maxWait: 10000, timeout: 30000 });
+        return created;
+      }, { maxWait: 10000, timeout: 15000 })
+    );
 
-    await recalculatePurchasePaymentStateForPurchase(purchase.id);
+    console.info("[perf][create-purchase]", {
+      code: purchase.code,
+      itemCount: normalizedItems.length,
+      supplierId: parsed.data.supplierId,
+      ...steps,
+      totalMs: Date.now() - totalStartedAt
+    });
 
     return NextResponse.json({ ok: true, purchase });
   } catch (error) {

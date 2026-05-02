@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
@@ -10,6 +11,7 @@ export function PurchaseCreateModal({
 }: {
   branchId: string;
 }) {
+  const router = useRouter();
   type ProductSuggestion = {
     id: string;
     label: string;
@@ -36,6 +38,7 @@ export function PurchaseCreateModal({
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
   const [items, setItems] = useState<PurchaseLine[]>([]);
   const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const pushToast = useToastStore((state) => state.push);
 
   useEffect(() => {
@@ -133,33 +136,45 @@ export function PurchaseCreateModal({
   }
 
   function submit() {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     startTransition(async () => {
-      const response = await fetch("/api/purchases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          branchId,
-          supplierId,
-          paidAmount,
-          note,
-          items: items.map(({ productId, quantity, importPrice, batchNumber, expiryDate }) => ({
-            productId,
-            quantity,
-            importPrice,
-            batchNumber,
-            expiryDate
-          }))
-        })
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        pushToast({ title: "Không thể tạo phiếu nhập", description: payload.error, variant: "error" });
-        return;
+      try {
+        const response = await fetch("/api/purchases", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            branchId,
+            supplierId,
+            paidAmount,
+            note,
+            items: items.map(({ productId, quantity, importPrice, batchNumber, expiryDate }) => ({
+              productId,
+              quantity,
+              importPrice,
+              batchNumber,
+              expiryDate
+            }))
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          pushToast({ title: "Không thể tạo phiếu nhập", description: payload.error, variant: "error" });
+          setIsSubmitting(false);
+          return;
+        }
+        pushToast({ title: "Đã tạo phiếu nhập", description: payload.purchase.code });
+        resetForm();
+        setOpen(false);
+        router.refresh();
+      } catch (error) {
+        pushToast({
+          title: "Không thể tạo phiếu nhập",
+          description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",
+          variant: "error"
+        });
+        setIsSubmitting(false);
       }
-      pushToast({ title: "Đã tạo phiếu nhập", description: payload.purchase.code });
-      resetForm();
-      setOpen(false);
-      window.location.reload();
     });
   }
 
@@ -281,8 +296,8 @@ export function PurchaseCreateModal({
               <textarea className="h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base sm:h-28 sm:px-5 sm:py-4 sm:text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú" />
             </div>
             <div className="border-t border-slate-100 px-4 py-4 sm:px-7">
-              <Button className="h-12 w-full text-lg sm:h-16 sm:text-3xl" onClick={submit} disabled={isPending || items.length === 0 || !supplierId}>
-                {isPending ? "Đang tạo..." : "Tạo phiếu nhập"}
+              <Button className="h-12 w-full text-lg sm:h-16 sm:text-3xl" onClick={submit} disabled={isPending || isSubmitting || items.length === 0 || !supplierId}>
+                {isPending || isSubmitting ? "Đang tạo..." : "Tạo phiếu nhập"}
               </Button>
             </div>
           </div>
