@@ -17,12 +17,14 @@ async function OrdersList({
   orderWhere,
   page,
   pageSize,
-  role
+  role,
+  query
 }: {
   orderWhere: Prisma.OrderWhereInput;
   page: number;
   pageSize: number;
   role: "ADMIN" | "MANAGER" | "CASHIER";
+  query: Record<string, string | undefined>;
 }) {
   const orders = await prisma.order.findMany({
     where: orderWhere,
@@ -42,13 +44,15 @@ async function OrdersList({
     },
     orderBy: { createdAt: "desc" },
     skip: (page - 1) * pageSize,
-    take: pageSize
+    take: pageSize + 1
   });
+  const hasNext = orders.length > pageSize;
+  const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
 
   return (
     <>
       <div className="grid gap-3 sm:hidden">
-        {orders.map((order) => (
+        {visibleOrders.map((order) => (
           <div key={order.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -105,7 +109,7 @@ async function OrdersList({
             </tr>
           </thead>
           <tbody>
-            {orders.map((order) => (
+            {visibleOrders.map((order) => (
               <tr key={order.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                 <td className="px-3 py-3 font-semibold text-emerald-600 sm:px-6 sm:py-4">
                   <Link href={`/orders/${order.id}`} prefetch={false} className="underline-offset-2 hover:underline">
@@ -137,6 +141,7 @@ async function OrdersList({
           </tbody>
         </table>
       </div>
+      <ServerPagination pathname="/orders" query={query} page={page} pageSize={pageSize} hasNext={hasNext} />
     </>
   );
 }
@@ -158,6 +163,80 @@ function OrdersListFallback() {
         </div>
       ))}
     </div>
+  );
+}
+
+async function PendingDeleteRequestsSection({
+  branchId,
+  createdAt
+}: {
+  branchId: string | null;
+  createdAt?: Prisma.DateTimeFilter;
+}) {
+  const pendingDeleteRequests = await prisma.orderDeleteRequest.findMany({
+    where: {
+      status: "PENDING",
+      order: {
+        branchId: branchId ?? undefined,
+        ...(createdAt ? { createdAt } : {})
+      }
+    },
+    include: {
+      order: {
+        select: {
+          id: true,
+          code: true,
+          grandTotal: true,
+          createdAt: true,
+          customer: { select: { name: true } }
+        }
+      },
+      requestedBy: {
+        select: { name: true, email: true }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  if (pendingDeleteRequests.length === 0) return null;
+
+  return (
+    <section className="rounded-3xl border border-amber-200 bg-amber-50/70 p-4 shadow-soft sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Yêu cầu xóa hóa đơn</h2>
+          <p className="mt-1 text-sm text-slate-600 sm:text-base">
+            Nhân viên đã gửi {pendingDeleteRequests.length} yêu cầu chờ sếp duyệt.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        {pendingDeleteRequests.map((request) => (
+          <div key={request.id} className="rounded-3xl border border-amber-200 bg-white p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
+                <Link
+                  href={`/orders/${request.order.id}`}
+                  prefetch={false}
+                  className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-xl"
+                >
+                  {request.order.code}
+                </Link>
+                <p className="text-sm text-slate-600 sm:text-base">Khách hàng: {request.order.customer.name}</p>
+                <p className="text-sm text-slate-600 sm:text-base">
+                  Nhân viên yêu cầu: <span className="font-semibold">{request.requestedBy.name}</span>
+                </p>
+                <p className="text-xs text-slate-500 sm:text-sm">
+                  {formatDate(request.createdAt)} · {formatCurrency(Number(request.order.grandTotal))}
+                </p>
+              </div>
+              <OrderDeleteRequestActions requestId={request.id} orderCode={request.order.code} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -204,103 +283,42 @@ export default async function OrdersPage({
     ]
   };
 
-  const [orderCount, defaultCustomer, defaultBranchId, pendingDeleteRequests] = await Promise.all([
-    prisma.order.count({ where: orderWhere }),
+  const [defaultCustomer, defaultBranchId] = await Promise.all([
     prisma.customer.findFirst({
       where: {
         code: "KH000000"
       },
       select: { id: true, name: true }
     }),
-    getDefaultBranchId(),
-    isAdmin
-      ? prisma.orderDeleteRequest.findMany({
-          where: {
-            status: "PENDING",
-            order: {
-              branchId: session.branchId ?? undefined,
-              ...(createdAt ? { createdAt } : {})
-            }
-          },
-          include: {
-            order: {
-              select: {
-                id: true,
-                code: true,
-                grandTotal: true,
-                createdAt: true,
-                customer: { select: { name: true } }
-              }
-            },
-            requestedBy: {
-              select: { name: true, email: true }
-            }
-          },
-          orderBy: { createdAt: "desc" }
-    })
-      : Promise.resolve([])
+    getDefaultBranchId()
   ]);
 
   const branchId = session.branchId ?? defaultBranchId ?? "";
 
   return (
     <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Hóa đơn" description={`${orderCount} hóa đơn`} session={session} />
+      <AppHeader title="Hóa đơn" description="Quản lý hóa đơn bán hàng" session={session} />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <OrdersFilterBar q={q} range={range} dateFrom={dateFrom} dateTo={dateTo} canExport={canExportExcel} />
         <OrderCreateModal branchId={branchId} defaultCustomer={defaultCustomer} />
       </div>
 
-      {isAdmin && pendingDeleteRequests.length > 0 ? (
-        <section className="rounded-3xl border border-amber-200 bg-amber-50/70 p-4 shadow-soft sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Yêu cầu xóa hóa đơn</h2>
-              <p className="mt-1 text-sm text-slate-600 sm:text-base">
-                Nhân viên đã gửi {pendingDeleteRequests.length} yêu cầu chờ sếp duyệt.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3">
-            {pendingDeleteRequests.map((request) => (
-              <div key={request.id} className="rounded-3xl border border-amber-200 bg-white p-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <Link
-                      href={`/orders/${request.order.id}`}
-                      prefetch={false}
-                      className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-xl"
-                    >
-                      {request.order.code}
-                    </Link>
-                    <p className="text-sm text-slate-600 sm:text-base">Khách hàng: {request.order.customer.name}</p>
-                    <p className="text-sm text-slate-600 sm:text-base">
-                      Nhân viên yêu cầu: <span className="font-semibold">{request.requestedBy.name}</span>
-                    </p>
-                    <p className="text-xs text-slate-500 sm:text-sm">
-                      {formatDate(request.createdAt)} · {formatCurrency(Number(request.order.grandTotal))}
-                    </p>
-                  </div>
-                  <OrderDeleteRequestActions requestId={request.id} orderCode={request.order.code} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {isAdmin ? (
+        <Suspense fallback={null}>
+          <PendingDeleteRequestsSection branchId={session.branchId} createdAt={createdAt} />
+        </Suspense>
       ) : null}
 
       <Suspense fallback={<OrdersListFallback />}>
-        <OrdersList orderWhere={orderWhere} page={page} pageSize={pageSize} role={session.role} />
+        <OrdersList
+          orderWhere={orderWhere}
+          page={page}
+          pageSize={pageSize}
+          role={session.role}
+          query={{ q, range, dateFrom, dateTo }}
+        />
       </Suspense>
-      <ServerPagination
-        pathname="/orders"
-        query={{ q, range, dateFrom, dateTo }}
-        page={page}
-        pageSize={pageSize}
-        totalCount={orderCount}
-      />
     </div>
   );
 }

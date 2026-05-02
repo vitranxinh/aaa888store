@@ -5,13 +5,14 @@ type Props = {
   query: Record<string, string | undefined>;
   page: number;
   pageSize: number;
-  totalCount: number;
+  totalCount?: number;
+  hasNext?: boolean;
 };
 
-export function ServerPagination({ pathname, query, page, pageSize, totalCount }: Props) {
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+export function ServerPagination({ pathname, query, page, pageSize, totalCount, hasNext }: Props) {
+  const totalPages = typeof totalCount === "number" ? Math.max(1, Math.ceil(totalCount / pageSize)) : null;
   const prevPage = page > 1 ? page - 1 : null;
-  const nextPage = page < totalPages ? page + 1 : null;
+  const nextPage = typeof totalPages === "number" ? (page < totalPages ? page + 1 : null) : hasNext ? page + 1 : null;
 
   function buildHref(targetPage: number) {
     const params = new URLSearchParams();
@@ -27,12 +28,22 @@ export function ServerPagination({ pathname, query, page, pageSize, totalCount }
     return search ? `${pathname}?${search}` : pathname;
   }
 
-  if (totalPages <= 1) return null;
+  if ((typeof totalPages === "number" && totalPages <= 1) || (typeof totalPages !== "number" && !prevPage && !nextPage)) {
+    return null;
+  }
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
       <div className="text-sm text-slate-500 sm:text-base">
-        Trang <span className="font-semibold text-slate-700">{page}</span> / {totalPages}
+        {typeof totalPages === "number" ? (
+          <>
+            Trang <span className="font-semibold text-slate-700">{page}</span> / {totalPages}
+          </>
+        ) : (
+          <>
+            Trang <span className="font-semibold text-slate-700">{page}</span>
+          </>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {prevPage ? (

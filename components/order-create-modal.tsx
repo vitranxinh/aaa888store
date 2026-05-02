@@ -29,8 +29,8 @@ export function OrderCreateModal({ branchId, defaultCustomer }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [customerId, setCustomerId] = useState(defaultCustomer?.id ?? "");
-  const [customerQuery, setCustomerQuery] = useState(defaultCustomer?.name ?? "");
+  const [customerId, setCustomerId] = useState("");
+  const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string }>>([]);
   const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   const [productQuery, setProductQuery] = useState("");
@@ -48,11 +48,11 @@ export function OrderCreateModal({ branchId, defaultCustomer }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setCustomerId(defaultCustomer?.id ?? "");
-    setCustomerQuery(defaultCustomer?.name ?? "");
+    setCustomerId("");
+    setCustomerQuery("");
     setCustomerResults([]);
     setProductQuery("");
-  }, [defaultCustomer?.id, defaultCustomer?.name, open]);
+  }, [open]);
 
   useEffect(() => {
     if (!paymentTouched) {
