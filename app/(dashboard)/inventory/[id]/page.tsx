@@ -201,8 +201,8 @@ export default async function PurchaseDetailPage({
                 <p className="mt-1 text-lg font-semibold text-slate-900 sm:text-xl">{formatDate(purchase.createdAt)}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-sm font-medium text-slate-500">Nguồn nhập</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900 sm:text-xl">{purchase.supplier.name}</p>
+                <p className="text-sm font-medium text-slate-500">Đơn nhập hàng</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900 sm:text-xl">{purchase.code}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm font-medium text-slate-500">Người lập</p>

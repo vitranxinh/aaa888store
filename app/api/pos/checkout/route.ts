@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chưa có người dùng hợp lệ trong hệ thống để tạo hóa đơn" }, { status: 500 });
     }
 
-    const order = await createOrderFromPayload({
+    const { order } = await createOrderFromPayload({
       ...parsed.data,
       createdById: actor.id
     });

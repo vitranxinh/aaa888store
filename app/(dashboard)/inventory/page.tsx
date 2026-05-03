@@ -95,7 +95,7 @@ async function InventoryContent({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[0.82rem] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.code}</p>
-                  <p className="mt-1 text-[1.1rem] font-bold leading-snug text-slate-900">{item.supplier.name}</p>
+                  <p className="mt-1 text-[1.1rem] font-bold leading-snug text-slate-900">Đơn nhập hàng</p>
                   <p className="mt-1 text-[0.9rem] text-slate-500">{formatDate(item.createdAt)}</p>
                 </div>
                 <div className="rounded-2xl bg-red-50 px-3 py-2 text-right">
@@ -168,7 +168,7 @@ async function InventoryContent({
             <tr>
               <th className="px-3 py-3 sm:px-6 sm:py-4">Mã phiếu</th>
               <th className="px-3 py-3 sm:px-6 sm:py-4">Ngày</th>
-              <th className="px-3 py-3 sm:px-6 sm:py-4">NCC</th>
+              <th className="px-3 py-3 sm:px-6 sm:py-4">Đơn nhập</th>
               <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Tổng tiền</th>
               <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Đã trả</th>
               <th className="px-3 py-3 text-right text-red-600 sm:px-6 sm:py-4">Còn nợ</th>
@@ -185,7 +185,7 @@ async function InventoryContent({
                 <tr key={item.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                   <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">{item.code}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{formatDate(item.createdAt)}</td>
-                  <td className="px-3 py-3 sm:px-6 sm:py-4">{item.supplier.name}</td>
+                  <td className="px-3 py-3 sm:px-6 sm:py-4">Đơn nhập hàng</td>
                   <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(item.totalAmount))}</td>
                   <td className="px-3 py-3 text-right text-emerald-600 sm:px-6 sm:py-4">{formatCurrency(Number(item.paidAmount))}</td>
                   <td className="px-3 py-3 text-right font-semibold text-red-600 sm:px-6 sm:py-4">

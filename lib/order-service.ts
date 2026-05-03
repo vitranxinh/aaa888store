@@ -19,6 +19,28 @@ type OrderPayload = {
 
 type PerfSteps = Record<string, number>;
 
+export type CreateOrderTiming = {
+  requestReceivedMs?: number;
+  validationMs?: number;
+  loadItemsMs?: number;
+  deriveStateMs?: number;
+  codeGenMs?: number;
+  transactionWaitMs?: number;
+  transactionMs?: number;
+  createOrderMs?: number;
+  createOrderItemsMs?: number;
+  inventoryValidationMs?: number;
+  inventoryUpdateMs?: number;
+  customerDebtUpdateMs?: number;
+  cashTransactionMs?: number;
+  cashAndDebtUpdateMs?: number;
+  batchFetchMs?: number;
+  batchPersistMs?: number;
+  batchAllocationMs?: number;
+  revalidateRedirectMs?: number;
+  totalMs?: number;
+};
+
 async function measureStep<T>(steps: PerfSteps, key: string, task: () => Promise<T>) {
   const startedAt = Date.now();
   const result = await task();
@@ -143,17 +165,14 @@ async function applyInventoryQuantityChanges(
   const missingProductIds = productIds.filter((productId) => !existingProductIds.has(productId));
 
   if (missingProductIds.length > 0) {
-    await Promise.all(
-      missingProductIds.map((productId) =>
-        tx.inventory.create({
-          data: {
-            branchId,
-            productId,
-            quantity: 0
-          }
-        })
-      )
-    );
+    await tx.inventory.createMany({
+      data: missingProductIds.map((productId) => ({
+        branchId,
+        productId,
+        quantity: 0
+      })),
+      skipDuplicates: true
+    });
   }
 
   const caseClauses = Prisma.join(
@@ -441,7 +460,7 @@ export async function allocateBatchesFEFO(branchId: string, productId: string, q
   }
 }
 
-export async function createOrderFromPayload(payload: OrderPayload) {
+export async function createOrderFromPayload(payload: OrderPayload): Promise<{ order: { id: string; code: string }; timing: CreateOrderTiming }> {
   const steps: PerfSteps = {};
   const totalStartedAt = Date.now();
   const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
@@ -516,6 +535,14 @@ export async function createOrderFromPayload(payload: OrderPayload) {
         ["transaction total", transactionSteps.transactionTotalMs]
       ]);
 
+      steps.createOrderMs = transactionSteps.createOrderMs;
+      steps.createOrderItemsMs = transactionSteps.createOrderItemsMs;
+      steps.inventoryValidationMs = transactionSteps.inventoryValidationMs;
+      steps.inventoryUpdateMs = transactionSteps.inventoryUpdateMs;
+      steps.customerDebtUpdateMs = transactionSteps.customerDebtUpdateMs;
+      steps.cashTransactionMs = transactionSteps.cashTransactionMs;
+      steps.cashAndDebtUpdateMs = transactionSteps.cashAndDebtUpdateMs;
+
       return created;
     }, { maxWait: 10000, timeout: 15000 })
   );
@@ -527,27 +554,50 @@ export async function createOrderFromPayload(payload: OrderPayload) {
     );
   }
   steps.revalidateRedirectMs = 0;
+  steps.totalMs = Date.now() - totalStartedAt;
 
   console.info("[perf][create-order]", {
     code,
     itemCount: items.length,
     customerId: payload.customerId,
     ...steps,
-    totalMs: Date.now() - totalStartedAt
+    totalMs: steps.totalMs
   });
   logPerfSummary("CreateInvoice", [
-    ["validation", steps.loadItemsMs ? steps.loadItemsMs + (steps.deriveStateMs ?? 0) : undefined],
+    ["validation", steps.validationMs],
     ["transaction wait/start", steps.transactionWaitMs],
-    ["create invoice", undefined],
-    ["create items", undefined],
-    ["inventory update", undefined],
-    ["debt update", undefined],
-    ["cash transaction", undefined],
+    ["create invoice", steps.createOrderMs],
+    ["create items", steps.createOrderItemsMs],
+    ["inventory update", steps.inventoryUpdateMs],
+    ["debt update", steps.customerDebtUpdateMs],
+    ["cash transaction", steps.cashTransactionMs],
     ["transaction total", steps.transactionMs],
+    ["batch allocation", steps.batchAllocationMs],
     ["revalidate/redirect", steps.revalidateRedirectMs],
-    ["total", Date.now() - totalStartedAt]
+    ["total", steps.totalMs]
   ]);
-  return order;
+  return {
+    order,
+    timing: {
+      loadItemsMs: steps.loadItemsMs,
+      deriveStateMs: steps.deriveStateMs,
+      codeGenMs: steps.codeGenMs,
+      transactionWaitMs: steps.transactionWaitMs,
+      transactionMs: steps.transactionMs,
+      createOrderMs: steps.createOrderMs,
+      createOrderItemsMs: steps.createOrderItemsMs,
+      inventoryValidationMs: steps.inventoryValidationMs,
+      inventoryUpdateMs: steps.inventoryUpdateMs,
+      customerDebtUpdateMs: steps.customerDebtUpdateMs,
+      cashTransactionMs: steps.cashTransactionMs,
+      cashAndDebtUpdateMs: steps.cashAndDebtUpdateMs,
+      batchFetchMs: steps.batchFetchMs,
+      batchPersistMs: steps.batchPersistMs,
+      batchAllocationMs: steps.batchAllocationMs,
+      revalidateRedirectMs: steps.revalidateRedirectMs,
+      totalMs: steps.totalMs
+    }
+  };
 }
 
 function nextOrderRevisionCode(currentCode: string) {
