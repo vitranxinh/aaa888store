@@ -19,9 +19,8 @@ export default async function OrderDetailPage({
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
-  const [order, customers, deleteRequest] = await Promise.all([
+  const [order, deleteRequest] = await Promise.all([
     getOrderDetail(params.id),
-    prisma.customer.findMany({ select: { id: true, name: true, code: true }, orderBy: { code: "desc" }, take: 200 }),
     prisma.orderDeleteRequest.findUnique({
       where: { orderId: params.id },
       include: {
@@ -29,11 +28,6 @@ export default async function OrderDetailPage({
       }
     })
   ]);
-  customers.sort((a, b) => {
-    if (a.code === "KH000000") return -1;
-    if (b.code === "KH000000") return 1;
-    return a.code.localeCompare(b.code);
-  });
 
   if (!order || (session.branchId && order.branchId !== session.branchId)) {
     notFound();
@@ -70,6 +64,7 @@ export default async function OrderDetailPage({
             orderId={order.id}
             branchId={order.branchId}
             customerId={order.customerId}
+            customerName={order.customer.name}
             note={order.note || ""}
             otherCharge={Number(order.otherCharge)}
             paidAmount={Number(order.paidAmount)}
@@ -80,7 +75,6 @@ export default async function OrderDetailPage({
               unitPrice: Number(item.unitPrice),
               discountValue: Number(item.discountValue)
             }))}
-            customers={customers.map((customer) => ({ id: customer.id, name: customer.name }))}
           />
           {Number(order.debtAmount) > 0 ? <OrderPaymentButton orderId={order.id} remainingAmount={Number(order.debtAmount)} /> : null}
           <OrderStatusActions

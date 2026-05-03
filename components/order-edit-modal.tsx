@@ -16,11 +16,11 @@ type Props = {
   orderId: string;
   branchId: string;
   customerId: string;
+  customerName: string;
   note: string;
   otherCharge: number;
   paidAmount: number;
   lines: OrderLine[];
-  customers: { id: string; name: string }[];
 };
 
 type ProductSuggestion = {
@@ -34,15 +34,18 @@ export function OrderEditModal({
   orderId,
   branchId,
   customerId: initialCustomerId,
+  customerName: initialCustomerName,
   note: initialNote,
   otherCharge: initialOtherCharge,
   paidAmount: initialPaidAmount,
-  lines: initialLines,
-  customers
+  lines: initialLines
 }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [customerId, setCustomerId] = useState(initialCustomerId);
+  const [customerQuery, setCustomerQuery] = useState(initialCustomerName);
+  const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string }>>([]);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   const [productQuery, setProductQuery] = useState("");
   const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
@@ -56,6 +59,8 @@ export function OrderEditModal({
   useEffect(() => {
     if (open) {
       setCustomerId(initialCustomerId);
+      setCustomerQuery(initialCustomerName);
+      setCustomerResults([]);
       setNote(initialNote);
       setOtherCharge(initialOtherCharge);
       setPaidAmount(initialPaidAmount);
@@ -63,7 +68,7 @@ export function OrderEditModal({
       setPaymentTouched(false);
       setProductQuery("");
     }
-  }, [open, initialCustomerId, initialNote, initialOtherCharge, initialPaidAmount, initialLines]);
+  }, [open, initialCustomerId, initialCustomerName, initialNote, initialOtherCharge, initialPaidAmount, initialLines]);
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
@@ -72,6 +77,46 @@ export function OrderEditModal({
       setPaidAmount(Math.min(initialPaidAmount, orderTotal));
     }
   }, [orderTotal, paymentTouched, open, initialPaidAmount]);
+
+  useEffect(() => {
+    if (!open) return;
+    const query = customerQuery.trim();
+
+    if (!query || customerId) {
+      setCustomerResults([]);
+      setIsSearchingCustomers(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearchingCustomers(true);
+      try {
+        const response = await fetch(`/api/customers/search?q=${encodeURIComponent(query)}&limit=20`, {
+          signal: controller.signal,
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          setCustomerResults([]);
+          return;
+        }
+
+        const payload = (await response.json()) as Array<{ id: string; label: string; meta?: string }>;
+        setCustomerResults(payload);
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setCustomerResults([]);
+        }
+      } finally {
+        setIsSearchingCustomers(false);
+      }
+    }, 180);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, customerQuery, customerId]);
 
   useEffect(() => {
     if (!open) return;
@@ -138,6 +183,12 @@ export function OrderEditModal({
     ]);
     setProductQuery("");
     setProductResults([]);
+  }
+
+  function selectCustomer(customer: { id: string; label: string }) {
+    setCustomerId(customer.id);
+    setCustomerQuery(customer.label);
+    setCustomerResults([]);
   }
 
   function updateLine(index: number, key: "quantity" | "unitPrice", value: number) {
@@ -227,17 +278,36 @@ export function OrderEditModal({
             <div className="mt-4 space-y-4 sm:mt-6 sm:space-y-5">
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-900 sm:text-lg">Khách hàng</label>
-                <select
+                <input
+                  value={customerQuery}
+                  onChange={(e) => {
+                    setCustomerQuery(e.target.value);
+                    setCustomerId("");
+                  }}
+                  placeholder="Tìm khách hàng..."
                   className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-lg"
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                >
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
+                />
+                {customerQuery ? (
+                  <div className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                    {isSearchingCustomers ? (
+                      <div className="px-3 py-3 text-sm text-slate-500 sm:px-4">Đang tìm khách hàng...</div>
+                    ) : customerResults.length === 0 ? (
+                      customerId ? null : <div className="px-3 py-3 text-sm text-slate-500 sm:px-4">Không tìm thấy khách hàng phù hợp.</div>
+                    ) : (
+                      customerResults.map((customer) => (
+                        <button
+                          key={customer.id}
+                          type="button"
+                          className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50 sm:px-4 sm:py-2.5 sm:text-base"
+                          onClick={() => selectCustomer(customer)}
+                        >
+                          <div className="font-semibold text-slate-900">{customer.label}</div>
+                          <div className="mt-0.5 text-xs text-slate-500 sm:text-sm">{customer.meta ?? ""}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <div>
