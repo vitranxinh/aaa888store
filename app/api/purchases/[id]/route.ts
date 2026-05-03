@@ -7,6 +7,17 @@ import { prisma } from "@/lib/prisma";
 import { runTransactionWithRetry } from "@/lib/transaction-retry";
 import { purchaseSchema } from "@/lib/validations";
 
+async function resolvePurchaseSupplierId(explicitSupplierId?: string) {
+  if (explicitSupplierId) return explicitSupplierId;
+
+  const fallbackSupplier = await prisma.supplier.findFirst({
+    select: { id: true },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+  });
+
+  return fallbackSupplier?.id ?? null;
+}
+
 async function applyPurchaseInventory(
   tx: Prisma.TransactionClient,
   purchase: {
@@ -116,6 +127,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       ...item,
       batchNumber: item.batchNumber?.trim() || `${existing.code}-AUTO-${index + 1}`
     }));
+    const supplierId = (await resolvePurchaseSupplierId(parsed.data.supplierId)) ?? existing.supplierId;
 
     const totalAmount = normalizedItems.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
     const paidAmount = parsed.data.paidAmount;
@@ -167,7 +179,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         where: { id: existing.id },
         data: {
           branchId: parsed.data.branchId,
-          supplierId: parsed.data.supplierId,
+          supplierId,
           createdById: session.id,
           status,
           totalAmount,
@@ -219,7 +231,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
             type: "PAYMENT",
             amount: new Prisma.Decimal(paidAmount),
             purchaseOrderId: existing.id,
-            supplierId: parsed.data.supplierId,
+            supplierId,
             createdById: session.id,
             note: parsed.data.note ?? `Chi tiền phiếu nhập ${existing.code}`
           }
@@ -230,7 +242,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }, { maxWait: 10000, timeout: 30000 });
 
     await recalculatePurchasePaymentStateForPurchase(existing.id);
-    if (existing.supplierId !== parsed.data.supplierId) {
+    if (existing.supplierId !== supplierId) {
       await recalculateSupplierPayableDebtForSupplier(existing.supplierId);
     }
 

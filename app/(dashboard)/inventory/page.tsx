@@ -115,9 +115,18 @@ async function InventoryContent({
                 </div>
                 <div className="border-t border-slate-200 pt-2">
                   <p className="text-[0.85rem] font-medium text-slate-400">Sản phẩm</p>
-                  <p className="mt-1 text-[0.98rem] leading-relaxed text-slate-700">
-                    {item.items.length} dòng hàng
-                  </p>
+                  <div className="mt-1 space-y-1">
+                    {item.items.slice(0, 3).map((purchaseItem) => (
+                      <p key={`${item.id}-${purchaseItem.productId}`} className="text-[0.98rem] leading-relaxed text-slate-700">
+                        {purchaseItem.product.name}
+                      </p>
+                    ))}
+                    {item.items.length > 3 ? (
+                      <p className="text-[0.88rem] font-medium text-slate-500">
+                        +{item.items.length - 3} sản phẩm khác
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 

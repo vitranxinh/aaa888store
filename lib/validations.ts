@@ -79,7 +79,7 @@ export const purchaseItemSchema = z.object({
 
 export const purchaseSchema = z.object({
   branchId: z.string().min(1),
-  supplierId: z.string().min(1),
+  supplierId: z.string().optional(),
   paidAmount: z.number().nonnegative(),
   note: z.string().optional(),
   items: z.array(purchaseItemSchema).min(1)

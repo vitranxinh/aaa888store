@@ -34,7 +34,6 @@ type ProductSuggestion = {
 
 export function PurchaseEditModal({ purchase }: Props) {
   const [open, setOpen] = useState(false);
-  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [supplierId, setSupplierId] = useState(purchase.supplierId);
   const [note, setNote] = useState(purchase.note ?? "");
   const [search, setSearch] = useState("");
@@ -46,27 +45,6 @@ export function PurchaseEditModal({ purchase }: Props) {
   const pushToast = useToastStore((state) => state.push);
   const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
   const debtAmount = Math.max(totalAmount - paidAmount, 0);
-
-  useEffect(() => {
-    if (!open || suppliers.length > 0) return;
-
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch("/api/suppliers?limit=80", {
-          signal: controller.signal,
-          credentials: "same-origin"
-        });
-        if (!response.ok) return;
-        const payload = (await response.json()) as Array<{ id: string; name: string }>;
-        setSuppliers(payload);
-      } catch {
-        // Ignore transient modal bootstrap failures
-      }
-    })();
-
-    return () => controller.abort();
-  }, [open, suppliers.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -188,26 +166,8 @@ export function PurchaseEditModal({ purchase }: Props) {
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <select className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-14 sm:text-xl" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                  {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-                </select>
+              <div className="grid gap-3">
                 <input className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-14 sm:text-xl" type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(Number(e.target.value))} placeholder="Đã trả" />
-              </div>
-
-              <div className="grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 sm:p-4">
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Tổng tiền</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-slate-900 sm:text-3xl">{formatCurrency(totalAmount)}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Đã trả</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-emerald-600 sm:text-3xl">{formatCurrency(paidAmount)}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500 sm:text-sm">Còn nợ</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-red-600 sm:text-3xl">{formatCurrency(debtAmount)}</p>
-                </div>
               </div>
 
               <input value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-14 sm:text-xl" placeholder="Tìm theo tên hàng..." />
@@ -276,13 +236,28 @@ export function PurchaseEditModal({ purchase }: Props) {
                 })}
               </div>
 
+              <div className="grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 sm:p-4">
+                <div className="rounded-2xl bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Tổng tiền</p>
+                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-slate-900 sm:text-3xl">{formatCurrency(totalAmount)}</p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Đã trả</p>
+                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-emerald-600 sm:text-3xl">{formatCurrency(paidAmount)}</p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500 sm:text-sm">Còn nợ</p>
+                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-red-600 sm:text-3xl">{formatCurrency(debtAmount)}</p>
+                </div>
+              </div>
+
               <textarea className="h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base sm:h-24 sm:text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú" />
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-4 sm:px-7">
               <Button variant="destructive" className="h-12 text-sm sm:h-14 sm:text-xl" onClick={deletePurchase} disabled={isPending}>
                 Xóa phiếu nhập
               </Button>
-              <Button className="h-12 text-sm sm:h-14 sm:text-xl" onClick={submit} disabled={isPending || items.length === 0 || !supplierId}>
+              <Button className="h-12 text-sm sm:h-14 sm:text-xl" onClick={submit} disabled={isPending || items.length === 0}>
                 {isPending ? "Đang lưu..." : "Lưu thay đổi"}
               </Button>
             </div>
