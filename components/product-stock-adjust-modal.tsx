@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
@@ -12,16 +13,23 @@ type Props = {
 };
 
 export function ProductStockAdjustModal({ productId, productName, branchId, currentQuantity }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [displayQuantity, setDisplayQuantity] = useState(currentQuantity);
   const [targetQuantity, setTargetQuantity] = useState(currentQuantity);
   const [note, setNote] = useState("");
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
 
-  const delta = targetQuantity - currentQuantity;
+  useEffect(() => {
+    setDisplayQuantity(currentQuantity);
+    setTargetQuantity(currentQuantity);
+  }, [currentQuantity]);
+
+  const delta = targetQuantity - displayQuantity;
 
   function resetAndOpen() {
-    setTargetQuantity(currentQuantity);
+    setTargetQuantity(displayQuantity);
     setNote("");
     setOpen(true);
   }
@@ -47,7 +55,8 @@ export function ProductStockAdjustModal({ productId, productName, branchId, curr
             productId,
             type: "ADJUSTMENT",
             quantity: delta,
-            note: note.trim() || `Điều chỉnh tồn trực tiếp từ ${currentQuantity} lên ${targetQuantity}`
+            targetQuantity,
+            note: note.trim() || `Điều chỉnh tồn trực tiếp từ ${displayQuantity} lên ${targetQuantity}`
           })
         });
 
@@ -63,10 +72,11 @@ export function ProductStockAdjustModal({ productId, productName, branchId, curr
 
         pushToast({
           title: "Đã cập nhật tồn kho",
-          description: `${productName}: ${currentQuantity} → ${targetQuantity}`
+          description: `${productName}: ${displayQuantity} → ${targetQuantity}`
         });
+        setDisplayQuantity(targetQuantity);
         setOpen(false);
-        window.location.reload();
+        router.refresh();
       } catch (error) {
         pushToast({
           title: "Không thể cập nhật tồn kho",
@@ -104,7 +114,7 @@ export function ProductStockAdjustModal({ productId, productName, branchId, curr
                 <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2">
                   <div>
                     <p className="text-sm font-medium text-slate-500">Tồn hiện tại</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-900">{currentQuantity}</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{displayQuantity}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-500">Chênh lệch</p>

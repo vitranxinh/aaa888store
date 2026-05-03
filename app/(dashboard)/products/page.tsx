@@ -132,7 +132,7 @@ const getCachedProductsPageData = unstable_cache(
     };
   },
   ["products-page-data"],
-  { revalidate: 15 }
+  { revalidate: 15, tags: ["products-page"] }
 );
 
 async function ProductsList({

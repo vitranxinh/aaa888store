@@ -65,6 +65,7 @@ export const inventoryAdjustmentSchema = z.object({
   variantId: z.string().optional(),
   type: z.enum(["IMPORT", "EXPORT", "ADJUSTMENT", "TRANSFER_OUT", "TRANSFER_IN"]),
   quantity: z.number().int(),
+  targetQuantity: z.number().int().nonnegative().optional(),
   note: z.string().optional(),
   referenceCode: z.string().optional()
 });
