@@ -26,6 +26,14 @@ async function measureStep<T>(steps: PerfSteps, key: string, task: () => Promise
   return result;
 }
 
+function logPerfSummary(label: string, summary: Array<[string, number | undefined]>) {
+  console.info(
+    `${label} timing:\n${summary
+      .map(([key, value]) => `- ${key}: ${Math.round(value ?? 0)} ms`)
+      .join("\n")}`
+  );
+}
+
 async function loadOrderPayloadItems(items: OrderPayload["items"]) {
   const productIds = Array.from(new Set(items.map((item) => item.productId)));
   const products = await prisma.product.findMany({
@@ -253,28 +261,32 @@ async function applyOrderEffects(
 
   await measureStep(steps ?? {}, "cashAndDebtUpdateMs", () =>
     Promise.all([
-      derived.paidAmount > 0
-        ? tx.cashTransaction.create({
-            data: {
-              code: receiptCode ?? "",
-              branchId: payload.branchId,
-              type: CashTxnType.RECEIPT,
-              amount: new Prisma.Decimal(derived.paidAmount),
-              customerId: payload.customerId,
-              orderId: order.id,
-              createdById: payload.createdById,
-              note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
-            }
-          })
-        : Promise.resolve(),
-      tx.customer.update({
-        where: { id: payload.customerId },
-        data: {
-          totalSpend: { increment: derived.grandTotal },
-          loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
-          receivableDebt: { increment: derived.debtAmount }
-        }
-      })
+      measureStep(steps ?? {}, "cashTransactionMs", () =>
+        derived.paidAmount > 0
+          ? tx.cashTransaction.create({
+              data: {
+                code: receiptCode ?? "",
+                branchId: payload.branchId,
+                type: CashTxnType.RECEIPT,
+                amount: new Prisma.Decimal(derived.paidAmount),
+                customerId: payload.customerId,
+                orderId: order.id,
+                createdById: payload.createdById,
+                note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
+              }
+            }).then(() => undefined)
+          : Promise.resolve()
+      ),
+      measureStep(steps ?? {}, "customerDebtUpdateMs", () =>
+        tx.customer.update({
+          where: { id: payload.customerId },
+          data: {
+            totalSpend: { increment: derived.grandTotal },
+            loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
+            receivableDebt: { increment: derived.debtAmount }
+          }
+        }).then(() => undefined)
+      )
     ]).then(() => undefined)
   );
 }
@@ -348,16 +360,18 @@ async function allocateOrderBatchesFEFO(
   }
 
   await measureStep(steps ?? {}, "batchPersistMs", async () => {
+    const batchUpdateCaseClauses = Prisma.join(
+      batchUpdates.map((batch) => Prisma.sql`WHEN ${batch.id} THEN ${batch.quantity}`),
+      " "
+    );
+
     await Promise.all([
       batchUpdates.length > 0
-        ? Promise.all(
-            batchUpdates.map((batch) =>
-              prisma.productBatch.update({
-                where: { id: batch.id },
-                data: { quantity: { decrement: batch.quantity } }
-              })
-            )
-          )
+        ? prisma.$executeRaw`
+            UPDATE "ProductBatch"
+            SET "quantity" = "quantity" - (CASE "id" ${batchUpdateCaseClauses} ELSE 0 END)
+            WHERE "id" IN (${Prisma.join(batchUpdates.map((batch) => batch.id))})
+          `
         : Promise.resolve(),
       inventoryTransactions.length > 0
         ? prisma.inventoryTransaction.createMany({ data: inventoryTransactions })
@@ -439,8 +453,11 @@ export async function createOrderFromPayload(payload: OrderPayload) {
     ])
   );
 
+  const transactionQueuedAt = Date.now();
+  let transactionStartedAt = 0;
   const order = await measureStep(steps, "transactionMs", () =>
     runTransactionWithRetry(async (tx) => {
+      transactionStartedAt = Date.now();
       const transactionSteps: PerfSteps = {};
       const created = await measureStep(transactionSteps, "createOrderMs", () =>
         tx.order.create({
@@ -482,21 +499,34 @@ export async function createOrderFromPayload(payload: OrderPayload) {
       );
 
       await applyOrderEffects(tx, created, payload, items, derived, receiptCode, transactionSteps);
+      transactionSteps.transactionTotalMs = Date.now() - transactionStartedAt;
       console.info("[perf][create-order][transaction]", {
         code,
         itemCount: items.length,
         ...transactionSteps
       });
+      logPerfSummary("CreateInvoice transaction", [
+        ["create invoice", transactionSteps.createOrderMs],
+        ["create items", transactionSteps.createOrderItemsMs],
+        ["inventory validation", transactionSteps.inventoryValidationMs],
+        ["inventory update", transactionSteps.inventoryUpdateMs],
+        ["customer debt update", transactionSteps.customerDebtUpdateMs],
+        ["cash transaction", transactionSteps.cashTransactionMs],
+        ["cash/debt total", transactionSteps.cashAndDebtUpdateMs],
+        ["transaction total", transactionSteps.transactionTotalMs]
+      ]);
 
       return created;
     }, { maxWait: 10000, timeout: 15000 })
   );
+  steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
 
   if (derived.finalStatus !== "DRAFT") {
     await measureStep(steps, "batchAllocationMs", () =>
       allocateOrderBatchesFEFO(payload.branchId, items, code, payload.createdById, steps)
     );
   }
+  steps.revalidateRedirectMs = 0;
 
   console.info("[perf][create-order]", {
     code,
@@ -505,6 +535,18 @@ export async function createOrderFromPayload(payload: OrderPayload) {
     ...steps,
     totalMs: Date.now() - totalStartedAt
   });
+  logPerfSummary("CreateInvoice", [
+    ["validation", steps.loadItemsMs ? steps.loadItemsMs + (steps.deriveStateMs ?? 0) : undefined],
+    ["transaction wait/start", steps.transactionWaitMs],
+    ["create invoice", undefined],
+    ["create items", undefined],
+    ["inventory update", undefined],
+    ["debt update", undefined],
+    ["cash transaction", undefined],
+    ["transaction total", steps.transactionMs],
+    ["revalidate/redirect", steps.revalidateRedirectMs],
+    ["total", Date.now() - totalStartedAt]
+  ]);
   return order;
 }
 

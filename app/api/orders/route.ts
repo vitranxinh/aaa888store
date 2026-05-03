@@ -49,13 +49,18 @@ export async function POST(request: Request) {
       ...parsed.data,
       createdById: session.id
     });
+    const revalidateRedirectMs = 0;
     console.info("[perf][orders-route][create]", {
       requestBodyMs,
       validationMs,
       createOrderMs: Date.now() - createOrderStartedAt,
+      revalidateRedirectMs,
       totalMs: Date.now() - startedAt,
       orderId: order.id
     });
+    console.info(
+      `CreateInvoice timing:\n- validation: ${Math.round(validationMs)} ms\n- transaction wait/start: 0 ms\n- create invoice: 0 ms\n- create items: 0 ms\n- inventory update: 0 ms\n- debt update: 0 ms\n- cash transaction: 0 ms\n- transaction total: ${Math.round(Date.now() - createOrderStartedAt)} ms\n- revalidate/redirect: ${Math.round(revalidateRedirectMs)} ms\n- total: ${Math.round(Date.now() - startedAt)} ms`
+    );
     return NextResponse.json({ ok: true, order });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

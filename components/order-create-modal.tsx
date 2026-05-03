@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
@@ -184,13 +185,23 @@ export function OrderCreateModal({ branchId }: Props) {
   function submit() {
     if (isSubmitting) return;
     const clickStartedAt = performance.now();
-    setIsSubmitting(true);
+    console.info("[perf][order-create-modal][click]", {
+      lineCount: lines.length,
+      customerId,
+      atMs: Math.round(clickStartedAt)
+    });
+    flushSync(() => {
+      setIsSubmitting(true);
+    });
+    console.info("[perf][order-create-modal][loading-state]", {
+      sinceClickMs: Math.round(performance.now() - clickStartedAt)
+    });
     startTransition(async () => {
       try {
-        console.info("[perf][order-create-modal][submit-start]", {
+        console.info("[perf][order-create-modal][request-start]", {
           lineCount: lines.length,
           customerId,
-          t: 0
+          sinceClickMs: Math.round(performance.now() - clickStartedAt)
         });
         if (!customerId) {
           pushToast({
@@ -224,7 +235,7 @@ export function OrderCreateModal({ branchId }: Props) {
             }))
           })
         });
-        console.info("[perf][order-create-modal][response]", {
+        console.info("[perf][order-create-modal][response-return]", {
           requestMs: Math.round(performance.now() - requestStartedAt),
           totalMs: Math.round(performance.now() - clickStartedAt),
           redirected: response.redirected,
@@ -268,6 +279,10 @@ export function OrderCreateModal({ branchId }: Props) {
         });
         router.push(`/orders/${payload.order.id}?created=1`);
       } catch (error) {
+        console.info("[perf][order-create-modal][error]", {
+          totalMs: Math.round(performance.now() - clickStartedAt),
+          message: error instanceof Error ? error.message : String(error)
+        });
         pushToast({
           title: "Không thể tạo hóa đơn",
           description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",

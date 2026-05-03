@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
@@ -29,8 +30,6 @@ export function PurchaseCreateModal({
   };
 
   const [open, setOpen] = useState(false);
-  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
   const [note, setNote] = useState("");
   const [search, setSearch] = useState("");
   const [paidAmount, setPaidAmount] = useState(0);
@@ -40,28 +39,6 @@ export function PurchaseCreateModal({
   const [isPending, startTransition] = useTransition();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const pushToast = useToastStore((state) => state.push);
-
-  useEffect(() => {
-    if (!open || suppliers.length > 0) return;
-
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch("/api/suppliers?limit=80", {
-          signal: controller.signal,
-          credentials: "same-origin"
-        });
-        if (!response.ok) return;
-        const payload = (await response.json()) as Array<{ id: string; name: string }>;
-        setSuppliers(payload);
-        setSupplierId((current) => current || payload[0]?.id || "");
-      } catch {
-        // Ignore transient modal bootstrap failures
-      }
-    })();
-
-    return () => controller.abort();
-  }, [open, suppliers.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -128,7 +105,6 @@ export function PurchaseCreateModal({
   }
 
   function resetForm() {
-    setSupplierId(suppliers[0]?.id ?? "");
     setNote("");
     setSearch("");
     setPaidAmount(0);
@@ -138,13 +114,21 @@ export function PurchaseCreateModal({
   function submit() {
     if (isSubmitting) return;
     const clickStartedAt = performance.now();
-    setIsSubmitting(true);
+    console.info("[perf][purchase-create-modal][click]", {
+      itemCount: items.length,
+      atMs: Math.round(clickStartedAt)
+    });
+    flushSync(() => {
+      setIsSubmitting(true);
+    });
+    console.info("[perf][purchase-create-modal][loading-state]", {
+      sinceClickMs: Math.round(performance.now() - clickStartedAt)
+    });
     startTransition(async () => {
       try {
-        console.info("[perf][purchase-create-modal][submit-start]", {
+        console.info("[perf][purchase-create-modal][request-start]", {
           itemCount: items.length,
-          supplierId,
-          t: 0
+          sinceClickMs: Math.round(performance.now() - clickStartedAt)
         });
         const requestStartedAt = performance.now();
         const response = await fetch("/api/purchases", {
@@ -152,7 +136,6 @@ export function PurchaseCreateModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             branchId,
-            supplierId,
             paidAmount,
             note,
             items: items.map(({ productId, quantity, importPrice, batchNumber, expiryDate }) => ({
@@ -165,7 +148,7 @@ export function PurchaseCreateModal({
           })
         });
         const payload = await response.json();
-        console.info("[perf][purchase-create-modal][response]", {
+        console.info("[perf][purchase-create-modal][response-return]", {
           requestMs: Math.round(performance.now() - requestStartedAt),
           totalMs: Math.round(performance.now() - clickStartedAt),
           status: response.status
@@ -183,6 +166,10 @@ export function PurchaseCreateModal({
         });
         router.refresh();
       } catch (error) {
+        console.info("[perf][purchase-create-modal][error]", {
+          totalMs: Math.round(performance.now() - clickStartedAt),
+          message: error instanceof Error ? error.message : String(error)
+        });
         pushToast({
           title: "Không thể tạo phiếu nhập",
           description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",
@@ -204,15 +191,12 @@ export function PurchaseCreateModal({
             <div className="flex items-start justify-between border-b border-slate-100 px-4 py-4 sm:px-7 sm:py-6">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900 sm:text-5xl">Tạo phiếu nhập</h3>
-                <p className="mt-1 text-sm text-slate-500 sm:text-lg">Nhập hàng theo NCC, theo dõi tổng tiền và công nợ ngay trong form.</p>
+                <p className="mt-1 text-sm text-slate-500 sm:text-lg">Nhập hàng nhanh, theo dõi tổng tiền và công nợ ngay trong form.</p>
               </div>
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <select className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                  {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-                </select>
+              <div className="grid gap-3">
                 <input
                   className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl"
                   type="number"
@@ -221,21 +205,6 @@ export function PurchaseCreateModal({
                   onChange={(e) => setPaidAmount(Number(e.target.value))}
                   placeholder="Đã trả"
                 />
-              </div>
-
-              <div className="grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 sm:p-4">
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Tổng tiền</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-slate-900 sm:text-3xl">{formatCurrency(totalAmount)}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Đã trả</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-emerald-600 sm:text-3xl">{formatCurrency(paidAmount)}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500 sm:text-sm">Còn nợ</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-red-600 sm:text-3xl">{formatCurrency(debtAmount)}</p>
-                </div>
               </div>
 
               <input value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl" placeholder="Tìm theo tên hàng..." />
@@ -308,10 +277,25 @@ export function PurchaseCreateModal({
                 })}
               </div>
 
+              <div className="grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 sm:p-4">
+                <div className="rounded-2xl bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Tổng tiền</p>
+                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-slate-900 sm:text-3xl">{formatCurrency(totalAmount)}</p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Đã trả</p>
+                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-emerald-600 sm:text-3xl">{formatCurrency(paidAmount)}</p>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500 sm:text-sm">Còn nợ</p>
+                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-red-600 sm:text-3xl">{formatCurrency(debtAmount)}</p>
+                </div>
+              </div>
+
               <textarea className="h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base sm:h-28 sm:px-5 sm:py-4 sm:text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú" />
             </div>
             <div className="border-t border-slate-100 px-4 py-4 sm:px-7">
-              <Button className="h-12 w-full text-lg sm:h-16 sm:text-3xl" onClick={submit} disabled={isPending || isSubmitting || items.length === 0 || !supplierId}>
+              <Button className="h-12 w-full text-lg sm:h-16 sm:text-3xl" onClick={submit} disabled={isPending || isSubmitting || items.length === 0}>
                 {isPending || isSubmitting ? "Đang tạo..." : "Tạo phiếu nhập"}
               </Button>
             </div>
