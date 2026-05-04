@@ -32,7 +32,6 @@ export function PurchaseCreateModal({
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [search, setSearch] = useState("");
-  const [paidAmount, setPaidAmount] = useState(0);
   const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
   const [items, setItems] = useState<PurchaseLine[]>([]);
@@ -92,9 +91,6 @@ export function PurchaseCreateModal({
     };
   }, [open, search]);
 
-  const totalAmount = items.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
-  const debtAmount = Math.max(totalAmount - paidAmount, 0);
-
   function addProduct(product: ProductSuggestion) {
     setItems((prev) => [
       ...prev,
@@ -107,7 +103,6 @@ export function PurchaseCreateModal({
   function resetForm() {
     setNote("");
     setSearch("");
-    setPaidAmount(0);
     setItems([]);
   }
 
@@ -136,7 +131,7 @@ export function PurchaseCreateModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             branchId,
-            paidAmount,
+            paidAmount: 0,
             note,
             items: items.map(({ productId, quantity, importPrice, batchNumber, expiryDate }) => ({
               productId,
@@ -196,20 +191,6 @@ export function PurchaseCreateModal({
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
-              <div className="grid gap-3">
-                <label className="space-y-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Đã trả</span>
-                  <input
-                    className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl"
-                    type="number"
-                    min="0"
-                    value={paidAmount === 0 ? "" : paidAmount}
-                    onChange={(e) => setPaidAmount(Number(e.target.value || 0))}
-                    placeholder="Nhập số tiền đã trả"
-                  />
-                </label>
-              </div>
-
               <input value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl" placeholder="Tìm theo tên hàng..." />
               {search ? (
                 <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200">
