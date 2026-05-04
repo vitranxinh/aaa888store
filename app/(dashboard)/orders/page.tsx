@@ -45,7 +45,26 @@ const getCachedOrdersPageData = unstable_cache(
     role: "ADMIN" | "MANAGER" | "CASHIER";
     createdAt?: Prisma.DateTimeFilter;
   }) => {
-    const startedAt = Date.now();
+    const requestStartedAt = Date.now();
+    const normalizedQuery = q.trim();
+    const validationStartedAt = Date.now();
+    const validationMs = Date.now() - validationStartedAt;
+    let customerFilterLookupMs = 0;
+    let matchedCustomerIds: string[] = [];
+
+    if (normalizedQuery) {
+      const customerLookupStartedAt = Date.now();
+      matchedCustomerIds = (
+        await prisma.customer.findMany({
+          where: { name: { contains: normalizedQuery, mode: "insensitive" } },
+          select: { id: true },
+          take: 50
+        })
+      ).map((customer) => customer.id);
+      customerFilterLookupMs = Date.now() - customerLookupStartedAt;
+    }
+
+    const countQueryMs = 0;
     const orderWhere: Prisma.OrderWhereInput = {
       AND: [
         { branchId: branchId ?? undefined },
@@ -60,12 +79,12 @@ const getCachedOrdersPageData = unstable_cache(
               }
             ]
           : []),
-        ...(q
+        ...(normalizedQuery
           ? [
               {
                 OR: [
-                  { code: { contains: q, mode: "insensitive" as const } },
-                  { customer: { name: { contains: q, mode: "insensitive" as const } } }
+                  { code: { contains: normalizedQuery, mode: "insensitive" as const } },
+                  ...(matchedCustomerIds.length > 0 ? [{ customerId: { in: matchedCustomerIds } }] : [])
                 ]
               }
             ]
@@ -73,6 +92,7 @@ const getCachedOrdersPageData = unstable_cache(
       ]
     };
 
+    const mainQueryStartedAt = Date.now();
     const orders = await prisma.order.findMany({
       where: orderWhere,
       select: {
@@ -87,7 +107,7 @@ const getCachedOrdersPageData = unstable_cache(
       skip: (page - 1) * pageSize,
       take: pageSize + 1
     });
-    const baseQueryMs = Date.now() - startedAt;
+    const mainOrdersQueryMs = Date.now() - mainQueryStartedAt;
 
     const hasNext = orders.length > pageSize;
     const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
@@ -95,56 +115,85 @@ const getCachedOrdersPageData = unstable_cache(
     const customerIds = Array.from(new Set(visibleOrders.map((order) => order.customerId)));
     const createdByIds = Array.from(new Set(visibleOrders.map((order) => order.createdById)));
 
-    const relationStartedAt = Date.now();
+    let customerLookupMs = 0;
+    let userLookupMs = 0;
+    let deleteRequestLookupMs = 0;
     const [customers, users, deleteRequests] = await Promise.all([
       customerIds.length
-        ? prisma.customer.findMany({
-            where: { id: { in: customerIds } },
-            select: { id: true, name: true, receivableDebt: true }
-          })
+        ? (async () => {
+            const startedAt = Date.now();
+            const result = await prisma.customer.findMany({
+              where: { id: { in: customerIds } },
+              select: { id: true, name: true, receivableDebt: true }
+            });
+            customerLookupMs = Date.now() - startedAt;
+            return result;
+          })()
         : Promise.resolve([]),
       createdByIds.length
-        ? prisma.user.findMany({
-            where: { id: { in: createdByIds } },
-            select: { id: true, name: true }
-          })
+        ? (async () => {
+            const startedAt = Date.now();
+            const result = await prisma.user.findMany({
+              where: { id: { in: createdByIds } },
+              select: { id: true, name: true }
+            });
+            userLookupMs = Date.now() - startedAt;
+            return result;
+          })()
         : Promise.resolve([]),
-      orderIds.length
-        ? prisma.orderDeleteRequest.findMany({
-            where: { orderId: { in: orderIds } },
-            select: { orderId: true, status: true }
-          })
+      role === "ADMIN" && orderIds.length
+        ? (async () => {
+            const startedAt = Date.now();
+            const result = await prisma.orderDeleteRequest.findMany({
+              where: { orderId: { in: orderIds } },
+              select: { orderId: true, status: true }
+            });
+            deleteRequestLookupMs = Date.now() - startedAt;
+            return result;
+          })()
         : Promise.resolve([])
     ]);
-    const relationQueryMs = Date.now() - relationStartedAt;
 
     const customerById = new Map(customers.map((customer) => [customer.id, customer]));
     const userById = new Map(users.map((user) => [user.id, user]));
     const deleteRequestByOrderId = new Map(deleteRequests.map((request) => [request.orderId, request]));
 
-    const totalMs = Date.now() - startedAt;
-    console.info("[perf][orders-page]", {
-      q,
+    const serializationStartedAt = Date.now();
+    const serializedOrders = visibleOrders.map((order) => ({
+      id: order.id,
+      code: order.code,
+      createdAt: order.createdAt,
+      grandTotal: order.grandTotal,
+      customer: customerById.get(order.customerId) ?? { id: order.customerId, name: "-", receivableDebt: 0 },
+      createdBy: userById.get(order.createdById) ?? null,
+      deleteRequest: deleteRequestByOrderId.get(order.id) ?? null
+    }));
+    const serializationMs = Date.now() - serializationStartedAt;
+    const totalRequestDurationMs = Date.now() - requestStartedAt;
+    console.info("[OrdersPerformance]", {
+      q: normalizedQuery,
       page,
       pageSize,
       role,
-      rowCount: visibleOrders.length,
-      baseQueryMs,
-      relationQueryMs,
-      totalMs
+      rowCount: serializedOrders.length,
+      authSessionCheckMs: 0,
+      countQueryMs,
+      validationMs,
+      customerFilterLookupMs,
+      mainOrdersQueryMs,
+      nestedItemsQueryMs: 0,
+      customerLookupMs,
+      userLookupMs,
+      deleteRequestLookupMs,
+      productLookupMs: 0,
+      totalsCalculationsMs: 0,
+      serializationMs,
+      fullRequestDurationMs: totalRequestDurationMs
     });
 
     return {
       hasNext,
-      orders: visibleOrders.map((order) => ({
-        id: order.id,
-        code: order.code,
-        createdAt: order.createdAt,
-        grandTotal: order.grandTotal,
-        customer: customerById.get(order.customerId) ?? { id: order.customerId, name: "-", receivableDebt: 0 },
-        createdBy: userById.get(order.createdById) ?? null,
-        deleteRequest: deleteRequestByOrderId.get(order.id) ?? null
-      }))
+      orders: serializedOrders
     };
   },
   ["orders-page-data"],
@@ -301,6 +350,7 @@ async function PendingDeleteRequestsSection({
   branchId: string | null;
   createdAt?: Prisma.DateTimeFilter;
 }) {
+  const startedAt = Date.now();
   const pendingDeleteRequests = await prisma.orderDeleteRequest.findMany({
     where: {
       status: "PENDING",
@@ -324,6 +374,11 @@ async function PendingDeleteRequestsSection({
       }
     },
     orderBy: { createdAt: "desc" }
+  });
+  console.info("[OrdersPerformance]", {
+    section: "pendingDeleteRequests",
+    rowCount: pendingDeleteRequests.length,
+    fullRequestDurationMs: Date.now() - startedAt
   });
 
   if (pendingDeleteRequests.length === 0) return null;
@@ -382,7 +437,10 @@ export default async function OrdersPage({
 }: {
   searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string; page?: string };
 }) {
+  const startedAt = Date.now();
+  const authStartedAt = Date.now();
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
+  const authSessionCheckMs = Date.now() - authStartedAt;
   const canExportExcel = session.role !== "CASHIER";
   const isAdmin = session.role === "ADMIN";
   const q = searchParams?.q ?? "";
@@ -390,10 +448,17 @@ export default async function OrdersPage({
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
-  const pageSize = 10;
+  const pageSize = 20;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
-
+  const branchLookupStartedAt = Date.now();
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
+  const branchLookupMs = Date.now() - branchLookupStartedAt;
+  console.info("[OrdersPerformance]", {
+    phase: "page-shell",
+    authSessionCheckMs,
+    branchLookupMs,
+    fullRequestDurationMs: Date.now() - startedAt
+  });
 
   return (
     <div className="space-y-5 sm:space-y-8">

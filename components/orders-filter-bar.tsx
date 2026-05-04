@@ -30,7 +30,7 @@ export function OrdersFilterBar({ q, range, dateFrom, dateTo, canExport = true }
       if (queryValue !== q) {
         submitForm();
       }
-    }, 300);
+    }, 400);
 
     return () => window.clearTimeout(timeout);
   }, [q, queryValue]);
