@@ -191,7 +191,7 @@ export function PurchaseCreateModal({
             <div className="flex items-start justify-between border-b border-slate-100 px-4 py-4 sm:px-7 sm:py-6">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900 sm:text-5xl">Tạo phiếu nhập</h3>
-                <p className="mt-1 text-sm text-slate-500 sm:text-lg">Nhập hàng nhanh, theo dõi tổng tiền và công nợ ngay trong form.</p>
+                <p className="mt-1 text-sm text-slate-500 sm:text-lg">Nhập hàng nhanh ngay trong form.</p>
               </div>
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
@@ -275,21 +275,6 @@ export function PurchaseCreateModal({
                     </div>
                   );
                 })}
-              </div>
-
-              <div className="grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3 sm:p-4">
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Tổng tiền</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-slate-900 sm:text-3xl">{formatCurrency(totalAmount)}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Đã trả</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-emerald-600 sm:text-3xl">{formatCurrency(paidAmount)}</p>
-                </div>
-                <div className="rounded-2xl bg-white px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500 sm:text-sm">Còn nợ</p>
-                  <p className="mt-1 text-lg font-bold whitespace-nowrap text-red-600 sm:text-3xl">{formatCurrency(debtAmount)}</p>
-                </div>
               </div>
 
               <textarea className="h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base sm:h-28 sm:px-5 sm:py-4 sm:text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú" />
