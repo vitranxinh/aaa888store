@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,6 +31,7 @@ type Props = {
 };
 
 export function CustomerEditModal({ customer, groups }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [currentDebtValue, setCurrentDebtValue] = useState(customer.currentDebt);
@@ -76,7 +78,7 @@ export function CustomerEditModal({ customer, groups }: Props) {
 
       pushToast({ title: "Đã cập nhật khách hàng", description: payload.name });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -97,7 +99,7 @@ export function CustomerEditModal({ customer, groups }: Props) {
 
       pushToast({ title: "Đã xóa khách hàng", description: payload.name });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -165,11 +167,11 @@ export function CustomerEditModal({ customer, groups }: Props) {
                 {...form.register("note")}
               />
               <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white pt-4">
-                <Button type="button" variant="destructive" className="h-14 text-xl" disabled={isPending} onClick={handleDelete}>
+                <Button type="button" variant="destructive" className="h-14 text-xl" loading={isPending} onClick={handleDelete}>
                   Xóa khách hàng
                 </Button>
-                <Button className="h-14 text-2xl" disabled={isPending}>
-                  {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+                <Button className="h-14 text-2xl" loading={isPending}>
+                  Lưu thay đổi
                 </Button>
               </div>
               </div>

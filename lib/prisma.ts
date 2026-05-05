@@ -6,7 +6,8 @@ const globalForPrisma = globalThis as unknown as {
 
 function createPrismaClient() {
   return new PrismaClient({
-    log: ["error"]
+    // Bật log query để check N+1 và đo thời gian DB thực tế
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"]
   });
 }
 

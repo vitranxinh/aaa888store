@@ -152,8 +152,8 @@ export function ProductStockAdjustModal({ productId, productName, branchId, curr
               <Button variant="outline" onClick={() => setOpen(false)}>
                 Đóng
               </Button>
-              <Button onClick={submit} disabled={isPending}>
-                {isPending ? "Đang lưu..." : "Lưu tồn kho"}
+              <Button onClick={submit} loading={isPending}>
+                Lưu tồn kho
               </Button>
             </div>
           </div>

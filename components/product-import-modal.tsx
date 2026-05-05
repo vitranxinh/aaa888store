@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +16,7 @@ export function ProductImportModal({ branchId }: { branchId: string }) {
 
   function submit() {
     startTransition(async () => {
+      const router = useRouter();
       const formData = new FormData();
       formData.append("branchId", branchId);
       if (file) {
@@ -36,7 +39,7 @@ export function ProductImportModal({ branchId }: { branchId: string }) {
         description: `${payload.imported} sản phẩm từ ${payload.source}`,
       });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -71,8 +74,8 @@ export function ProductImportModal({ branchId }: { branchId: string }) {
               <p className="text-sm text-slate-500">
                 App sẽ lấy danh sách hàng hóa từ file Excel, cập nhật tên hàng, nhóm hàng, giá bán, ảnh và tồn kho vào chi nhánh hiện tại.
               </p>
-              <Button className="h-14 w-full text-2xl" disabled={isPending} onClick={submit}>
-                {isPending ? "Đang import..." : "Import ngay"}
+              <Button className="h-14 w-full text-2xl" loading={isPending} onClick={submit}>
+                Import ngay
               </Button>
             </div>
           </div>

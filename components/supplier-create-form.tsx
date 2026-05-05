@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,6 +14,7 @@ import { useToastStore } from "@/store/toast-store";
 type FormValues = z.infer<typeof supplierSchema>;
 
 export function SupplierCreateForm() {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
   const form = useForm<FormValues>({
@@ -34,7 +36,7 @@ export function SupplierCreateForm() {
       }
       form.reset();
       pushToast({ title: "Đã thêm nhà cung cấp", description: payload.name });
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -53,7 +55,7 @@ export function SupplierCreateForm() {
         </div>
         <Input placeholder="Địa chỉ" {...form.register("address")} />
         <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Ghi chú" {...form.register("note")} />
-        <Button disabled={isPending}>{isPending ? "Đang lưu..." : "Thêm nhà cung cấp"}</Button>
+        <Button loading={isPending}>Thêm nhà cung cấp</Button>
       </form>
     </Card>
   );

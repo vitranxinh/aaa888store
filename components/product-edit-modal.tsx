@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export function ProductEditModal({ product, categories = [], brands = [], canDelete = false }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -131,7 +133,7 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
 
       pushToast({ title: "Đã cập nhật sản phẩm", description: payload.name });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -152,7 +154,7 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
 
       pushToast({ title: "Đã xóa sản phẩm", description: payload.name ?? product.name });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -284,8 +286,8 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
                 {showCategoryCreator ? (
                   <div className="flex gap-2">
                     <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} className="h-12 text-base" />
-                    <Button type="button" className="shrink-0" disabled={isAddingCategory} onClick={createCategory}>
-                      {isAddingCategory ? "Đang thêm..." : "Thêm"}
+                    <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
+                      Thêm
                     </Button>
                   </div>
                 ) : null}
@@ -313,8 +315,8 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
                 {showBrandCreator ? (
                   <div className="flex gap-2">
                     <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} className="h-12 text-base" />
-                    <Button type="button" className="shrink-0" disabled={isAddingBrand} onClick={createBrand}>
-                      {isAddingBrand ? "Đang thêm..." : "Thêm"}
+                    <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
+                      Thêm
                     </Button>
                   </div>
                 ) : null}
@@ -347,18 +349,19 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
               />
               <div className="sticky bottom-0 border-t border-slate-100 bg-white pt-4">
               <div className="flex flex-col gap-3 sm:flex-row">
-              <Button className="h-14 w-full flex-1 text-2xl" disabled={isPending}>
-                {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+              <Button className="h-14 w-full flex-1 text-2xl" loading={isPending}>
+                Lưu thay đổi
               </Button>
               {canDelete ? (
-                <button
+                <Button
                   type="button"
                   onClick={handleDelete}
-                  disabled={isPending}
-                  className="h-14 rounded-2xl border border-red-200 bg-red-50 px-6 text-2xl font-semibold text-red-600 disabled:opacity-60"
+                  loading={isPending}
+                  variant="destructive"
+                  className="h-14 px-6 text-2xl font-semibold"
                 >
-                  {isPending ? "Đang xử lý..." : "Xóa sản phẩm"}
-                </button>
+                  Xóa sản phẩm
+                </Button>
               ) : null}
               </div>
               </div>

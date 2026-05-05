@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ export function OrderPaymentButton({ orderId, remainingAmount = 0 }: { orderId: 
   const [amount, setAmount] = useState(remainingAmount);
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
+  const router = useRouter();
 
   function submit() {
     startTransition(async () => {
@@ -25,7 +27,7 @@ export function OrderPaymentButton({ orderId, remainingAmount = 0 }: { orderId: 
       }
       pushToast({ title: "Đã cập nhật thanh toán", description: "Công nợ đã được điều chỉnh" });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -48,16 +50,16 @@ export function OrderPaymentButton({ orderId, remainingAmount = 0 }: { orderId: 
               <button onClick={() => setOpen(false)} className="text-4xl leading-none text-slate-500 sm:hidden">×</button>
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:pb-6">
-            <FormattedNumberInput
-              className="h-14 w-full rounded-2xl border border-slate-300 px-4 text-2xl"
-              placeholder="Nhập số tiền"
-              value={amount}
-              onValueChange={setAmount}
-            />
-            <div className="sticky bottom-0 mt-5 flex justify-end gap-3 border-t border-slate-100 bg-white pt-4">
-              <Button variant="outline" onClick={() => setOpen(false)}>Đóng</Button>
-              <Button onClick={submit} disabled={isPending || amount <= 0}>{isPending ? "Đang lưu..." : "Xác nhận"}</Button>
-            </div>
+              <FormattedNumberInput
+                className="h-14 w-full rounded-2xl border border-slate-300 px-4 text-2xl"
+                placeholder="Nhập số tiền"
+                value={amount}
+                onValueChange={setAmount}
+              />
+              <div className="sticky bottom-0 mt-5 flex justify-end gap-3 border-t border-slate-100 bg-white pt-4">
+                <Button variant="outline" onClick={() => setOpen(false)}>Đóng</Button>
+                <Button onClick={submit} loading={isPending} disabled={amount <= 0}>Xác nhận</Button>
+              </div>
             </div>
           </div>
         </div>

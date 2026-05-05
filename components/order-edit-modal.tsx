@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { useToastStore } from "@/store/toast-store";
@@ -41,6 +42,7 @@ export function OrderEditModal({
   paidAmount: initialPaidAmount,
   lines: initialLines
 }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [customerId, setCustomerId] = useState(initialCustomerId);
@@ -73,6 +75,7 @@ export function OrderEditModal({
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
+  
   useEffect(() => {
     if (!paymentTouched && open) {
       setPaidAmount(Math.min(initialPaidAmount, orderTotal));
@@ -249,7 +252,7 @@ export function OrderEditModal({
           description: payload.order.code
         });
         setOpen(false);
-        window.location.reload();
+        router.refresh();
       } catch (error) {
         pushToast({
           title: "Không thể cập nhật hóa đơn",
@@ -423,8 +426,8 @@ export function OrderEditModal({
                 </div>
               </div>
 
-              <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} disabled={isPending || lines.length === 0}>
-                {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+              <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} loading={isPending} disabled={lines.length === 0}>
+                Lưu thay đổi
               </Button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -19,6 +20,7 @@ type Props = {
 type FormValues = z.infer<typeof inventoryAdjustmentSchema>;
 
 export function InventoryAdjustForm({ branches, products, defaultBranchId }: Props) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
   const form = useForm<FormValues>({
@@ -46,7 +48,7 @@ export function InventoryAdjustForm({ branches, products, defaultBranchId }: Pro
         return;
       }
       pushToast({ title: "Đã cập nhật kho", description: "Tồn kho và nhật ký đã được ghi nhận" });
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -81,7 +83,7 @@ export function InventoryAdjustForm({ branches, products, defaultBranchId }: Pro
         </div>
         <Input placeholder="Mã tham chiếu" {...form.register("referenceCode")} />
         <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Ghi chú" {...form.register("note")} />
-        <Button disabled={isPending}>{isPending ? "Đang cập nhật..." : "Lưu giao dịch kho"}</Button>
+        <Button loading={isPending}>Lưu giao dịch kho</Button>
       </form>
     </Card>
   );

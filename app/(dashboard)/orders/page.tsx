@@ -47,13 +47,9 @@ const getCachedOrdersPageData = unstable_cache(
   }) => {
     const requestStartedAt = Date.now();
     const normalizedQuery = q.trim();
-    const validationStartedAt = Date.now();
-    const validationMs = Date.now() - validationStartedAt;
-    let customerFilterLookupMs = 0;
     let matchedCustomerIds: string[] = [];
 
     if (normalizedQuery) {
-      const customerLookupStartedAt = Date.now();
       matchedCustomerIds = (
         await prisma.customer.findMany({
           where: { name: { contains: normalizedQuery, mode: "insensitive" } },
@@ -61,10 +57,8 @@ const getCachedOrdersPageData = unstable_cache(
           take: 50
         })
       ).map((customer) => customer.id);
-      customerFilterLookupMs = Date.now() - customerLookupStartedAt;
     }
 
-    const countQueryMs = 0;
     const orderWhere: Prisma.OrderWhereInput = {
       AND: [
         { branchId: branchId ?? undefined },
@@ -95,13 +89,16 @@ const getCachedOrdersPageData = unstable_cache(
     const mainQueryStartedAt = Date.now();
     const orders = await prisma.order.findMany({
       where: orderWhere,
-      select: {
-        id: true,
-        code: true,
-        createdAt: true,
-        grandTotal: true,
-        customerId: true,
-        createdById: true
+      include: {
+        customer: {
+          select: { id: true, name: true, receivableDebt: true }
+        },
+        createdBy: {
+          select: { id: true, name: true }
+        },
+        deleteRequest: role === "ADMIN" ? {
+          select: { status: true }
+        } : false
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
@@ -111,52 +108,6 @@ const getCachedOrdersPageData = unstable_cache(
 
     const hasNext = orders.length > pageSize;
     const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
-    const orderIds = visibleOrders.map((order) => order.id);
-    const customerIds = Array.from(new Set(visibleOrders.map((order) => order.customerId)));
-    const createdByIds = Array.from(new Set(visibleOrders.map((order) => order.createdById)));
-
-    let customerLookupMs = 0;
-    let userLookupMs = 0;
-    let deleteRequestLookupMs = 0;
-    const [customers, users, deleteRequests] = await Promise.all([
-      customerIds.length
-        ? (async () => {
-            const startedAt = Date.now();
-            const result = await prisma.customer.findMany({
-              where: { id: { in: customerIds } },
-              select: { id: true, name: true, receivableDebt: true }
-            });
-            customerLookupMs = Date.now() - startedAt;
-            return result;
-          })()
-        : Promise.resolve([]),
-      createdByIds.length
-        ? (async () => {
-            const startedAt = Date.now();
-            const result = await prisma.user.findMany({
-              where: { id: { in: createdByIds } },
-              select: { id: true, name: true }
-            });
-            userLookupMs = Date.now() - startedAt;
-            return result;
-          })()
-        : Promise.resolve([]),
-      role === "ADMIN" && orderIds.length
-        ? (async () => {
-            const startedAt = Date.now();
-            const result = await prisma.orderDeleteRequest.findMany({
-              where: { orderId: { in: orderIds } },
-              select: { orderId: true, status: true }
-            });
-            deleteRequestLookupMs = Date.now() - startedAt;
-            return result;
-          })()
-        : Promise.resolve([])
-    ]);
-
-    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
-    const userById = new Map(users.map((user) => [user.id, user]));
-    const deleteRequestByOrderId = new Map(deleteRequests.map((request) => [request.orderId, request]));
 
     const serializationStartedAt = Date.now();
     const serializedOrders = visibleOrders.map((order) => ({
@@ -164,31 +115,18 @@ const getCachedOrdersPageData = unstable_cache(
       code: order.code,
       createdAt: order.createdAt,
       grandTotal: order.grandTotal,
-      customer: customerById.get(order.customerId) ?? { id: order.customerId, name: "-", receivableDebt: 0 },
-      createdBy: userById.get(order.createdById) ?? null,
-      deleteRequest: deleteRequestByOrderId.get(order.id) ?? null
+      customer: order.customer ?? { id: "-", name: "-", receivableDebt: 0 },
+      createdBy: order.createdBy ?? null,
+      deleteRequest: order.deleteRequest ?? null
     }));
     const serializationMs = Date.now() - serializationStartedAt;
-    const totalRequestDurationMs = Date.now() - requestStartedAt;
+
     console.info("[OrdersPerformance]", {
       q: normalizedQuery,
-      page,
-      pageSize,
-      role,
       rowCount: serializedOrders.length,
-      authSessionCheckMs: 0,
-      countQueryMs,
-      validationMs,
-      customerFilterLookupMs,
       mainOrdersQueryMs,
-      nestedItemsQueryMs: 0,
-      customerLookupMs,
-      userLookupMs,
-      deleteRequestLookupMs,
-      productLookupMs: 0,
-      totalsCalculationsMs: 0,
       serializationMs,
-      fullRequestDurationMs: totalRequestDurationMs
+      fullRequestDurationMs: Date.now() - requestStartedAt
     });
 
     return {

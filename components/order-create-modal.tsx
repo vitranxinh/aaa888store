@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { useToastStore } from "@/store/toast-store";
@@ -30,7 +29,6 @@ export function OrderCreateModal({ branchId }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string }>>([]);
@@ -184,37 +182,17 @@ export function OrderCreateModal({ branchId }: Props) {
   }
 
   function submit() {
-    if (isSubmitting) return;
-    const clickStartedAt = performance.now();
-    console.info("[perf][order-create-modal][click]", {
-      lineCount: lines.length,
-      customerId,
-      atMs: Math.round(clickStartedAt)
-    });
-    flushSync(() => {
-      setIsSubmitting(true);
-    });
-    console.info("[perf][order-create-modal][loading-state]", {
-      sinceClickMs: Math.round(performance.now() - clickStartedAt)
-    });
     startTransition(async () => {
       try {
-        console.info("[perf][order-create-modal][request-start]", {
-          lineCount: lines.length,
-          customerId,
-          sinceClickMs: Math.round(performance.now() - clickStartedAt)
-        });
         if (!customerId) {
           pushToast({
             title: "Thiếu khách hàng",
             description: "Hãy chọn khách hàng từ gợi ý trước khi tạo hóa đơn",
             variant: "error"
           });
-          setIsSubmitting(false);
           return;
         }
 
-        const requestStartedAt = performance.now();
         const response = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -236,18 +214,8 @@ export function OrderCreateModal({ branchId }: Props) {
             }))
           })
         });
-        console.info("[perf][order-create-modal][response-return]", {
-          requestMs: Math.round(performance.now() - requestStartedAt),
-          totalMs: Math.round(performance.now() - clickStartedAt),
-          redirected: response.redirected,
-          status: response.status
-        });
 
         if (response.redirected) {
-          console.info("[perf][order-create-modal][redirect]", {
-            totalMs: Math.round(performance.now() - clickStartedAt),
-            mode: "server-redirect"
-          });
           window.location.href = response.url;
           return;
         }
@@ -263,7 +231,6 @@ export function OrderCreateModal({ branchId }: Props) {
             description: payload.error ?? "Có lỗi xảy ra khi tạo hóa đơn",
             variant: "error"
           });
-          setIsSubmitting(false);
           return;
         }
 
@@ -274,22 +241,14 @@ export function OrderCreateModal({ branchId }: Props) {
         setOtherCharge(0);
         setPaidAmount(0);
         setPaymentTouched(false);
-        console.info("[perf][order-create-modal][navigate]", {
-          totalMs: Math.round(performance.now() - clickStartedAt),
-          target: `/orders/${payload.order.id}?created=1`
-        });
         router.push(`/orders/${payload.order.id}?created=1`);
+        router.refresh();
       } catch (error) {
-        console.info("[perf][order-create-modal][error]", {
-          totalMs: Math.round(performance.now() - clickStartedAt),
-          message: error instanceof Error ? error.message : String(error)
-        });
         pushToast({
           title: "Không thể tạo hóa đơn",
           description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",
           variant: "error"
         });
-        setIsSubmitting(false);
       }
     });
   }
@@ -475,8 +434,8 @@ export function OrderCreateModal({ branchId }: Props) {
                   <p className="mt-1 text-lg font-bold text-slate-900 sm:text-xl">{orderTotal.toLocaleString("vi-VN")} đ</p>
                 </div>
               </div>
-              <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} disabled={isPending || isSubmitting || lines.length === 0}>
-                {isPending || isSubmitting ? "Đang tạo..." : "Tạo hóa đơn"}
+              <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} loading={isPending} disabled={lines.length === 0}>
+                Tạo hóa đơn
               </Button>
             </div>
           </div>

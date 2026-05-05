@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AsyncLookupInput } from "@/components/async-lookup-input";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ export function CashflowCreateModal({
 }: {
   branchId: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"RECEIPT" | "PAYMENT">("RECEIPT");
   const [amount, setAmount] = useState(0);
@@ -36,7 +38,7 @@ export function CashflowCreateModal({
       }
       pushToast({ title: "Đã tạo phiếu", description: payload.transaction.code });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -92,7 +94,7 @@ export function CashflowCreateModal({
               )}
               <textarea className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / ghi chú" />
               <div className="sticky bottom-0 border-t border-slate-100 bg-white pt-4">
-                <Button className="h-16 w-full text-3xl" onClick={submit} disabled={isPending || amount <= 0}>{isPending ? "Đang lưu..." : "Lưu phiếu"}</Button>
+                <Button className="h-16 w-full text-3xl" onClick={submit} loading={isPending} disabled={amount <= 0}>Lưu phiếu</Button>
               </div>
             </div>
             </div>

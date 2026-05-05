@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { formatCurrency } from "@/lib/utils";
@@ -34,6 +35,7 @@ type ProductSuggestion = {
 };
 
 export function PurchaseEditModal({ purchase }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState(purchase.supplierId);
   const [note, setNote] = useState(purchase.note ?? "");
@@ -125,7 +127,7 @@ export function PurchaseEditModal({ purchase }: Props) {
       }
       pushToast({ title: "Đã cập nhật phiếu nhập", description: purchase.code });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -144,7 +146,7 @@ export function PurchaseEditModal({ purchase }: Props) {
       }
       pushToast({ title: "Đã xóa phiếu nhập", description: payload.code });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -233,11 +235,11 @@ export function PurchaseEditModal({ purchase }: Props) {
               <textarea className="h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base sm:h-24 sm:text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú" />
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-4 sm:px-7">
-              <Button variant="destructive" className="h-12 text-sm sm:h-14 sm:text-xl" onClick={deletePurchase} disabled={isPending}>
+              <Button variant="destructive" className="h-12 text-sm sm:h-14 sm:text-xl" onClick={deletePurchase} loading={isPending}>
                 Xóa phiếu nhập
               </Button>
-              <Button className="h-12 text-sm sm:h-14 sm:text-xl" onClick={submit} disabled={isPending || items.length === 0}>
-                {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+              <Button className="h-12 text-sm sm:h-14 sm:text-xl" onClick={submit} loading={isPending} disabled={items.length === 0}>
+                Lưu thay đổi
               </Button>
             </div>
           </div>

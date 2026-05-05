@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +18,7 @@ type Props = {
 type FormValues = z.infer<typeof customerSchema>;
 
 export function CustomerCreateForm({ groups }: Props) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
   const form = useForm<FormValues>({
@@ -38,7 +40,7 @@ export function CustomerCreateForm({ groups }: Props) {
       }
       form.reset();
       pushToast({ title: "Đã thêm khách hàng", description: payload.name });
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -65,7 +67,7 @@ export function CustomerCreateForm({ groups }: Props) {
           ))}
         </select>
         <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Ghi chú" {...form.register("note")} />
-        <Button disabled={isPending}>{isPending ? "Đang lưu..." : "Thêm khách hàng"}</Button>
+        <Button loading={isPending}>Thêm khách hàng</Button>
       </form>
     </Card>
   );
