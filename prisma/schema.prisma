@@ -447,3 +447,13 @@ model CashTransaction {
   @@index([createdById])
   @@index([type])
 }
+
+model CodeSequence {
+  id        String   @id
+  prefix    String
+  model     String
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@index([model, prefix])
+}

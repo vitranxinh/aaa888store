@@ -5,25 +5,23 @@ const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-pathname", pathname);
 
   if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
-    return NextResponse.next({
-      request: { headers: requestHeaders }
-    });
+    return NextResponse.next();
   }
 
   const token = request.cookies.get("soban_session")?.value;
   if (!token) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Bạn cần đăng nhập" }, { status: 401 });
+    }
+
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  return NextResponse.next({
-    request: { headers: requestHeaders }
-  });
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
+  matcher: ["/((?!_next|favicon.ico|manifest.webmanifest|apple-icon|icon).*)"]
 };

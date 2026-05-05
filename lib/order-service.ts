@@ -48,16 +48,32 @@ async function measureStep<T>(steps: PerfSteps, key: string, task: () => Promise
   return result;
 }
 
-function logPerfSummary(label: string, summary: Array<[string, number | undefined]>) {
-  console.info(
-    `${label} timing:\n${summary
-      .map(([key, value]) => `- ${key}: ${Math.round(value ?? 0)} ms`)
-      .join("\n")}`
-  );
+let codeSequenceTableAvailable: boolean | undefined;
+
+async function isCodeSequenceTableAvailable() {
+  if (codeSequenceTableAvailable !== undefined) {
+    return codeSequenceTableAvailable;
+  }
+
+  try {
+    const result = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = 'CodeSequence'
+      ) AS "exists"
+    `;
+    codeSequenceTableAvailable = result[0]?.exists === true;
+  } catch {
+    codeSequenceTableAvailable = false;
+  }
+
+  return codeSequenceTableAvailable;
 }
 
 async function loadOrderPayloadItems(items: OrderPayload["items"]) {
-  const productIds = Array.from(new Set(items.map((item) => item.productId)));
+  const productIds = Array.from(new Set(items.map((item: { productId: string }) => item.productId)));
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
     select: {
@@ -67,12 +83,16 @@ async function loadOrderPayloadItems(items: OrderPayload["items"]) {
       costPrice: true
     }
   });
-  const productMap = new Map(products.map((product) => [product.id, product]));
+  
+  type ProductType = { id: string; name: string; sku: string; costPrice: Prisma.Decimal };
+  const productMap = new Map<string, ProductType>(
+    products.map((product: ProductType) => [product.id, product])
+  );
 
-  return items.map((item) => {
+  return items.map((item: OrderPayload["items"][number]) => {
     const product = productMap.get(item.productId);
     if (!product) throw new Error(`Không tìm thấy sản phẩm ${item.productId}`);
-    return { ...item, product };
+    return { ...item, product: product as ProductType };
   });
 }
 
@@ -100,8 +120,8 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
     payload.orderDiscount
   );
 
-  const grandTotal = Math.max(totals.grandTotal + payload.otherCharge, 0);
-  const paidAmount = payload.paidAmount;
+  const grandTotal = Math.max(Number(totals.grandTotal) + payload.otherCharge, 0);
+  const paidAmount = Number(payload.paidAmount);
   const debtAmount = Math.max(grandTotal - paidAmount, 0);
   const finalStatus: OrderStatus = payload.status === "DRAFT" ? "DRAFT" : debtAmount > 0 ? "PARTIAL" : "COMPLETED";
 
@@ -114,7 +134,11 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
   };
 }
 
-async function ensureInventorySufficient(tx: Prisma.TransactionClient, branchId: string, items: Awaited<ReturnType<typeof loadOrderPayloadItems>>) {
+async function ensureInventorySufficientFast(
+  tx: Prisma.TransactionClient,
+  branchId: string,
+  items: Awaited<ReturnType<typeof loadOrderPayloadItems>>
+) {
   const quantityByProduct = aggregateQuantityByProduct(items);
   const productIds = Array.from(quantityByProduct.keys());
   const inventories = await tx.inventory.findMany({
@@ -128,45 +152,54 @@ async function ensureInventorySufficient(tx: Prisma.TransactionClient, branchId:
     }
   });
 
-  const inventoryMap = new Map(inventories.map((inventory) => [inventory.productId, inventory.quantity]));
+  const inventoryMap = new Map(
+    inventories.map((inventory: { productId: string | null; quantity: number }) => [
+      inventory.productId,
+      inventory.quantity
+    ])
+  );
+  const productNameById = new Map(items.map((item) => [item.product.id, item.product.name]));
 
-  for (const item of items) {
-    const requiredQuantity = quantityByProduct.get(item.product.id) ?? 0;
-    const quantity = inventoryMap.get(item.product.id) ?? 0;
+  for (const [productId, requiredQuantity] of quantityByProduct.entries()) {
+    const quantity = inventoryMap.get(productId) ?? 0;
     if (quantity < requiredQuantity) {
-      throw new Error(`Tồn kho không đủ cho ${item.product.name}`);
+      throw new Error(`Tồn kho không đủ cho ${productNameById.get(productId) ?? productId}`);
     }
   }
+
+  return inventories;
 }
 
 async function applyInventoryQuantityChanges(
   tx: Prisma.TransactionClient,
   branchId: string,
   quantityByProduct: Map<string, number>,
-  direction: "increment" | "decrement"
+  direction: "increment" | "decrement",
+  existingInventories?: Array<{ productId: string | null }>
 ) {
   const productIds = Array.from(quantityByProduct.keys());
   if (productIds.length === 0) return;
 
-  const existingInventories = await tx.inventory.findMany({
-    where: {
-      branchId,
-      variantId: null,
-      productId: { in: productIds }
-    },
-    select: { productId: true }
-  });
-
   const existingProductIds = new Set(
-    existingInventories
-      .map((inventory) => inventory.productId)
-      .filter((productId): productId is string => Boolean(productId))
+    (
+      existingInventories ||
+      (await tx.inventory.findMany({
+        where: {
+          branchId,
+          variantId: null,
+          productId: { in: productIds }
+        },
+        select: { productId: true }
+      }))
+    )
+      .map((inventory: { productId: string | null }) => inventory.productId)
+      .filter((productId: string | null): productId is string => Boolean(productId))
   );
-  const missingProductIds = productIds.filter((productId) => !existingProductIds.has(productId));
+  const missingProductIds = productIds.filter((productId: string) => !existingProductIds.has(productId));
 
   if (missingProductIds.length > 0) {
     await tx.inventory.createMany({
-      data: missingProductIds.map((productId) => ({
+      data: missingProductIds.map((productId: string) => ({
         branchId,
         productId,
         quantity: 0
@@ -176,7 +209,7 @@ async function applyInventoryQuantityChanges(
   }
 
   const caseClauses = Prisma.join(
-    productIds.map((productId) => Prisma.sql`WHEN ${productId} THEN ${quantityByProduct.get(productId) ?? 0}`),
+    productIds.map((productId: string) => Prisma.sql`WHEN ${productId} THEN ${quantityByProduct.get(productId) ?? 0}`),
     " "
   );
   const directionSql = direction === "increment" ? Prisma.sql`+` : Prisma.sql`-`;
@@ -228,7 +261,7 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
       if (txn.batchId) {
         await tx.productBatch.update({
           where: { id: txn.batchId },
-          data: { quantity: { increment: Math.abs(txn.quantity) } }
+          data: { quantity: { increment: Math.abs(txn.quantity as number) } }
         });
       }
     }
@@ -269,45 +302,44 @@ async function applyOrderEffects(
     return;
   }
 
-  await measureStep(steps ?? {}, "inventoryValidationMs", () =>
-    ensureInventorySufficient(tx, payload.branchId, items)
+  const inventories = await measureStep(steps ?? {}, "inventoryValidationMs", () =>
+    ensureInventorySufficientFast(tx, payload.branchId, items)
   );
 
   const quantityByProduct = aggregateQuantityByProduct(items);
   await measureStep(steps ?? {}, "inventoryUpdateMs", () =>
-    applyInventoryQuantityChanges(tx, payload.branchId, quantityByProduct, "decrement")
+    applyInventoryQuantityChanges(tx, payload.branchId, quantityByProduct, "decrement", inventories)
   );
 
-  await measureStep(steps ?? {}, "cashAndDebtUpdateMs", () =>
-    Promise.all([
-      measureStep(steps ?? {}, "cashTransactionMs", () =>
-        derived.paidAmount > 0
-          ? tx.cashTransaction.create({
-              data: {
-                code: receiptCode ?? "",
-                branchId: payload.branchId,
-                type: CashTxnType.RECEIPT,
-                amount: new Prisma.Decimal(derived.paidAmount),
-                customerId: payload.customerId,
-                orderId: order.id,
-                createdById: payload.createdById,
-                note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
-              }
-            }).then(() => undefined)
-          : Promise.resolve()
-      ),
-      measureStep(steps ?? {}, "customerDebtUpdateMs", () =>
-        tx.customer.update({
-          where: { id: payload.customerId },
+  await measureStep(steps ?? {}, "cashAndDebtUpdateMs", async () => {
+    if (derived.paidAmount > 0) {
+      await measureStep(steps ?? {}, "cashTransactionMs", () =>
+        tx.cashTransaction.create({
           data: {
-            totalSpend: { increment: derived.grandTotal },
-            loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
-            receivableDebt: { increment: derived.debtAmount }
+            code: receiptCode ?? "",
+            branchId: payload.branchId,
+            type: CashTxnType.RECEIPT,
+            amount: new Prisma.Decimal(derived.paidAmount),
+            customerId: payload.customerId,
+            orderId: order.id,
+            createdById: payload.createdById,
+            note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
           }
         }).then(() => undefined)
-      )
-    ]).then(() => undefined)
-  );
+      );
+    }
+
+    await measureStep(steps ?? {}, "customerDebtUpdateMs", () =>
+      tx.customer.update({
+        where: { id: payload.customerId },
+        data: {
+          totalSpend: { increment: derived.grandTotal },
+          loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
+          receivableDebt: { increment: derived.debtAmount }
+        }
+      }).then(() => undefined)
+    );
+  });
 }
 
 async function allocateOrderBatchesFEFO(
@@ -315,14 +347,16 @@ async function allocateOrderBatchesFEFO(
   items: Awaited<ReturnType<typeof loadOrderPayloadItems>>,
   referenceCode: string,
   createdById: string,
+  tx: Prisma.TransactionClient,
   steps?: PerfSteps
 ) {
   const quantityByProduct = aggregateQuantityByProduct(items);
   const productIds = Array.from(quantityByProduct.keys());
   if (productIds.length === 0) return;
 
+  type BatchResult = { id: string; productId: string; batchNumber: string; quantity: number };
   const batches = await measureStep(steps ?? {}, "batchFetchMs", () =>
-    prisma.productBatch.findMany({
+    tx.productBatch.findMany({
       where: { branchId, productId: { in: productIds }, quantity: { gt: 0 } },
       orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }],
       select: {
@@ -331,11 +365,11 @@ async function allocateOrderBatchesFEFO(
         batchNumber: true,
         quantity: true
       }
-    })
+    }) as Promise<BatchResult[]>
   );
 
-  const batchesByProduct = new Map<string, typeof batches>();
-  for (const batch of batches) {
+  const batchesByProduct = new Map<string, BatchResult[]>();
+  for (const batch of batches as BatchResult[]) {
     const productBatches = batchesByProduct.get(batch.productId) ?? [];
     productBatches.push(batch);
     batchesByProduct.set(batch.productId, productBatches);
@@ -379,23 +413,26 @@ async function allocateOrderBatchesFEFO(
   }
 
   await measureStep(steps ?? {}, "batchPersistMs", async () => {
-    const batchUpdateCaseClauses = Prisma.join(
-      batchUpdates.map((batch) => Prisma.sql`WHEN ${batch.id} THEN ${batch.quantity}`),
-      " "
-    );
+    const persistTasks: Array<Promise<unknown>> = [];
 
-    await Promise.all([
-      batchUpdates.length > 0
-        ? prisma.$executeRaw`
-            UPDATE "ProductBatch"
-            SET "quantity" = "quantity" - (CASE "id" ${batchUpdateCaseClauses} ELSE 0 END)
-            WHERE "id" IN (${Prisma.join(batchUpdates.map((batch) => batch.id))})
-          `
-        : Promise.resolve(),
-      inventoryTransactions.length > 0
-        ? prisma.inventoryTransaction.createMany({ data: inventoryTransactions })
-        : Promise.resolve()
-    ]);
+    if (batchUpdates.length > 0) {
+      const batchUpdateCaseClauses = Prisma.join(
+        batchUpdates.map((batch) => Prisma.sql`WHEN ${batch.id} THEN ${batch.quantity}`),
+        " "
+      );
+
+      persistTasks.push(tx.$executeRaw`
+        UPDATE "ProductBatch"
+        SET "quantity" = "quantity" - (CASE "id" ${batchUpdateCaseClauses} ELSE 0 END)
+        WHERE "id" IN (${Prisma.join(batchUpdates.map((batch: { id: string }) => batch.id))})
+      `);
+    }
+
+    if (inventoryTransactions.length > 0) {
+      persistTasks.push(tx.inventoryTransaction.createMany({ data: inventoryTransactions }));
+    }
+
+    await Promise.all(persistTasks);
   });
 }
 
@@ -465,20 +502,26 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
   const totalStartedAt = Date.now();
   const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
   const derived = await measureStep(steps, "deriveStateMs", async () => calculateOrderDerivedState(items, payload));
-  const [code, receiptCode] = await measureStep(steps, "codeGenMs", () =>
-    Promise.all([
-      nextCode("DH", "order"),
-      derived.paidAmount > 0 ? nextCode("PT", "cashTransaction") : Promise.resolve(null)
-    ])
-  );
-
+  const useCodeSequence = await measureStep(steps, "codeSequenceCheckMs", () => isCodeSequenceTableAvailable());
   const transactionQueuedAt = Date.now();
   let transactionStartedAt = 0;
-  const order = await measureStep(steps, "transactionMs", () =>
-    runTransactionWithRetry(async (tx) => {
+  const { order, transactionSteps } = (await measureStep(steps, "transactionMs", () =>
+    runTransactionWithRetry(async (tx: Prisma.TransactionClient) => {
       transactionStartedAt = Date.now();
-      const transactionSteps: PerfSteps = {};
-      const created = await measureStep(transactionSteps, "createOrderMs", () =>
+      const tSteps: PerfSteps = {};
+
+      // 1. Generate codes inside transaction/retry to avoid race conditions
+      const [code, receiptCode] = await measureStep(tSteps, "codeGenMs", () =>
+        Promise.all([
+          nextCode("DH", "order", tx, { useSequence: useCodeSequence }),
+          derived.paidAmount > 0
+            ? nextCode("PT", "cashTransaction", tx, { useSequence: useCodeSequence })
+            : Promise.resolve(null)
+        ])
+      );
+
+      // 2. Create the order first, then bulk insert items to keep the transaction short.
+      const created = await measureStep(tSteps, "createOrderMs", () =>
         tx.order.create({
           data: {
             code,
@@ -503,9 +546,9 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
         })
       );
 
-      await measureStep(transactionSteps, "createOrderItemsMs", () =>
+      await measureStep(tSteps, "createOrderItemsMs", () =>
         tx.orderItem.createMany({
-          data: items.map((item) => ({
+          data: items.map((item: Awaited<ReturnType<typeof loadOrderPayloadItems>>[number]) => ({
             orderId: created.id,
             productId: item.product.id,
             quantity: item.quantity,
@@ -514,68 +557,42 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
             discountValue: new Prisma.Decimal(item.discountValue),
             total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
           }))
-        })
+        }).then(() => undefined)
       );
 
-      await applyOrderEffects(tx, created, payload, items, derived, receiptCode, transactionSteps);
-      transactionSteps.transactionTotalMs = Date.now() - transactionStartedAt;
-      console.info("[perf][create-order][transaction]", {
-        code,
-        itemCount: items.length,
-        ...transactionSteps
-      });
-      logPerfSummary("CreateInvoice transaction", [
-        ["create invoice", transactionSteps.createOrderMs],
-        ["create items", transactionSteps.createOrderItemsMs],
-        ["inventory validation", transactionSteps.inventoryValidationMs],
-        ["inventory update", transactionSteps.inventoryUpdateMs],
-        ["customer debt update", transactionSteps.customerDebtUpdateMs],
-        ["cash transaction", transactionSteps.cashTransactionMs],
-        ["cash/debt total", transactionSteps.cashAndDebtUpdateMs],
-        ["transaction total", transactionSteps.transactionTotalMs]
-      ]);
+      // 3. Apply inventory decrement, cash transaction, customer debt
+      await measureStep(tSteps, "applyEffectsMs", () =>
+        applyOrderEffects(tx, created, payload, items, derived, receiptCode, tSteps)
+      );
 
-      steps.createOrderMs = transactionSteps.createOrderMs;
-      steps.createOrderItemsMs = transactionSteps.createOrderItemsMs;
-      steps.inventoryValidationMs = transactionSteps.inventoryValidationMs;
-      steps.inventoryUpdateMs = transactionSteps.inventoryUpdateMs;
-      steps.customerDebtUpdateMs = transactionSteps.customerDebtUpdateMs;
-      steps.cashTransactionMs = transactionSteps.cashTransactionMs;
-      steps.cashAndDebtUpdateMs = transactionSteps.cashAndDebtUpdateMs;
+      // 4. Batch Allocation (FEFO) - Now inside transaction
+      if (derived.finalStatus !== "DRAFT") {
+        await measureStep(tSteps, "batchAllocationMs", () =>
+          allocateOrderBatchesFEFO(payload.branchId, items, code, payload.createdById, tx, tSteps)
+        );
+      }
+      
+      tSteps.transactionTotalMs = Date.now() - transactionStartedAt;
+      
+      return { order: created, transactionSteps: tSteps };
+    }, { maxWait: 10000, timeout: 30000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
 
-      return created;
-    }, { maxWait: 10000, timeout: 15000 })
-  );
   steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
-
-  if (derived.finalStatus !== "DRAFT") {
-    await measureStep(steps, "batchAllocationMs", () =>
-      allocateOrderBatchesFEFO(payload.branchId, items, code, payload.createdById, steps)
-    );
-  }
-  steps.revalidateRedirectMs = 0;
+  
+  // Map transaction steps back to main steps for logging
+  Object.assign(steps, transactionSteps);
+  const code = order.code;
   steps.totalMs = Date.now() - totalStartedAt;
 
-  console.info("[perf][create-order]", {
-    code,
-    itemCount: items.length,
-    customerId: payload.customerId,
-    ...steps,
-    totalMs: steps.totalMs
-  });
-  logPerfSummary("CreateInvoice", [
-    ["validation", steps.validationMs],
-    ["transaction wait/start", steps.transactionWaitMs],
-    ["create invoice", steps.createOrderMs],
-    ["create items", steps.createOrderItemsMs],
-    ["inventory update", steps.inventoryUpdateMs],
-    ["debt update", steps.customerDebtUpdateMs],
-    ["cash transaction", steps.cashTransactionMs],
-    ["transaction total", steps.transactionMs],
-    ["batch allocation", steps.batchAllocationMs],
-    ["revalidate/redirect", steps.revalidateRedirectMs],
-    ["total", steps.totalMs]
-  ]);
+  if (steps.totalMs > 1000) {
+    console.info("[perf][create-order][slow]", {
+      code,
+      itemCount: items.length,
+      customerId: payload.customerId,
+      ...steps,
+      totalMs: steps.totalMs
+    });
+  }
   return {
     order,
     timing: {
@@ -677,25 +694,111 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   return order;
 }
 
-export async function nextCode(prefix: string, model: "order" | "purchaseOrder" | "cashTransaction" | "supplier" | "customer") {
+type CodeModel = "order" | "purchaseOrder" | "cashTransaction" | "supplier" | "customer";
+
+async function readNextCodeNumberFromExistingCodes(
+  prefix: string,
+  model: CodeModel,
+  client: Prisma.TransactionClient | typeof prisma
+) {
   let row: { code: string } | null = null;
+
   switch (model) {
     case "order":
-      row = await prisma.order.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
+      row = await client.order.findFirst({
+        where: { code: { startsWith: prefix } },
+        select: { code: true },
+        orderBy: { code: "desc" }
+      });
       break;
     case "purchaseOrder":
-      row = await prisma.purchaseOrder.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
+      row = await client.purchaseOrder.findFirst({
+        where: { code: { startsWith: prefix } },
+        select: { code: true },
+        orderBy: { code: "desc" }
+      });
       break;
     case "cashTransaction":
-      row = await prisma.cashTransaction.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
+      row = await client.cashTransaction.findFirst({
+        where: { code: { startsWith: prefix } },
+        select: { code: true },
+        orderBy: { code: "desc" }
+      });
       break;
     case "supplier":
-      row = await prisma.supplier.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
+      row = await client.supplier.findFirst({
+        where: { code: { startsWith: prefix } },
+        select: { code: true },
+        orderBy: { code: "desc" }
+      });
       break;
     case "customer":
-      row = await prisma.customer.findFirst({ where: { code: { startsWith: prefix } }, select: { code: true }, orderBy: { code: "desc" } });
+      row = await client.customer.findFirst({
+        where: { code: { startsWith: prefix } },
+        select: { code: true },
+        orderBy: { code: "desc" }
+      });
       break;
   }
-  const max = row ? Number(row.code.slice(prefix.length)) || 0 : 0;
-  return `${prefix}${String(max + 1).padStart(6, "0")}`;
+
+  return row ? Number(row.code.slice(prefix.length)) + 1 || 1 : 1;
+}
+
+function shouldUseLegacyCodeLookup(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
+  return code === "P2021" || code === "P2022";
+}
+
+export async function nextCode(
+  prefix: string,
+  model: CodeModel,
+  tx?: Prisma.TransactionClient,
+  options: { useSequence?: boolean } = {}
+) {
+  const client = tx || prisma;
+  const useSequence = options.useSequence ?? codeSequenceTableAvailable ?? !tx;
+
+  if (!useSequence) {
+    const nextValue = await readNextCodeNumberFromExistingCodes(prefix, model, client);
+    return `${prefix}${String(nextValue).padStart(6, "0")}`;
+  }
+
+  const sequenceId = `${model}:${prefix}`;
+
+  try {
+    const existingSequence = await client.codeSequence.findUnique({
+      where: { id: sequenceId },
+      select: { id: true }
+    });
+
+    if (existingSequence) {
+      const sequence = await client.codeSequence.update({
+        where: { id: sequenceId },
+        data: { value: { increment: 1 } },
+        select: { value: true }
+      });
+      return `${prefix}${String(sequence.value).padStart(6, "0")}`;
+    }
+
+    const nextValue = await readNextCodeNumberFromExistingCodes(prefix, model, client);
+    const sequence = await client.codeSequence.upsert({
+      where: { id: sequenceId },
+      create: {
+        id: sequenceId,
+        prefix,
+        model,
+        value: nextValue
+      },
+      update: { value: { increment: 1 } },
+      select: { value: true }
+    });
+    return `${prefix}${String(sequence.value).padStart(6, "0")}`;
+  } catch (error) {
+    if (shouldUseLegacyCodeLookup(error)) {
+      codeSequenceTableAvailable = false;
+      const nextValue = await readNextCodeNumberFromExistingCodes(prefix, model, client);
+      return `${prefix}${String(nextValue).padStart(6, "0")}`;
+    }
+    throw error;
+  }
 }

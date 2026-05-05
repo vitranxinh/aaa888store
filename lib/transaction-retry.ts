@@ -8,6 +8,7 @@ function isRetryablePrismaTransactionError(error: unknown) {
   const maybeMessage = error instanceof Error ? error.message : String(error);
 
   return (
+    maybeCode === "P2002" ||
     maybeCode === "P2028" ||
     /Transaction already closed/i.test(maybeMessage) ||
     /expired transaction/i.test(maybeMessage) ||
@@ -18,7 +19,7 @@ function isRetryablePrismaTransactionError(error: unknown) {
 export async function runTransactionWithRetry<T>(
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
   options: { maxWait?: number; timeout?: number } = { maxWait: 10000, timeout: 30000 },
-  maxAttempts = 2
+  maxAttempts = 3
 ) {
   let lastError: unknown;
 
@@ -30,6 +31,7 @@ export async function runTransactionWithRetry<T>(
       if (attempt >= maxAttempts || !isRetryablePrismaTransactionError(error)) {
         throw error;
       }
+      await new Promise((resolve) => setTimeout(resolve, 40 * attempt));
     }
   }
 
