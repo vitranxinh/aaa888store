@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireApiSession, resolveActorUserId } from "@/lib/auth";
 import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
@@ -53,6 +54,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
       return result;
     });
+
+    revalidateTag("customers-page");
+    revalidatePath("/orders");
+    revalidatePath(`/orders/${params.id}`);
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${order.customerId}`);
 
     return NextResponse.json({ ok: true, order: updated });
   } catch (error) {

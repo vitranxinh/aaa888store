@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/auth";
 import { productSchema } from "@/lib/validations";
@@ -63,6 +64,11 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       },
     });
 
+    revalidateTag("products-page");
+    revalidateTag("pos-data");
+    revalidatePath("/products");
+    revalidatePath("/pos");
+
     return NextResponse.json(product);
   } catch (error) {
     return NextResponse.json(
@@ -109,6 +115,11 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       await tx.productVariant.deleteMany({ where: { productId: params.id } });
       await tx.product.delete({ where: { id: params.id } });
     });
+
+    revalidateTag("products-page");
+    revalidateTag("pos-data");
+    revalidatePath("/products");
+    revalidatePath("/pos");
 
     return NextResponse.json({ ok: true, name: product.name });
   } catch (error) {

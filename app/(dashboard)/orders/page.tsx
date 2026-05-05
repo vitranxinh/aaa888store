@@ -12,7 +12,7 @@ import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatCustomerDebt, formatDate } from "@/lib/utils";
 
 const OrderCreateModal = dynamic(
   () => import("@/components/order-create-modal").then((module) => module.OrderCreateModal),
@@ -257,7 +257,7 @@ async function OrdersList({
               </Link>
               <p className="mt-1 text-[0.92rem] text-slate-500">Lập bởi: {order.createdBy?.name ?? "Không rõ"}</p>
               <p className="mt-1 text-[0.92rem] font-semibold text-red-600">
-                Khách còn nợ: {formatCurrency(Number(order.customer.receivableDebt))}
+                Công nợ KH: {formatCustomerDebt(Number(order.customer.receivableDebt))}
               </p>
             </div>
 
@@ -299,8 +299,8 @@ async function OrdersList({
                     {order.customer.name}
                   </Link>
                 </td>
-                <td className="px-3 py-3 text-right font-semibold text-red-600 sm:px-6 sm:py-4">
-                  {formatCurrency(Number(order.customer.receivableDebt))}
+                <td className={`px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${Number(order.customer.receivableDebt) > 0 ? "text-red-600" : Number(order.customer.receivableDebt) < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+                  {formatCustomerDebt(Number(order.customer.receivableDebt))}
                 </td>
                 <td className="px-3 py-3 sm:px-6 sm:py-4">{order.createdBy?.name ?? "-"}</td>
                 <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(order.grandTotal))}</td>

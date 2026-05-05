@@ -5,9 +5,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { customerSchema } from "@/lib/validations";
-import { formatCurrency } from "@/lib/utils";
+import { formatCustomerDebt } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
 
 type FormValues = z.infer<typeof customerSchema>;
@@ -143,13 +144,15 @@ export function CustomerEditModal({ customer, groups }: Props) {
               </select>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Công nợ hiện tại</p>
-                <p className="mt-2 text-3xl font-bold text-red-600">{formatCurrency(currentDebtValue)}</p>
+                <p className={`mt-2 text-3xl font-bold ${currentDebtValue > 0 ? "text-red-600" : currentDebtValue < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+                  {formatCustomerDebt(currentDebtValue)}
+                </p>
               </div>
-              <Input
-                type="number"
+              <FormattedNumberInput
                 placeholder="Công nợ hiện tại"
-                value={String(currentDebtValue)}
-                onChange={(event) => setCurrentDebtValue(Number(event.target.value || 0))}
+                value={currentDebtValue}
+                onValueChange={setCurrentDebtValue}
+                allowNegative
                 className="h-14 text-xl"
               />
               <p className="-mt-2 text-sm text-slate-500">

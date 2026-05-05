@@ -26,7 +26,7 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
   await tx.customer.update({
     where: { id: customerId },
     data: {
-      receivableDebt: Math.max(orderDebt - standaloneReceipt, 0)
+      receivableDebt: orderDebt - standaloneReceipt
     }
   });
 }

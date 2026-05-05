@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireApiSession } from "@/lib/auth";
 import {
@@ -67,6 +68,11 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       ...Array.from(supplierIds).map((supplierId) => recalculateSupplierPayableDebtForSupplier(supplierId))
     ]);
 
+    revalidateTag("customers-page");
+    revalidatePath("/customers");
+    revalidatePath("/cashflow");
+    for (const customerId of customerIds) revalidatePath(`/customers/${customerId}`);
+
     return NextResponse.json({ ok: true, transaction });
   } catch (error) {
     return NextResponse.json(
@@ -100,6 +106,11 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       existing.customerId ? recalculateCustomerReceivableDebtForCustomer(existing.customerId) : Promise.resolve(),
       existing.supplierId ? recalculateSupplierPayableDebtForSupplier(existing.supplierId) : Promise.resolve()
     ]);
+
+    revalidateTag("customers-page");
+    revalidatePath("/customers");
+    revalidatePath("/cashflow");
+    if (existing.customerId) revalidatePath(`/customers/${existing.customerId}`);
 
     return NextResponse.json({ ok: true, code: existing.code });
   } catch (error) {

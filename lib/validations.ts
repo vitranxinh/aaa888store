@@ -40,9 +40,9 @@ export const productSchema = z.object({
 });
 
 export const customerSchema = z.object({
-  code: z.string().min(3),
+  code: z.string().optional().or(z.literal("")),
   name: z.string().min(2),
-  phone: z.string().min(1),
+  phone: z.string().optional().or(z.literal("")),
   email: z.string().email().optional().or(z.literal("")),
   address: z.string().optional(),
   note: z.string().optional(),
