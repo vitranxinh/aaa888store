@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { formatCurrency } from "@/lib/utils";
@@ -37,7 +36,6 @@ export function PurchaseCreateModal({
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
   const [items, setItems] = useState<PurchaseLine[]>([]);
   const [isPending, startTransition] = useTransition();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const pushToast = useToastStore((state) => state.push);
 
   useEffect(() => {
@@ -108,25 +106,8 @@ export function PurchaseCreateModal({
   }
 
   function submit() {
-    if (isSubmitting) return;
-    const clickStartedAt = performance.now();
-    console.info("[perf][purchase-create-modal][click]", {
-      itemCount: items.length,
-      atMs: Math.round(clickStartedAt)
-    });
-    flushSync(() => {
-      setIsSubmitting(true);
-    });
-    console.info("[perf][purchase-create-modal][loading-state]", {
-      sinceClickMs: Math.round(performance.now() - clickStartedAt)
-    });
     startTransition(async () => {
       try {
-        console.info("[perf][purchase-create-modal][request-start]", {
-          itemCount: items.length,
-          sinceClickMs: Math.round(performance.now() - clickStartedAt)
-        });
-        const requestStartedAt = performance.now();
         const response = await fetch("/api/purchases", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -144,34 +125,21 @@ export function PurchaseCreateModal({
           })
         });
         const payload = await response.json();
-        console.info("[perf][purchase-create-modal][response-return]", {
-          requestMs: Math.round(performance.now() - requestStartedAt),
-          totalMs: Math.round(performance.now() - clickStartedAt),
-          status: response.status
-        });
+        
         if (!response.ok) {
           pushToast({ title: "Không thể tạo phiếu nhập", description: payload.error, variant: "error" });
-          setIsSubmitting(false);
           return;
         }
         pushToast({ title: "Đã tạo phiếu nhập", description: payload.purchase.code });
         resetForm();
         setOpen(false);
-        console.info("[perf][purchase-create-modal][refresh]", {
-          totalMs: Math.round(performance.now() - clickStartedAt)
-        });
         router.refresh();
       } catch (error) {
-        console.info("[perf][purchase-create-modal][error]", {
-          totalMs: Math.round(performance.now() - clickStartedAt),
-          message: error instanceof Error ? error.message : String(error)
-        });
         pushToast({
           title: "Không thể tạo phiếu nhập",
           description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",
           variant: "error"
         });
-        setIsSubmitting(false);
       }
     });
   }
@@ -265,8 +233,8 @@ export function PurchaseCreateModal({
               <textarea className="h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base sm:h-28 sm:px-5 sm:py-4 sm:text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú" />
             </div>
             <div className="border-t border-slate-100 px-4 py-4 sm:px-7">
-              <Button className="h-12 w-full text-lg sm:h-16 sm:text-3xl" onClick={submit} disabled={isPending || isSubmitting || items.length === 0}>
-                {isPending || isSubmitting ? "Đang tạo..." : "Tạo phiếu nhập"}
+              <Button className="h-12 w-full text-lg sm:h-16 sm:text-3xl" onClick={submit} loading={isPending} disabled={items.length === 0}>
+                Tạo phiếu nhập
               </Button>
             </div>
           </div>

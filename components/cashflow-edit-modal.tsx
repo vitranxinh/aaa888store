@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { AsyncLookupInput } from "@/components/async-lookup-input";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export function CashflowEditModal({ transaction, branchId }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"RECEIPT" | "PAYMENT">(transaction.type);
   const [amount, setAmount] = useState(transaction.amount);
@@ -51,7 +53,7 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
       }
       pushToast({ title: "Đã cập nhật phiếu", description: transaction.code });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -70,7 +72,7 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
       }
       pushToast({ title: "Đã xóa phiếu", description: payload.code });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -133,11 +135,11 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
               )}
               <textarea className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / ghi chú" />
               <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white pt-4">
-                <Button variant="destructive" className="h-14 text-xl" onClick={deleteTxn} disabled={isPending}>
+                <Button variant="destructive" className="h-14 text-xl" onClick={deleteTxn} loading={isPending}>
                   Xóa phiếu
                 </Button>
-                <Button className="h-14 text-xl" onClick={submit} disabled={isPending || amount <= 0}>
-                  {isPending ? "Đang lưu..." : "Lưu thay đổi"}
+                <Button className="h-14 text-xl" onClick={submit} loading={isPending} disabled={amount <= 0}>
+                  Lưu thay đổi
                 </Button>
               </div>
             </div>

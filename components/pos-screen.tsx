@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Search, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
@@ -13,6 +14,7 @@ import { formatCurrency } from "@/lib/utils";
 type PosData = Awaited<ReturnType<typeof import("@/lib/data").getPosData>>;
 
 export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBranchId?: string | null }) {
+  const router = useRouter();
   const [keyword, setKeyword] = useState("");
   const [isPending, startTransition] = useTransition();
   const totals = usePosTotals();
@@ -59,6 +61,7 @@ export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBra
         title: status === "DRAFT" ? "Đã lưu đơn nháp" : "Thanh toán thành công",
         description: `Mã đơn ${payload.order.code}`
       });
+      router.refresh();
     });
   }
 
@@ -221,11 +224,11 @@ export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBra
         </div>
 
         <div className="mt-5 flex flex-col gap-3">
-          <Button variant="outline" onClick={() => handleCheckout("DRAFT")} disabled={isPending || store.items.length === 0}>
+          <Button variant="outline" onClick={() => handleCheckout("DRAFT")} loading={isPending} disabled={store.items.length === 0}>
             Lưu đơn nháp
           </Button>
-          <Button onClick={() => handleCheckout("COMPLETED")} disabled={isPending || store.items.length === 0}>
-            {isPending ? "Đang xử lý..." : "Thanh toán"}
+          <Button onClick={() => handleCheckout("COMPLETED")} loading={isPending} disabled={store.items.length === 0}>
+            Thanh toán
           </Button>
         </div>
 

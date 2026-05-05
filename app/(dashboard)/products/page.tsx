@@ -49,86 +49,60 @@ const getCachedProductsPageData = unstable_cache(
         }
       : undefined;
 
+    // Tối ưu: Sử dụng include để lấy Category và Inventory (theo chi nhánh) trong 1 query duy nhất
     const products = await prisma.product.findMany({
       where: productWhere,
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        barcode: true,
-        imageUrl: true,
-        categoryId: true,
-        brandId: true,
-        costPrice: true,
-        sellingPrice: true,
-        lowStockAlert: true,
-        status: true,
-        description: true
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        inventories: {
+          where: {
+            branchId,
+            variantId: null
+          },
+          select: { quantity: true }
+        }
       },
       orderBy: { sku: "asc" },
       skip: (page - 1) * pageSize,
       take: pageSize + 1
     });
-    const baseQueryMs = Date.now() - startedAt;
-
+    
     const hasNext = products.length > pageSize;
     const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
-    const productIds = visibleProducts.map((product) => product.id);
-    const categoryIds = Array.from(
-      new Set(visibleProducts.map((product) => product.categoryId).filter((value): value is string => Boolean(value)))
-    );
 
-    const relationStartedAt = Date.now();
-    const [inventories, categories] = await Promise.all([
-      productIds.length
-        ? prisma.inventory.findMany({
-            where: {
-              branchId,
-              variantId: null,
-              productId: { in: productIds }
-            },
-            select: {
-              productId: true,
-              quantity: true
-            }
-          })
-        : Promise.resolve([]),
-      categoryIds.length
-        ? prisma.category.findMany({
-            where: { id: { in: categoryIds } },
-            select: { id: true, name: true }
-          })
-        : Promise.resolve([])
-    ]);
-    const relationQueryMs = Date.now() - relationStartedAt;
+    const result = visibleProducts.map((product) => {
+      // Tính tổng tồn kho từ mảng inventories (thường chỉ có 1 row vì đã filter theo branchId và variantId: null)
+      const quantity = product.inventories.reduce((sum, inv) => sum + inv.quantity, 0);
+      
+      return {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        barcode: product.barcode,
+        imageUrl: product.imageUrl,
+        categoryId: product.categoryId,
+        brandId: product.brandId,
+        costPrice: Number(product.costPrice),
+        sellingPrice: Number(product.sellingPrice),
+        lowStockAlert: product.lowStockAlert,
+        status: product.status,
+        description: product.description,
+        categoryName: product.category?.name ?? null,
+        quantity
+      };
+    });
 
-    const quantityByProductId = new Map<string, number>();
-    for (const inventory of inventories) {
-      const key = inventory.productId;
-      if (!key) continue;
-      quantityByProductId.set(key, (quantityByProductId.get(key) ?? 0) + inventory.quantity);
-    }
-
-    const categoryById = new Map(categories.map((category) => [category.id, category.name]));
-
-    const totalMs = Date.now() - startedAt;
     console.info("[perf][products-page]", {
       q,
-      page,
-      pageSize,
-      rowCount: visibleProducts.length,
-      baseQueryMs,
-      relationQueryMs,
-      totalMs
+      rowCount: result.length,
+      fullDurationMs: Date.now() - startedAt
     });
 
     return {
       hasNext,
-      products: visibleProducts.map((product) => ({
-        ...product,
-        categoryName: product.categoryId ? categoryById.get(product.categoryId) ?? null : null,
-        quantity: quantityByProductId.get(product.id) ?? 0
-      }))
+      products: result
     };
   },
   ["products-page-data"],
@@ -185,20 +159,7 @@ async function ProductsList({
                       <div className="flex flex-col gap-2">
                         {canEditProducts ? (
                           <ProductEditModal
-                            product={{
-                              id: product.id,
-                              name: product.name,
-                              sku: product.sku,
-                              barcode: product.barcode,
-                              imageUrl: product.imageUrl,
-                              categoryId: product.categoryId,
-                              brandId: product.brandId,
-                              costPrice: Number(product.costPrice),
-                              sellingPrice: Number(product.sellingPrice),
-                            lowStockAlert: product.lowStockAlert,
-                            status: product.status,
-                            description: product.description
-                          }}
+                            product={product}
                             canDelete={canDeleteProducts}
                           />
                         ) : null}
@@ -221,7 +182,7 @@ async function ProductsList({
               <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
                 <div>
                   <p className="text-[0.85rem] font-medium text-slate-400">Giá bán</p>
-                  <p className="mt-1 text-[1.05rem] font-bold text-slate-900">{formatCurrency(Number(product.sellingPrice))}</p>
+                  <p className="mt-1 text-[1.05rem] font-bold text-slate-900">{formatCurrency(product.sellingPrice)}</p>
                 </div>
                 <div>
                   <p className="text-[0.85rem] font-medium text-slate-400">Tồn kho</p>
@@ -271,7 +232,7 @@ async function ProductsList({
                   <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">{product.name}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{product.categoryName ?? "-"}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{product.barcode ?? "-"}</td>
-                  <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(product.sellingPrice))}</td>
+                  <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(product.sellingPrice)}</td>
                   <td className={`px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${totalQuantity <= product.lowStockAlert ? "text-red-500" : "text-slate-900"}`}>
                     {totalQuantity}
                   </td>
@@ -289,20 +250,7 @@ async function ProductsList({
                         ) : null}
                         {canEditProducts ? (
                           <ProductEditModal
-                            product={{
-                              id: product.id,
-                              name: product.name,
-                              sku: product.sku,
-                              barcode: product.barcode,
-                              imageUrl: product.imageUrl,
-                              categoryId: product.categoryId,
-                              brandId: product.brandId,
-                              costPrice: Number(product.costPrice),
-                              sellingPrice: Number(product.sellingPrice),
-                              lowStockAlert: product.lowStockAlert,
-                              status: product.status,
-                              description: product.description
-                            }}
+                            product={product}
                             canDelete={canDeleteProducts}
                           />
                         ) : null}
@@ -353,16 +301,6 @@ export default async function ProductsPage({
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 10;
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
-  const productWhere = q
-    ? {
-        OR: [
-          { name: { contains: q, mode: "insensitive" as const } },
-          { sku: { contains: q, mode: "insensitive" as const } },
-          { barcode: { contains: q, mode: "insensitive" as const } },
-          { category: { name: { contains: q, mode: "insensitive" as const } } }
-        ]
-      }
-    : undefined;
 
   return (
     <div className="space-y-5 sm:space-y-8">

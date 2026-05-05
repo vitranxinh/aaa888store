@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
@@ -13,6 +14,7 @@ export function OrderDeleteRequestActions({
 }) {
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
+  const router = useRouter();
 
   function act(action: "approve" | "reject") {
     startTransition(async () => {
@@ -37,16 +39,16 @@ export function OrderDeleteRequestActions({
         description: orderCode
       });
 
-      window.location.reload();
+      router.refresh();
     });
   }
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Button disabled={isPending} onClick={() => act("approve")}>
+      <Button loading={isPending} onClick={() => act("approve")}>
         Duyệt xóa
       </Button>
-      <Button variant="outline" disabled={isPending} onClick={() => act("reject")}>
+      <Button variant="outline" loading={isPending} onClick={() => act("reject")}>
         Từ chối
       </Button>
     </div>

@@ -84,7 +84,8 @@ export async function POST(request: Request) {
 
     const { order } = await createOrderFromPayload({
       ...parsed.data,
-      createdById: await resolveActorUserId(session)
+      createdById: session.id, // Dùng trực tiếp ID từ session, không cần gọi DB nữa
+      branchId: parsed.data.branchId || session.branchId || ""
     });
 
     const totalMs = Date.now() - startedAt;

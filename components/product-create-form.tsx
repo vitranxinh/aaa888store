@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function ProductCreateForm({ categories = [], brands = [] }: Props) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isAddingBrand, setIsAddingBrand] = useState(false);
@@ -171,7 +173,7 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
       }
       resetForm();
       pushToast({ title: "Đã thêm sản phẩm", description: payload.name });
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -252,8 +254,8 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
             {showCategoryCreator ? (
               <div className="flex gap-2">
                 <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} />
-                <Button type="button" className="shrink-0" disabled={isAddingCategory} onClick={createCategory}>
-                  {isAddingCategory ? "Đang thêm..." : "Thêm"}
+                <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
+                  Thêm
                 </Button>
               </div>
             ) : null}
@@ -280,8 +282,8 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
             {showBrandCreator ? (
               <div className="flex gap-2">
                 <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} />
-                <Button type="button" className="shrink-0" disabled={isAddingBrand} onClick={createBrand}>
-                  {isAddingBrand ? "Đang thêm..." : "Thêm"}
+                <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
+                  Thêm
                 </Button>
               </div>
             ) : null}
@@ -323,8 +325,8 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
           <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Mô tả" value={description} onChange={(event) => setDescription(event.target.value)} />
         </label>
 
-        <Button disabled={isPending || !name.trim()}>
-          {isPending ? "Đang lưu..." : "Thêm sản phẩm"}
+        <Button loading={isPending} disabled={!name.trim()}>
+          Thêm sản phẩm
         </Button>
       </form>
     </Card>

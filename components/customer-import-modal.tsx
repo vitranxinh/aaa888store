@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +16,7 @@ export function CustomerImportModal() {
 
   function submit() {
     startTransition(async () => {
+      const router = useRouter();
       const formData = new FormData();
       if (file) {
         formData.append("file", file);
@@ -37,7 +40,7 @@ export function CustomerImportModal() {
         description: `${payload.imported} khách hàng từ ${payload.source}`,
       });
       setOpen(false);
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -74,8 +77,8 @@ export function CustomerImportModal() {
               <p className="text-sm text-slate-500">
                 App sẽ lấy mã khách hàng, tên, số điện thoại, địa chỉ, ghi chú và công nợ đầu kỳ từ file Excel.
               </p>
-              <Button className="h-14 w-full text-2xl" disabled={isPending} onClick={submit}>
-                {isPending ? "Đang import..." : "Import ngay"}
+              <Button className="h-14 w-full text-2xl" loading={isPending} onClick={submit}>
+                Import ngay
               </Button>
             </div>
           </div>
