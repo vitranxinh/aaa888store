@@ -259,12 +259,6 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
   const totalStartedAt = Date.now();
   const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
   const derived = calculateOrderDerivedState(items, payload);
-  const [code, receiptCode] = await measureStep(steps, "codeGenMs", async () => {
-    return Promise.all([
-      nextCode("DH", "order", undefined, { useSequence: true }),
-      derived.paidAmount > 0 ? nextCode("PT", "cashTransaction", undefined, { useSequence: true }) : Promise.resolve(null)
-    ]);
-  });
   const transactionQueuedAt = Date.now();
   let transactionStartedAt = 0;
   const { order, transactionSteps } = (await measureStep(steps, "transactionMs", () =>
@@ -274,11 +268,14 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
       const quantityByProduct = aggregateQuantityByProduct(items);
       const productIds = Array.from(quantityByProduct.keys());
       const orderId = randomUUID();
-      const [created, inventories, batches] = await Promise.all([
+
+      // BƯỚC 1: SONG SONG TOÀN BỘ (Dùng mã tạm để không phải chờ lấy mã thật)
+      const [, inventories, batches] = await Promise.all([
         tx.order.create({
           data: {
-            id: orderId, code, branchId: payload.branchId, customerId: payload.customerId, createdById: payload.createdById,
-            status: derived.finalStatus, subtotal: new Prisma.Decimal(derived.totals.subtotal),
+            id: orderId, code: `PENDING_${orderId}`, branchId: payload.branchId, customerId: payload.customerId,
+            createdById: payload.createdById, status: "DRAFT", // Để tạm DRAFT để an toàn
+            subtotal: new Prisma.Decimal(derived.totals.subtotal),
             discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
             otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
             profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
@@ -291,15 +288,25 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
                 total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
               }))
             }
-          },
-          select: { id: true, code: true }
+          }
         }),
         tx.inventory.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, variantId: null }, select: { productId: true, quantity: true } }),
         tx.productBatch.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, quantity: { gt: 0 } }, orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }], select: { id: true, productId: true, batchNumber: true, quantity: true } })
       ]);
-      await measureStep(tSteps, "applyEffectsMs", () => applyOrderEffects(tx, { id: orderId, code, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, receiptCode));
+
+      // BƯỚC 2: SONG SONG LẤY MÃ THẬT + CẬP NHẬT TẤT CẢ
+      const [realCode, realReceiptCode] = await Promise.all([
+        nextCode("DH", "order", tx),
+        derived.paidAmount > 0 ? nextCode("PT", "cashTransaction", tx) : Promise.resolve(null)
+      ]);
+
+      await Promise.all([
+        tx.order.update({ where: { id: orderId }, data: { code: realCode, status: derived.finalStatus } }),
+        applyOrderEffects(tx, { id: orderId, code: realCode, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, realReceiptCode)
+      ]);
+
       tSteps.transactionTotalMs = Date.now() - transactionStartedAt;
-      return { order: created, transactionSteps: tSteps };
+      return { order: { id: orderId, code: realCode }, transactionSteps: tSteps };
     }, { maxWait: 10000, timeout: 30000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
   steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
   Object.assign(steps, transactionSteps);

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+export const preferredRegion = 'sin1';
 import { Prisma } from "@prisma/client";
 import { requireApiSession, resolveActorUserId } from "@/lib/auth";
 import { createOrderFromPayload } from "@/lib/order-service";
