@@ -4,7 +4,11 @@ import { AppHeader } from "@/components/app-header";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatCustomerDebt, formatDate } from "@/lib/utils";
+
+function displayCustomerPhone(phone: string | null) {
+  return phone?.startsWith("AUTO_PHONE_") ? "" : phone ?? "";
+}
 
 type DebtHistoryItem = {
   id: string;
@@ -104,7 +108,7 @@ export default async function CustomerDetailPage({
     <div className="space-y-5 sm:space-y-8">
       <AppHeader
         title={customer.name}
-        description={`Công nợ hiện tại: ${formatCurrency(Number(customer.receivableDebt))}`}
+        description={`Công nợ hiện tại: ${formatCustomerDebt(Number(customer.receivableDebt))}`}
         session={session}
       />
 
@@ -121,7 +125,7 @@ export default async function CustomerDetailPage({
               id: customer.id,
               code: customer.code,
               name: customer.name,
-              phone: customer.phone,
+              phone: displayCustomerPhone(customer.phone),
               email: customer.email,
               address: customer.address,
               note: customer.note,
@@ -144,12 +148,14 @@ export default async function CustomerDetailPage({
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-medium text-slate-500">{canSeeCustomerPrivateFields ? "Số điện thoại" : "Thông tin"}</p>
             <p className="mt-1 text-lg font-bold text-slate-900 sm:text-xl">
-              {canSeeCustomerPrivateFields ? customer.phone || "-" : "Đã ẩn với nhân viên"}
+              {canSeeCustomerPrivateFields ? displayCustomerPhone(customer.phone) || "-" : "Đã ẩn với nhân viên"}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-medium text-slate-500">Công nợ hiện tại</p>
-            <p className="mt-1 text-lg font-bold text-red-600 sm:text-xl">{formatCurrency(Number(customer.receivableDebt))}</p>
+            <p className={`mt-1 text-lg font-bold sm:text-xl ${Number(customer.receivableDebt) > 0 ? "text-red-600" : Number(customer.receivableDebt) < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+              {formatCustomerDebt(Number(customer.receivableDebt))}
+            </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-medium text-slate-500">Email</p>

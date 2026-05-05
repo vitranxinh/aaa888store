@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/auth";
 import { productSchema } from "@/lib/validations";
@@ -63,6 +64,10 @@ export async function POST(request: Request) {
         description: parsed.data.description || null
       }
     });
+    revalidateTag("products-page");
+    revalidateTag("pos-data");
+    revalidatePath("/products");
+    revalidatePath("/pos");
     return NextResponse.json(product);
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AsyncLookupInput } from "@/components/async-lookup-input";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
@@ -57,7 +58,7 @@ export function CashflowCreateModal({
                 <option value="RECEIPT">Phiếu thu</option>
                 <option value="PAYMENT">Phiếu chi</option>
               </select>
-              <input className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} placeholder="Số tiền" />
+              <FormattedNumberInput className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" min={0} value={amount} onValueChange={setAmount} placeholder="Số tiền" />
               {type === "RECEIPT" ? (
                 <>
                   <AsyncLookupInput

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireApiSession } from "@/lib/auth";
+import { nextCode } from "@/lib/order-service";
 import { customerSchema } from "@/lib/validations";
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
@@ -22,10 +24,17 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "Không tìm thấy khách hàng" }, { status: 404 });
     }
 
+    const code = parsed.data.code?.trim() || (await nextCode("KH", "customer"));
+    const phone = parsed.data.phone?.trim() || `AUTO_PHONE_${code}`;
+    const duplicateChecks: Array<{ code: string } | { phone: string }> = [{ code }];
+    if (parsed.data.phone?.trim()) {
+      duplicateChecks.push({ phone });
+    }
+
     const duplicate = await prisma.customer.findFirst({
       where: {
         id: { not: params.id },
-        OR: [{ code: parsed.data.code }, { phone: parsed.data.phone }],
+        OR: duplicateChecks,
       },
       select: { id: true },
     });
@@ -37,9 +46,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const customer = await prisma.customer.update({
       where: { id: params.id },
       data: {
-        code: parsed.data.code,
+        code,
         name: parsed.data.name,
-        phone: parsed.data.phone,
+        phone,
         email: parsed.data.email || null,
         address: parsed.data.address || null,
         note: parsed.data.note || null,
@@ -47,6 +56,12 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         openingDebt: parsed.data.openingDebt ?? 0,
       },
     });
+
+    revalidateTag("customers-page");
+    revalidateTag("pos-data");
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${params.id}`);
+    revalidatePath("/pos");
 
     return NextResponse.json(customer);
   } catch (error) {
@@ -89,6 +104,11 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     await prisma.customer.delete({
       where: { id: params.id },
     });
+
+    revalidateTag("customers-page");
+    revalidateTag("pos-data");
+    revalidatePath("/customers");
+    revalidatePath("/pos");
 
     return NextResponse.json({ ok: true, name: existing.name });
   } catch (error) {

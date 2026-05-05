@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { usePosStore, usePosTotals } from "@/store/pos-store";
 import { useToastStore } from "@/store/toast-store";
@@ -154,24 +155,21 @@ export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBra
                   </button>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  <Input
-                    type="number"
+                  <FormattedNumberInput
                     min={1}
                     max={item.stock}
                     value={item.quantity}
-                    onChange={(e) => store.updateQuantity(item.productId, Math.min(Number(e.target.value), item.stock))}
+                    onValueChange={(value) => store.updateQuantity(item.productId, Math.min(value, item.stock))}
                   />
-                  <Input
-                    type="number"
+                  <FormattedNumberInput
                     min={0}
                     value={item.unitPrice}
-                    onChange={(e) => store.updatePrice(item.productId, Number(e.target.value))}
+                    onValueChange={(value) => store.updatePrice(item.productId, value)}
                   />
-                  <Input
-                    type="number"
+                  <FormattedNumberInput
                     min={0}
                     value={item.discountValue}
-                    onChange={(e) => store.updateDiscount(item.productId, Number(e.target.value))}
+                    onValueChange={(value) => store.updateDiscount(item.productId, value)}
                   />
                 </div>
               </div>
@@ -186,11 +184,10 @@ export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBra
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-500">Giảm giá đơn</span>
-            <Input
-              type="number"
+            <FormattedNumberInput
               min={0}
               value={store.orderDiscount}
-              onChange={(e) => store.setOrderDiscount(Number(e.target.value))}
+              onValueChange={(value) => store.setOrderDiscount(value)}
               className="w-36"
             />
           </div>
@@ -208,11 +205,10 @@ export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBra
               <option value="BANK_TRANSFER">Chuyển khoản</option>
               <option value="MIXED">Thanh toán hỗn hợp</option>
             </select>
-            <Input
-              type="number"
+            <FormattedNumberInput
               min={0}
               value={store.paidAmount}
-              onChange={(e) => store.setPaidAmount(Number(e.target.value))}
+              onValueChange={(value) => store.setPaidAmount(value)}
               placeholder="Số tiền khách trả"
             />
           </div>

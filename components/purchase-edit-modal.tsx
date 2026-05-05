@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { formatCurrency } from "@/lib/utils";
 import { useToastStore } from "@/store/toast-store";
 
@@ -204,11 +205,11 @@ export function PurchaseEditModal({ purchase }: Props) {
                       <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <label className="space-y-1">
                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Số lượng</span>
-                          <input className="h-11 w-full rounded-xl border border-slate-200 px-3 text-base sm:h-12 sm:text-lg" type="number" min="1" value={item.quantity} onChange={(e) => setItems((prev) => prev.map((line, idx) => idx === index ? { ...line, quantity: Number(e.target.value) } : line))} placeholder="Số lượng" />
+                          <FormattedNumberInput className="h-11 w-full rounded-xl border border-slate-200 px-3 text-base sm:h-12 sm:text-lg" min={1} value={item.quantity} onValueChange={(value) => setItems((prev) => prev.map((line, idx) => idx === index ? { ...line, quantity: value } : line))} placeholder="Số lượng" />
                         </label>
                         <label className="space-y-1">
                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Giá nhập</span>
-                          <input className="h-11 w-full rounded-xl border border-slate-200 px-3 text-base sm:h-12 sm:text-lg" type="number" min="0" value={item.importPrice} onChange={(e) => setItems((prev) => prev.map((line, idx) => idx === index ? { ...line, importPrice: Number(e.target.value) } : line))} placeholder="Giá nhập" />
+                          <FormattedNumberInput className="h-11 w-full rounded-xl border border-slate-200 px-3 text-base sm:h-12 sm:text-lg" min={0} value={item.importPrice} onValueChange={(value) => setItems((prev) => prev.map((line, idx) => idx === index ? { ...line, importPrice: value } : line))} placeholder="Giá nhập" />
                         </label>
                         <label className="space-y-1">
                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Số lô</span>

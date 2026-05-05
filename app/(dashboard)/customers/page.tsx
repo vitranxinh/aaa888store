@@ -9,7 +9,11 @@ import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getCustomerGroupOptions } from "@/lib/reference-data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCustomerDebt } from "@/lib/utils";
+
+function displayCustomerPhone(phone: string | null) {
+  return phone?.startsWith("AUTO_PHONE_") ? "" : phone ?? "";
+}
 
 const getCachedCustomersPageData = unstable_cache(
   async ({
@@ -68,7 +72,7 @@ const getCachedCustomersPageData = unstable_cache(
     return { customers: visibleCustomers, hasNext };
   },
   ["customers-page-data"],
-  { revalidate: 15 }
+  { revalidate: 15, tags: ["customers-page"] }
 );
 
 async function CustomersList({
@@ -124,7 +128,7 @@ async function CustomersList({
                     id: customer.id,
                     code: customer.code,
                     name: customer.name,
-                    phone: customer.phone,
+                    phone: displayCustomerPhone(customer.phone),
                     email: customer.email,
                     address: customer.address,
                     note: customer.note,
@@ -140,11 +144,11 @@ async function CustomersList({
             <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
               <div>
                 <p className="text-[0.85rem] font-medium text-slate-400">{canSeeCustomerPrivateFields ? "Số điện thoại" : "Thông tin"}</p>
-                <p className="mt-1 text-[1rem] font-semibold text-slate-800">{canSeeCustomerPrivateFields ? customer.phone || "-" : "Đã ẩn với nhân viên"}</p>
+                <p className="mt-1 text-[1rem] font-semibold text-slate-800">{canSeeCustomerPrivateFields ? displayCustomerPhone(customer.phone) || "-" : "Đã ẩn với nhân viên"}</p>
               </div>
               <div>
                 <p className="text-[0.85rem] font-medium text-slate-400">Công nợ</p>
-                <p className="mt-1 text-[1.15rem] font-bold text-red-600">{formatCurrency(customer.totalDebt)}</p>
+                <p className={`mt-1 text-[1.15rem] font-bold ${customer.totalDebt > 0 ? "text-red-600" : customer.totalDebt < 0 ? "text-emerald-700" : "text-slate-700"}`}>{formatCustomerDebt(customer.totalDebt)}</p>
               </div>
             </div>
 
@@ -194,10 +198,10 @@ async function CustomersList({
                     {customer.name}
                   </Link>
                 </td>
-                {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{customer.phone}</td> : null}
+                {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{displayCustomerPhone(customer.phone)}</td> : null}
                 {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{customer.address || "-"}</td> : null}
-                <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-red-600 sm:px-6 sm:py-4">
-                  {formatCurrency(customer.totalDebt)}
+                <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${customer.totalDebt > 0 ? "text-red-600" : customer.totalDebt < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+                  {formatCustomerDebt(customer.totalDebt)}
                 </td>
                 <td className="px-3 py-3 sm:px-6 sm:py-4">
                   <Link
@@ -215,7 +219,7 @@ async function CustomersList({
                         id: customer.id,
                         code: customer.code,
                         name: customer.name,
-                        phone: customer.phone,
+                        phone: displayCustomerPhone(customer.phone),
                         email: customer.email,
                         address: customer.address,
                         note: customer.note,

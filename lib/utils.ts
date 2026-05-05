@@ -15,6 +15,13 @@ export function formatCurrency(value: number | string) {
   }).format(amount || 0);
 }
 
+export function formatCustomerDebt(value: number | string) {
+  const amount = typeof value === "string" ? Number(value) : value;
+  if (amount > 0) return formatCurrency(amount);
+  if (amount < 0) return `Dư ${formatCurrency(Math.abs(amount))}`;
+  return "Không nợ";
+}
+
 export function formatDate(value: string | Date) {
   return formatVietnamDateTime(value);
 }

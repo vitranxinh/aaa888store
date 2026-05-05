@@ -500,27 +500,33 @@ export async function allocateBatchesFEFO(branchId: string, productId: string, q
 export async function createOrderFromPayload(payload: OrderPayload): Promise<{ order: { id: string; code: string }; timing: CreateOrderTiming }> {
   const steps: PerfSteps = {};
   const totalStartedAt = Date.now();
-  const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
-  const derived = await measureStep(steps, "deriveStateMs", async () => calculateOrderDerivedState(items, payload));
-  const useCodeSequence = await measureStep(steps, "codeSequenceCheckMs", () => isCodeSequenceTableAvailable());
+  
+  // 1. Chuẩn bị dữ liệu và tạo mã số BÊN NGOÀI transaction (Tối ưu cho Neon/Serverless)
+  const [items, useCodeSequence] = await Promise.all([
+    measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items)),
+    measureStep(steps, "codeSequenceCheckMs", () => isCodeSequenceTableAvailable())
+  ]);
+  
+  const derived = calculateOrderDerivedState(items, payload);
+  
+  const [code, receiptCode] = await measureStep(steps, "codeGenMs", () =>
+    Promise.all([
+      nextCode("DH", "order", undefined, { useSequence: useCodeSequence }),
+      derived.paidAmount > 0
+        ? nextCode("PT", "cashTransaction", undefined, { useSequence: useCodeSequence })
+        : Promise.resolve(null)
+    ])
+  );
+
   const transactionQueuedAt = Date.now();
   let transactionStartedAt = 0;
+  
   const { order, transactionSteps } = (await measureStep(steps, "transactionMs", () =>
     runTransactionWithRetry(async (tx: Prisma.TransactionClient) => {
       transactionStartedAt = Date.now();
       const tSteps: PerfSteps = {};
 
-      // 1. Generate codes inside transaction/retry to avoid race conditions
-      const [code, receiptCode] = await measureStep(tSteps, "codeGenMs", () =>
-        Promise.all([
-          nextCode("DH", "order", tx, { useSequence: useCodeSequence }),
-          derived.paidAmount > 0
-            ? nextCode("PT", "cashTransaction", tx, { useSequence: useCodeSequence })
-            : Promise.resolve(null)
-        ])
-      );
-
-      // 2. Create the order first, then bulk insert items to keep the transaction short.
+      // 2. Sử dụng NESTED CREATE để gộp tạo Đơn hàng và Items thành 1 query duy nhất
       const created = await measureStep(tSteps, "createOrderMs", () =>
         tx.order.create({
           data: {
@@ -537,62 +543,70 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
             paymentMethod: payload.paymentMethod,
             paidAmount: new Prisma.Decimal(derived.paidAmount),
             debtAmount: new Prisma.Decimal(derived.debtAmount),
-            note: payload.note
+            note: payload.note,
+            items: {
+              create: items.map((item) => ({
+                productId: item.product.id,
+                quantity: item.quantity,
+                unitPrice: new Prisma.Decimal(item.unitPrice),
+                costPrice: item.product.costPrice,
+                discountValue: new Prisma.Decimal(item.discountValue),
+                total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
+              }))
+            }
           },
-          select: {
-            id: true,
-            code: true
-          }
+          select: { id: true, code: true }
         })
       );
 
-      await measureStep(tSteps, "createOrderItemsMs", () =>
-        tx.orderItem.createMany({
-          data: items.map((item: Awaited<ReturnType<typeof loadOrderPayloadItems>>[number]) => ({
-            orderId: created.id,
-            productId: item.product.id,
-            quantity: item.quantity,
-            unitPrice: new Prisma.Decimal(item.unitPrice),
-            costPrice: item.product.costPrice,
-            discountValue: new Prisma.Decimal(item.discountValue),
-            total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
-          }))
-        }).then(() => undefined)
-      );
-
-      // 3. Apply inventory decrement, cash transaction, customer debt
-      await measureStep(tSteps, "applyEffectsMs", () =>
-        applyOrderEffects(tx, created, payload, items, derived, receiptCode, tSteps)
-      );
-
-      // 4. Batch Allocation (FEFO) - Now inside transaction
-      if (derived.finalStatus !== "DRAFT") {
-        await measureStep(tSteps, "batchAllocationMs", () =>
+      // 3. Thực thi các tác vụ hậu cần song song bên trong transaction
+      await measureStep(tSteps, "applyEffectsMs", async () => {
+        if (derived.finalStatus === "DRAFT") return;
+        const inventories = await ensureInventorySufficientFast(tx, payload.branchId, items);
+        
+        const asyncTasks: Promise<any>[] = [
+          applyInventoryQuantityChanges(tx, payload.branchId, aggregateQuantityByProduct(items), "decrement", inventories),
+          tx.customer.update({
+            where: { id: payload.customerId },
+            data: {
+              totalSpend: { increment: derived.grandTotal },
+              loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
+              receivableDebt: { increment: derived.debtAmount }
+            }
+          }),
           allocateOrderBatchesFEFO(payload.branchId, items, code, payload.createdById, tx, tSteps)
-        );
-      }
+        ];
+
+        if (derived.paidAmount > 0) {
+          asyncTasks.push(tx.cashTransaction.create({
+            data: {
+              code: receiptCode ?? "",
+              branchId: payload.branchId,
+              type: CashTxnType.RECEIPT,
+              amount: new Prisma.Decimal(derived.paidAmount),
+              customerId: payload.customerId,
+              orderId: created.id,
+              createdById: payload.createdById,
+              note: payload.note ?? `Thu tiền cho hóa đơn ${code}`
+            }
+          }));
+        }
+
+        await Promise.all(asyncTasks);
+      });
       
       tSteps.transactionTotalMs = Date.now() - transactionStartedAt;
-      
       return { order: created, transactionSteps: tSteps };
     }, { maxWait: 10000, timeout: 30000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
 
   steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
-  
-  // Map transaction steps back to main steps for logging
   Object.assign(steps, transactionSteps);
-  const code = order.code;
   steps.totalMs = Date.now() - totalStartedAt;
 
   if (steps.totalMs > 1000) {
-    console.info("[perf][create-order][slow]", {
-      code,
-      itemCount: items.length,
-      customerId: payload.customerId,
-      ...steps,
-      totalMs: steps.totalMs
-    });
+    console.info("[perf][create-order][slow]", { code, itemCount: items.length, ...steps });
   }
+
   return {
     order,
     timing: {
@@ -611,7 +625,6 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
       batchFetchMs: steps.batchFetchMs,
       batchPersistMs: steps.batchPersistMs,
       batchAllocationMs: steps.batchAllocationMs,
-      revalidateRedirectMs: steps.revalidateRedirectMs,
       totalMs: steps.totalMs
     }
   };
@@ -766,20 +779,21 @@ export async function nextCode(
   const sequenceId = `${model}:${prefix}`;
 
   try {
-    const existingSequence = await client.codeSequence.findUnique({
+    // Tối ưu: Update trực tiếp, nếu lỗi (không tồn tại) mới xử lý tạo mới
+    const sequence = await client.codeSequence.update({
       where: { id: sequenceId },
-      select: { id: true }
+      data: { value: { increment: 1 } },
+      select: { value: true }
     });
-
-    if (existingSequence) {
-      const sequence = await client.codeSequence.update({
-        where: { id: sequenceId },
-        data: { value: { increment: 1 } },
-        select: { value: true }
-      });
-      return `${prefix}${String(sequence.value).padStart(6, "0")}`;
+    return `${prefix}${String(sequence.value).padStart(6, "0")}`;
+  } catch (error) {
+    if (shouldUseLegacyCodeLookup(error)) {
+      codeSequenceTableAvailable = false;
+      const nextValue = await readNextCodeNumberFromExistingCodes(prefix, model, client);
+      return `${prefix}${String(nextValue).padStart(6, "0")}`;
     }
-
+    
+    // Nếu không tồn tại row trong CodeSequence, dùng upsert
     const nextValue = await readNextCodeNumberFromExistingCodes(prefix, model, client);
     const sequence = await client.codeSequence.upsert({
       where: { id: sequenceId },
@@ -793,12 +807,5 @@ export async function nextCode(
       select: { value: true }
     });
     return `${prefix}${String(sequence.value).padStart(6, "0")}`;
-  } catch (error) {
-    if (shouldUseLegacyCodeLookup(error)) {
-      codeSequenceTableAvailable = false;
-      const nextValue = await readNextCodeNumberFromExistingCodes(prefix, model, client);
-      return `${prefix}${String(nextValue).padStart(6, "0")}`;
-    }
-    throw error;
   }
 }

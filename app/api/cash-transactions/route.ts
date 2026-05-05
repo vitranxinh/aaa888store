@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireApiSession } from "@/lib/auth";
 import {
@@ -55,6 +56,11 @@ export async function POST(request: Request) {
     if (payload.supplierId) {
       await recalculateSupplierPayableDebtForSupplier(payload.supplierId);
     }
+
+    revalidateTag("customers-page");
+    revalidatePath("/customers");
+    revalidatePath("/cashflow");
+    if (payload.customerId) revalidatePath(`/customers/${payload.customerId}`);
 
     return NextResponse.json({ ok: true, transaction });
   } catch (error) {

@@ -6,6 +6,10 @@ import { compareSearchResults, getSearchScore } from "@/lib/search";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function displayCustomerPhone(phone: string | null) {
+  return phone?.startsWith("AUTO_PHONE_") ? "" : phone;
+}
+
 export async function GET(request: Request) {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
@@ -38,8 +42,8 @@ export async function GET(request: Request) {
 
     const results = customers
       .map((customer) => ({
-        customer,
-        score: getSearchScore(`${customer.name} ${customer.code} ${customer.phone ?? ""}`, query)
+        customer: { ...customer, phone: displayCustomerPhone(customer.phone) },
+        score: getSearchScore(`${customer.name} ${customer.code} ${displayCustomerPhone(customer.phone) ?? ""}`, query)
       }))
       .filter((entry) => entry.score > 0)
       .sort((a, b) =>

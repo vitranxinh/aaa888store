@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { useToastStore } from "@/store/toast-store";
 
 type OrderLine = {
@@ -360,8 +361,8 @@ export function OrderEditModal({
                         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-sm leading-5 sm:px-3 sm:py-2.5 sm:text-base sm:leading-6">
                           <div className="font-semibold text-slate-900">{line.productName}</div>
                         </div>
-                        <input className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" type="number" min="1" value={line.quantity} onChange={(e) => updateLine(index, "quantity", Number(e.target.value))} />
-                        <input className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" type="number" min="0" value={line.unitPrice} onChange={(e) => updateLine(index, "unitPrice", Number(e.target.value))} />
+                        <FormattedNumberInput className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" min={1} value={line.quantity} onValueChange={(value) => updateLine(index, "quantity", value)} />
+                        <FormattedNumberInput className="rounded-xl border border-slate-200 px-2 py-2 text-sm sm:px-3 sm:py-2.5 sm:text-base" min={0} value={line.unitPrice} onValueChange={(value) => updateLine(index, "unitPrice", value)} />
                         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-right text-sm font-semibold text-slate-900 sm:px-3 sm:py-2.5 sm:text-base">
                           {lineTotal.toLocaleString("vi-VN")} đ
                         </div>
@@ -392,24 +393,22 @@ export function OrderEditModal({
               <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:gap-4 sm:p-4 md:grid-cols-[180px_180px_1fr_1fr]">
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Thu khác</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <FormattedNumberInput
+                    min={0}
                     value={otherCharge}
-                    onChange={(e) => setOtherCharge(Number(e.target.value))}
+                    onValueChange={setOtherCharge}
                     className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base"
                     placeholder="Phí ship, hàng mua hộ..."
                   />
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Thanh toán</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <FormattedNumberInput
+                    min={0}
                     value={paidAmount}
-                    onChange={(e) => {
+                    onValueChange={(value) => {
                       setPaymentTouched(true);
-                      setPaidAmount(Number(e.target.value));
+                      setPaidAmount(value);
                     }}
                     className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base"
                   />
