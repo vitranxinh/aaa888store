@@ -32,76 +32,61 @@ export async function POST(request: Request) {
       if (!isJson) {
         const redirectUrl = new URL("/login", getRequestOrigin(request));
         redirectUrl.searchParams.set("error", "Dữ liệu đăng nhập không hợp lệ");
-        return NextResponse.redirect(redirectUrl);
+        return NextResponse.redirect(redirectUrl, 303);
       }
       return NextResponse.json({ error: "Dữ liệu đăng nhập không hợp lệ" }, { status: 400 });
     }
 
-    const defaultBranchId =
-      (await prisma.branch.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: "asc" },
-        select: { id: true }
-      }))?.id ?? null;
+    let user: any = null;
 
-    const demoUsers: Record<
-      string,
-      { id: string; email: string; name: string; role: "ADMIN" | "MANAGER" | "CASHIER"; branchId: string | null }
-    > = {
-      "huy@gbb.vn": {
-        id: "demo-admin",
-        email: "huy@gbb.vn",
-        name: "Huy",
-        role: "ADMIN",
-        branchId: defaultBranchId
-      },
-      "ha@gbb.vn": {
-        id: "demo-admin-2",
-        email: "ha@gbb.vn",
-        name: "Hà",
-        role: "ADMIN",
-        branchId: defaultBranchId
-      },
-      "nam@gbb.vn": {
-        id: "demo-manager",
-        email: "nam@gbb.vn",
-        name: "Nam",
-        role: "CASHIER",
-        branchId: defaultBranchId
-      },
-      "bich@gbb.vn": {
-        id: "demo-cashier",
-        email: "bich@gbb.vn",
-        name: "Bich",
-        role: "CASHIER",
-        branchId: defaultBranchId
-      }
-    };
+    // 1. Check real user in database first
+    const realUser = await prisma.user.findUnique({
+      where: { email: parsed.data.email }
+    });
 
-    const demoUser =
-      ((parsed.data.email === "huy@gbb.vn" && parsed.data.password === "huy2005") ||
-        (parsed.data.email === "ha@gbb.vn" && parsed.data.password === "ha2005") ||
-        (parsed.data.email === "nam@gbb.vn" && parsed.data.password === "nam") ||
-        (parsed.data.email === "bich@gbb.vn" && parsed.data.password === "bich"))
-        ? demoUsers[parsed.data.email]
-        : undefined;
-
-    const realUser = demoUser
-      ? await prisma.user.findUnique({
-          where: { email: parsed.data.email },
-          select: { id: true, email: true, name: true, role: true, branchId: true }
-        })
-      : null;
-
-    const user = realUser
-      ? {
+    if (realUser) {
+      const bcrypt = require("bcryptjs");
+      const isValidPassword = await bcrypt.compare(parsed.data.password, realUser.passwordHash);
+      if (isValidPassword) {
+        user = {
           id: realUser.id,
           email: realUser.email,
           name: realUser.name,
           role: realUser.role,
           branchId: realUser.branchId
-        }
-      : demoUser;
+        };
+      }
+    }
+
+    // 2. Fallback to demo users if real user not found or password invalid
+    if (!user) {
+      const defaultBranchId =
+        (await prisma.branch.findFirst({
+          where: { isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: { id: true }
+        }))?.id ?? null;
+
+      const demoUsers: Record<
+        string,
+        { id: string; email: string; name: string; role: "ADMIN" | "MANAGER" | "CASHIER"; branchId: string | null }
+      > = {
+        "huy@gbb.vn": { id: "demo-admin", email: "huy@gbb.vn", name: "Huy", role: "ADMIN", branchId: defaultBranchId },
+        "ha@gbb.vn": { id: "demo-admin-2", email: "ha@gbb.vn", name: "Hà", role: "ADMIN", branchId: defaultBranchId },
+        "nam@gbb.vn": { id: "demo-manager", email: "nam@gbb.vn", name: "Nam", role: "CASHIER", branchId: defaultBranchId },
+        "bich@gbb.vn": { id: "demo-cashier", email: "bich@gbb.vn", name: "Bich", role: "CASHIER", branchId: defaultBranchId }
+      };
+
+      if (
+        (parsed.data.email === "huy@gbb.vn" && parsed.data.password === "huy2005") ||
+        (parsed.data.email === "ha@gbb.vn" && parsed.data.password === "ha2005") ||
+        (parsed.data.email === "nam@gbb.vn" && parsed.data.password === "nam") ||
+        (parsed.data.email === "bich@gbb.vn" && parsed.data.password === "bich")
+      ) {
+        user = demoUsers[parsed.data.email];
+      }
+    }
+
 
     if (!user) {
       if (!isJson) {
@@ -109,7 +94,7 @@ export async function POST(request: Request) {
         redirectUrl.searchParams.set("error", "Sai email hoặc mật khẩu");
         const callbackUrl = String(body.callbackUrl ?? "");
         if (callbackUrl) redirectUrl.searchParams.set("callbackUrl", callbackUrl);
-        return NextResponse.redirect(redirectUrl);
+        return NextResponse.redirect(redirectUrl, 303);
       }
       return NextResponse.json({ error: "Sai email hoặc mật khẩu" }, { status: 401 });
     }
@@ -123,7 +108,7 @@ export async function POST(request: Request) {
     const callbackUrl = String(body.callbackUrl ?? "");
     const response = isJson
       ? NextResponse.json({ ok: true, user })
-      : NextResponse.redirect(new URL(callbackUrl || "/dashboard", getRequestOrigin(request)));
+      : NextResponse.redirect(new URL(callbackUrl || "/dashboard", getRequestOrigin(request)), 303);
     response.cookies.set("soban_session", token, {
       httpOnly: true,
       sameSite: "lax",
@@ -138,7 +123,7 @@ export async function POST(request: Request) {
     if (!isJson) {
       const redirectUrl = new URL("/login", getRequestOrigin(request));
       redirectUrl.searchParams.set("error", error instanceof Error ? error.message : "Lỗi đăng nhập nội bộ");
-      return NextResponse.redirect(redirectUrl);
+      return NextResponse.redirect(redirectUrl, 303);
     }
     return NextResponse.json(
       {

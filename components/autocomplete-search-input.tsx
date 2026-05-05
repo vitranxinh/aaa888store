@@ -35,18 +35,19 @@ export function AutocompleteSearchInput({
   const [open, setOpen] = useState(false);
   const [remoteSuggestions, setRemoteSuggestions] = useState<SuggestionItem[]>([]);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const isFirstRenderRef = useRef(true);
+  const lastQueryRef = useRef(query);
 
   useEffect(() => {
     setQuery(defaultValue);
+    lastQueryRef.current = defaultValue;
   }, [defaultValue]);
 
   useEffect(() => {
     if (!autoSubmitDelayMs) return;
-    if (isFirstRenderRef.current) {
-      isFirstRenderRef.current = false;
+    if (query === lastQueryRef.current) {
       return;
     }
+    lastQueryRef.current = query;
 
     const timeout = window.setTimeout(() => {
       const form = rootRef.current?.closest("form");

@@ -18,7 +18,7 @@ async function measureStep<T>(steps: PerfSteps, key: string, task: () => Promise
 function logPerfSummary(label: string, summary: Array<[string, number | undefined]>) {
   console.info(
     `${label} timing:\n${summary
-      .map(([key, value]) => `- ${key}: ${Math.round(value ?? 0)} ms`)
+      .map(([key, value]: [string, number | undefined]) => `- ${key}: ${Math.round(value ?? 0)} ms`)
       .join("\n")}`
   );
 }
@@ -56,14 +56,14 @@ async function applyInventoryQuantityChanges(
   });
   const existingProductIds = new Set(
     existingInventories
-      .map((inventory) => inventory.productId)
-      .filter((productId): productId is string => Boolean(productId))
+      .map((inventory: { productId: string | null }) => inventory.productId)
+      .filter((productId: string | null): productId is string => Boolean(productId))
   );
-  const missingProductIds = productIds.filter((productId) => !existingProductIds.has(productId));
+  const missingProductIds = productIds.filter((productId: string) => !existingProductIds.has(productId));
 
   if (missingProductIds.length > 0) {
     await Promise.all(
-      missingProductIds.map((productId) =>
+      missingProductIds.map((productId: string) =>
         tx.inventory.create({
           data: {
             branchId,
@@ -76,7 +76,7 @@ async function applyInventoryQuantityChanges(
   }
 
   const caseClauses = Prisma.join(
-    productIds.map((productId) => Prisma.sql`WHEN ${productId} THEN ${quantityByProduct.get(productId) ?? 0}`),
+    productIds.map((productId: string) => Prisma.sql`WHEN ${productId} THEN ${quantityByProduct.get(productId) ?? 0}`),
     " "
   );
 
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Dữ liệu phiếu nhập không hợp lệ" }, { status: 400 });
     }
 
-    const normalizedItems = parsed.data.items.map((item, index) => ({
+    const normalizedItems = parsed.data.items.map((item: any, index: number) => ({
       ...item,
       batchNumber: item.batchNumber?.trim() || `AUTO-${Date.now()}-${index + 1}`
     }));
@@ -108,30 +108,34 @@ export async function POST(request: Request) {
       resolvePurchaseSupplierId(parsed.data.supplierId)
     );
 
-    const totalAmount = normalizedItems.reduce((sum, item) => sum + item.quantity * item.importPrice, 0);
-    const paidAmount = parsed.data.paidAmount;
+    const totalAmount = Number(normalizedItems.reduce((sum: number, item: any) => sum + item.quantity * item.importPrice, 0));
+    const paidAmount = Number(parsed.data.paidAmount);
     const debtAmount = Math.max(totalAmount - paidAmount, 0);
     const status = debtAmount > 0 ? "PARTIAL" : "COMPLETED";
-    steps.validationMs = Date.now() - totalStartedAt - (steps.requestBodyMs ?? 0);
-    const [purchaseCode, paymentCode] = await measureStep(steps, "codeGenMs", () =>
-      Promise.all([
-        nextCode("PN", "purchaseOrder"),
-        paidAmount > 0 ? nextCode("PC", "cashTransaction") : Promise.resolve(null)
-      ])
-    );
-    const quantityByProduct = new Map<string, number>();
 
+    const quantityByProduct = new Map<string, number>();
     for (const item of normalizedItems) {
       quantityByProduct.set(item.productId, (quantityByProduct.get(item.productId) ?? 0) + item.quantity);
     }
 
+    steps.validationMs = Date.now() - totalStartedAt - (steps.requestBodyMs ?? 0);
     const transactionQueuedAt = Date.now();
     let transactionStartedAt = 0;
-    const purchase = await measureStep(steps, "transactionMs", () =>
-      runTransactionWithRetry(async (tx) => {
+    const purchase = (await measureStep(steps, "transactionMs", () =>
+      runTransactionWithRetry(async (tx: Prisma.TransactionClient) => {
         transactionStartedAt = Date.now();
         const transactionSteps: PerfSteps = {};
-        const created = await measureStep(transactionSteps, "createPurchaseMs", () =>
+
+        // 1. Generate codes inside transaction
+        const [purchaseCode, paymentCode] = await measureStep(transactionSteps, "codeGenMs", () =>
+          Promise.all([
+            nextCode("PN", "purchaseOrder", tx),
+            paidAmount > 0 ? nextCode("PC", "cashTransaction", tx) : Promise.resolve(null)
+          ])
+        );
+
+        // 2. Nested create for purchase and items
+        const created = (await measureStep(transactionSteps, "createPurchaseMs", () =>
           tx.purchaseOrder.create({
             data: {
               code: purchaseCode,
@@ -142,78 +146,57 @@ export async function POST(request: Request) {
               totalAmount: new Prisma.Decimal(totalAmount),
               paidAmount: new Prisma.Decimal(paidAmount),
               debtAmount: new Prisma.Decimal(debtAmount),
-              note: parsed.data.note
+              note: parsed.data.note,
+              items: {
+                create: normalizedItems.map((item: any) => ({
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  importPrice: new Prisma.Decimal(item.importPrice),
+                  total: new Prisma.Decimal(item.quantity * item.importPrice),
+                  batchNumber: item.batchNumber,
+                  expiryDate: (item.expiryDate && item.expiryDate.trim()) ? new Date(item.expiryDate) : null
+                }))
+              }
             },
-            select: {
-              id: true,
-              code: true,
-              branchId: true,
-              supplierId: true,
-              totalAmount: true,
-              paidAmount: true,
-              debtAmount: true,
-              note: true,
-              status: true
+            include: {
+              items: true
             }
           })
-        );
+        )) as any;
 
-        const createdItems = await measureStep(transactionSteps, "createPurchaseItemsMs", () =>
-          tx.purchaseOrderItem.createManyAndReturn({
-            data: normalizedItems.map((item) => ({
-              purchaseOrderId: created.id,
-              productId: item.productId,
-              quantity: item.quantity,
-              importPrice: new Prisma.Decimal(item.importPrice),
-              total: new Prisma.Decimal(item.quantity * item.importPrice),
-              batchNumber: item.batchNumber,
-              expiryDate: item.expiryDate ? new Date(item.expiryDate) : null
-            })),
-            select: {
-              id: true,
-              productId: true,
-              quantity: true,
-              batchNumber: true,
-              expiryDate: true,
-              importPrice: true
-            }
-          })
-        );
-
-        await measureStep(transactionSteps, "inventoryUpdateMs", () =>
-          applyInventoryQuantityChanges(tx, created.branchId, quantityByProduct)
-        );
-
-        await measureStep(transactionSteps, "productBatchCreateMs", () =>
-          tx.productBatch.createMany({
-            data: createdItems.map((item) => ({
-              branchId: created.branchId,
-              productId: item.productId,
-              batchNumber: item.batchNumber,
-              expiryDate: item.expiryDate,
-              quantity: item.quantity,
-              importPrice: item.importPrice,
-              purchaseItemId: item.id
-            }))
-          }).then(() => undefined)
-        );
-        await measureStep(transactionSteps, "inventoryTxnCreateMs", () =>
-          tx.inventoryTransaction.createMany({
-            data: createdItems.map((item) => ({
-              branchId: created.branchId,
-              productId: item.productId,
-              type: "IMPORT",
-              quantity: item.quantity,
-              referenceCode: created.code,
-              createdById: session.id,
-              note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
-            }))
-          }).then(() => undefined)
-        );
-
-        await measureStep(transactionSteps, "cashAndDebtUpdateMs", () =>
-          Promise.all([
-            measureStep(transactionSteps, "cashTransactionMs", () =>
+        // 3. Parallel updates for inventory, batches, and transactions
+        await Promise.all([
+          measureStep(transactionSteps, "inventoryUpdateMs", () =>
+            applyInventoryQuantityChanges(tx, created.branchId, quantityByProduct)
+          ),
+          measureStep(transactionSteps, "productBatchCreateMs", () =>
+            tx.productBatch.createMany({
+              data: created.items.map((item: any) => ({
+                branchId: created.branchId,
+                productId: item.productId,
+                batchNumber: item.batchNumber,
+                expiryDate: item.expiryDate,
+                quantity: item.quantity,
+                importPrice: item.importPrice,
+                purchaseItemId: item.id
+              }))
+            })
+          ),
+          measureStep(transactionSteps, "inventoryTxnCreateMs", () =>
+            tx.inventoryTransaction.createMany({
+              data: created.items.map((item: any) => ({
+                branchId: created.branchId,
+                productId: item.productId,
+                type: "IMPORT",
+                quantity: item.quantity,
+                referenceCode: created.code,
+                createdById: session.id,
+                note: item.batchNumber ? `Nhập lô ${item.batchNumber}` : "Nhập hàng"
+              }))
+            })
+          ),
+          measureStep(transactionSteps, "cashAndDebtUpdateMs", () =>
+            Promise.all([
               paidAmount > 0
                 ? tx.cashTransaction.create({
                     data: {
@@ -226,40 +209,22 @@ export async function POST(request: Request) {
                       createdById: session.id,
                       note: parsed.data.note ?? `Chi tiền phiếu nhập ${created.code}`
                     }
-                  }).then(() => undefined)
-                : Promise.resolve()
-            ),
-            measureStep(transactionSteps, "supplierDebtUpdateMs", () =>
+                  })
+                : Promise.resolve(),
               tx.supplier.update({
                 where: { id: created.supplierId },
                 data: {
-                  payableDebt: { increment: debtAmount }
+                  payableDebt: { increment: Number(debtAmount) }
                 }
-              }).then(() => undefined)
-            )
-          ]).then(() => undefined)
-        );
-        transactionSteps.transactionTotalMs = Date.now() - transactionStartedAt;
-
-        console.info("[perf][create-purchase][transaction]", {
-          code: created.code,
-          itemCount: normalizedItems.length,
-          ...transactionSteps
-        });
-        logPerfSummary("CreatePurchase transaction", [
-          ["create order", transactionSteps.createPurchaseMs],
-          ["create items", transactionSteps.createPurchaseItemsMs],
-          ["inventory update", transactionSteps.inventoryUpdateMs],
-          ["product batches", transactionSteps.productBatchCreateMs],
-          ["inventory transactions", transactionSteps.inventoryTxnCreateMs],
-          ["supplier debt update", transactionSteps.supplierDebtUpdateMs],
-          ["cash transaction", transactionSteps.cashTransactionMs],
-          ["transaction total", transactionSteps.transactionTotalMs]
+              })
+            ])
+          )
         ]);
 
+        transactionSteps.transactionTotalMs = Date.now() - transactionStartedAt;
         return created;
-      }, { maxWait: 10000, timeout: 15000 })
-    );
+      }, { maxWait: 10000, timeout: 20000 })
+    )) as any;
     steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
     steps.revalidateRedirectMs = 0;
 
