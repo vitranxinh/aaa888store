@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { ChartCard } from "@/components/chart-card";
 import { Card } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +10,7 @@ import { requireSession } from "@/lib/auth";
 async function getReportsData(branchId?: string) {
   const branchWhere = { branchId: branchId ?? undefined };
 
-  const [salesAggregate, customers, inventories, orderItems] = await Promise.all([
+  const [salesAggregate, customers, orderItems] = await Promise.all([
     prisma.order.aggregate({
       where: { ...branchWhere, status: "COMPLETED" },
       _sum: { grandTotal: true, profitEstimate: true }
@@ -24,17 +25,6 @@ async function getReportsData(branchId?: string) {
         totalSpend: true
       }
     }),
-    prisma.inventory.findMany({
-      where: branchWhere,
-      select: {
-        quantity: true,
-        product: {
-          select: {
-            costPrice: true
-          }
-        }
-      }
-    }),
     prisma.orderItem.groupBy({
       by: ["productId"],
       _sum: { quantity: true, total: true },
@@ -43,12 +33,16 @@ async function getReportsData(branchId?: string) {
     })
   ]);
 
+  const inventoryValueAggregate = await prisma.$queryRaw<Array<{ total_value: number }>>`
+    SELECT COALESCE(SUM(i."quantity" * p."costPrice"), 0)::float as total_value
+    FROM "Inventory" i
+    JOIN "Product" p ON i."productId" = p.id
+    WHERE (${branchId === undefined} OR i."branchId" = ${branchId})
+  `;
+
   const sales = Number(salesAggregate._sum.grandTotal ?? 0);
   const profit = Number(salesAggregate._sum.profitEstimate ?? 0);
-  const inventoryValue = inventories.reduce(
-    (sum, item) => sum + item.quantity * Number(item.product?.costPrice ?? 0),
-    0
-  );
+  const inventoryValue = inventoryValueAggregate[0]?.total_value ?? 0;
 
   return {
     sales,
@@ -113,7 +107,7 @@ export default async function ReportsPage() {
         <Card>
           <h3 className="text-base font-semibold text-slate-900">Khách hàng mua nhiều nhất</h3>
           <div className="mt-4 space-y-3">
-            {customers.map((customer) => (
+            {customers.map((customer: { id: string; name: string; phone: string | null; totalSpend: Prisma.Decimal }) => (
               <div key={customer.id} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
                 <div>
                   <p className="font-medium text-slate-900">{customer.name}</p>
@@ -128,7 +122,7 @@ export default async function ReportsPage() {
         <Card>
           <h3 className="text-base font-semibold text-slate-900">Top sản phẩm theo doanh thu</h3>
           <div className="mt-4 space-y-3">
-            {orderItems.map((item) => (
+            {orderItems.map((item: { productId: string; _sum: { quantity: number | null; total: Prisma.Decimal | null } }) => (
               <div key={item.productId} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
                 <div>
                   <p className="font-medium text-slate-900">Sản phẩm {item.productId.slice(-6)}</p>

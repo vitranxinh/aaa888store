@@ -13,24 +13,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.flatten().formErrors[0] ?? "Dữ liệu không hợp lệ" }, { status: 400 });
     }
 
-    const actor =
-      (await prisma.user.findUnique({
-        where: { email: session.email },
-        select: { id: true }
-      })) ??
-      (await prisma.user.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: "asc" },
-        select: { id: true }
-      }));
-
-    if (!actor) {
-      return NextResponse.json({ error: "Chưa có người dùng hợp lệ trong hệ thống để tạo hóa đơn" }, { status: 500 });
-    }
-
     const { order } = await createOrderFromPayload({
       ...parsed.data,
-      createdById: actor.id
+      createdById: session.id
     });
 
     return NextResponse.json({ ok: true, order });
