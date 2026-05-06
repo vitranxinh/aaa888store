@@ -311,7 +311,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
   steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
   Object.assign(steps, transactionSteps);
   steps.totalMs = Date.now() - totalStartedAt;
-  console.info("[perf][create-order]", { code, itemCount: items.length, total: `${steps.totalMs}ms`, db: `${steps.transactionMs}ms`, steps });
+  console.info("[perf][create-order]", { code: order.code, itemCount: items.length, total: `${steps.totalMs}ms`, db: `${steps.transactionMs}ms`, steps });
   return { order, timing: steps };
 }
 
