@@ -48,22 +48,22 @@ input[type="number"] {
 }
 
 @page {
-  size: A4 landscape;
+  size: auto;
   margin: 6mm;
 }
 
 @media print {
   html,
   body {
-    width: 297mm;
-    min-height: 210mm;
+    width: 100%;
+    min-height: auto;
     background: #fff !important;
   }
 
   .invoice-sheet {
-    width: 285mm;
+    width: 100%;
     min-height: auto;
-    padding: 4mm !important;
+    padding: 0 !important;
     box-shadow: none !important;
     overflow: visible !important;
     page-break-inside: auto;

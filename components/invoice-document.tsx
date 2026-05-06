@@ -93,7 +93,7 @@ export function InvoiceDocument({
       className={
         isPdf
           ? "grid gap-2 bg-white p-3 text-[12px] leading-snug text-black"
-          : "grid gap-3 text-[13px] leading-snug text-slate-700 sm:text-[14px] print:gap-2 print:text-[10px] print:leading-tight"
+          : "grid gap-3 text-[13px] leading-snug text-slate-700 sm:text-[14px] print:gap-2 print:text-[9.5px] print:leading-tight print:w-full"
       }
       style={isPdf ? { fontFamily: "Arial, Helvetica, sans-serif" } : undefined}
     >
@@ -121,8 +121,8 @@ export function InvoiceDocument({
         </div>
       </div>
 
-      <div className={isPdf ? "" : "mx-auto w-full max-w-[980px]"}>
-        <div className={isPdf ? "overflow-hidden border border-slate-400 bg-white" : "w-full overflow-hidden border border-slate-400 bg-white"}>
+      <div className={isPdf ? "" : "mx-auto w-full max-w-[980px] print:max-w-none"}>
+        <div className={isPdf ? "overflow-hidden border border-slate-400 bg-white" : "w-full border border-slate-400 bg-white print:overflow-visible"}>
           {isPdf ? (
             <table className="w-full table-fixed border-collapse text-[11px] text-black">
               <colgroup>
@@ -234,10 +234,10 @@ export function InvoiceDocument({
           ) : (
             <table className="invoice-table w-full table-fixed border-collapse text-[10px] text-slate-700 sm:text-[11px] print:text-[10px]">
               <colgroup>
-                <col style={{ width: "34%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "12%" }} />
-                <col style={{ width: "46%" }} />
+                <col style={{ width: "42%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "23%" }} />
+                <col style={{ width: "25%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 text-center font-semibold text-slate-900">
@@ -269,7 +269,7 @@ export function InvoiceDocument({
                       <td className="border border-slate-400 px-0.5 py-1 text-right whitespace-nowrap">{formatInvoiceAmount(item.unitPrice)}</td>
                       <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
                         <div className="flex w-full justify-end text-right">
-                          <span className="min-w-[72px] text-right">{formatInvoiceAmount(item.total)}</span>
+                          <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(item.total)}</span>
                         </div>
                       </td>
                     </tr>
@@ -290,7 +290,7 @@ export function InvoiceDocument({
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(subtotal)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(subtotal)}</span>
                     </div>
                   </td>
                 </tr>
@@ -300,7 +300,7 @@ export function InvoiceDocument({
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(discountTotal)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(discountTotal)}</span>
                     </div>
                   </td>
                 </tr>
@@ -310,7 +310,7 @@ export function InvoiceDocument({
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(otherCharge)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(otherCharge)}</span>
                     </div>
                   </td>
                 </tr>
@@ -320,7 +320,7 @@ export function InvoiceDocument({
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(paidAmount)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(paidAmount)}</span>
                     </div>
                   </td>
                 </tr>
@@ -330,7 +330,7 @@ export function InvoiceDocument({
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold text-red-600 whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtAmount)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtAmount)}</span>
                     </div>
                   </td>
                 </tr>
@@ -340,7 +340,7 @@ export function InvoiceDocument({
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-extrabold whitespace-nowrap print:text-[11px]">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(grandTotal)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(grandTotal)}</span>
                     </div>
                   </td>
                 </tr>
