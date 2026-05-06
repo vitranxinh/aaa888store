@@ -1,13 +1,4 @@
-import { formatCurrency, formatDate } from "@/lib/utils";
 
-function displayDate(value: Date | string | undefined) {
-  if (!value) return "";
-  if (typeof value === "string") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? value : formatDate(parsed);
-  }
-  return formatDate(value);
-}
 
 function formatInvoiceAmount(value: number) {
   return new Intl.NumberFormat("vi-VN", {
