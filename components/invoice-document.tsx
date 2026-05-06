@@ -93,7 +93,7 @@ export function InvoiceDocument({
       className={
         isPdf
           ? "grid gap-2 bg-white p-3 text-[12px] leading-snug text-black"
-          : "grid gap-3 text-[13px] leading-snug text-slate-700 sm:text-[14px] print:gap-2 print:text-[9.5px] print:leading-tight print:w-full"
+          : "grid gap-3 text-[13px] leading-snug text-slate-700 sm:text-[14px] print:gap-2 print:text-[10px] print:leading-tight print:w-full"
       }
       style={isPdf ? { fontFamily: "Arial, Helvetica, sans-serif" } : undefined}
     >
@@ -122,7 +122,7 @@ export function InvoiceDocument({
       </div>
 
       <div className={isPdf ? "" : "mx-auto w-full max-w-[980px] print:max-w-none"}>
-        <div className={isPdf ? "overflow-hidden border border-slate-400 bg-white" : "w-full border border-slate-400 bg-white print:overflow-visible"}>
+        <div className={isPdf ? "overflow-hidden border border-slate-400 bg-white" : "w-full overflow-hidden border border-slate-400 bg-white print:overflow-visible"}>
           {isPdf ? (
             <table className="w-full table-fixed border-collapse text-[11px] text-black">
               <colgroup>
