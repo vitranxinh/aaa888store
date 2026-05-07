@@ -6,33 +6,42 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
-import { productSchema } from "@/lib/validations";
+import { productUpdateSchema } from "@/lib/validations";
 import { useToastStore } from "@/store/toast-store";
 
-type FormValues = z.infer<typeof productSchema>;
+type FormValues = z.infer<typeof productUpdateSchema>;
 
 type Props = {
   product: {
     id: string;
     name: string;
     sku: string;
-    barcode: string | null;
     imageUrl: string | null;
     categoryId: string | null;
     brandId: string | null;
-    costPrice: number;
     sellingPrice: number;
-    lowStockAlert: number;
-    status: "ACTIVE" | "INACTIVE";
-    description: string | null;
   };
   categories?: { id: string; name: string }[];
   brands?: { id: string; name: string }[];
+  branches: { id: string; name: string }[];
+  defaultBranchId?: string | null;
+  currentQuantity: number;
+  currentBranchName: string;
   canDelete?: boolean;
 };
 
-export function ProductEditModal({ product, categories = [], brands = [], canDelete = false }: Props) {
+export function ProductEditModal({
+  product,
+  categories = [],
+  brands = [],
+  branches,
+  defaultBranchId,
+  currentQuantity,
+  currentBranchName,
+  canDelete = false
+}: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -51,21 +60,19 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
     () => ({
       name: product.name,
       sku: product.sku,
-      barcode: product.barcode || "",
       imageUrl: product.imageUrl || "",
       categoryId: product.categoryId || "",
       brandId: product.brandId || "",
-      costPrice: product.costPrice,
       sellingPrice: product.sellingPrice,
-      lowStockAlert: product.lowStockAlert,
-      status: product.status,
-      description: product.description || ""
+      stockAdjustmentQuantity: 0,
+      stockBranchId: defaultBranchId || "",
+      stockNote: ""
     }),
-    [product]
+    [defaultBranchId, product]
   );
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(productSchema),
+    resolver: zodResolver(productUpdateSchema),
     defaultValues
   });
 
@@ -133,6 +140,11 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
 
       pushToast({ title: "Đã cập nhật sản phẩm", description: payload.name });
       setOpen(false);
+      form.reset({
+        ...values,
+        stockAdjustmentQuantity: 0,
+        stockNote: ""
+      });
       router.refresh();
     });
   }
@@ -239,132 +251,159 @@ export function ProductEditModal({ product, categories = [], brands = [], canDel
             </div>
 
             <form className="flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6" onSubmit={form.handleSubmit(onSubmit)}>
-              <div className="grid gap-4">
-              <Input placeholder="Tên sản phẩm" {...form.register("name")} className="h-14 text-xl" />
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input placeholder="SKU" {...form.register("sku")} className="h-14 text-xl" />
-                <Input placeholder="Barcode" {...form.register("barcode")} className="h-14 text-xl" />
-              </div>
-              <Input placeholder="Ảnh sản phẩm URL" {...form.register("imageUrl")} className="h-14 text-xl" />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="rounded-2xl border border-slate-300 px-4 py-4 text-base"
-              />
-              {imagePreview || form.watch("imageUrl") ? (
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imagePreview || form.watch("imageUrl")}
-                    alt={form.watch("name")}
-                    className="h-28 w-28 rounded-xl object-cover"
+              <div className="grid gap-5">
+                <section className="grid gap-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Thông tin sản phẩm</h4>
+
+                  <Input placeholder="Tên sản phẩm" {...form.register("name")} className="h-14 text-xl" />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Input placeholder="SKU" {...form.register("sku")} className="h-14 text-xl" />
+                    <FormattedNumberInput
+                      placeholder="Giá bán"
+                      min={0}
+                      value={Number(form.watch("sellingPrice") ?? 0)}
+                      onValueChange={(value) => form.setValue("sellingPrice", value, { shouldDirty: true })}
+                      className="h-14 text-xl"
+                    />
+                  </div>
+
+                  <Input placeholder="Ảnh sản phẩm URL" {...form.register("imageUrl")} className="h-14 text-xl" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="rounded-2xl border border-slate-300 px-4 py-4 text-base"
                   />
-                </div>
-              ) : null}
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                <select
-                  className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
-                  value={form.watch("categoryId")}
-                  onChange={(event) => form.setValue("categoryId", event.target.value, { shouldDirty: true })}
-                >
-                  <option value="">Chọn danh mục</option>
-                  {categoryOptions.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="text-left text-sm font-semibold text-emerald-700"
-                  onClick={() => setShowCategoryCreator((prev) => !prev)}
-                >
-                  + Thêm danh mục mới
-                </button>
-                {showCategoryCreator ? (
-                  <div className="flex gap-2">
-                    <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} className="h-12 text-base" />
-                    <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
-                      Thêm
-                    </Button>
+
+                  {imagePreview || form.watch("imageUrl") ? (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imagePreview || form.watch("imageUrl")}
+                        alt={form.watch("name")}
+                        className="h-28 w-28 rounded-xl object-cover"
+                      />
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-2">
+                      <select
+                        className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                        value={form.watch("categoryId")}
+                        onChange={(event) => form.setValue("categoryId", event.target.value, { shouldDirty: true })}
+                      >
+                        <option value="">Chọn danh mục</option>
+                        {categoryOptions.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" className="text-left text-sm font-semibold text-emerald-700" onClick={() => setShowCategoryCreator((prev) => !prev)}>
+                        + Thêm danh mục mới
+                      </button>
+                      {showCategoryCreator ? (
+                        <div className="flex gap-2">
+                          <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} className="h-12 text-base" />
+                          <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
+                            Thêm
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-2">
+                      <select
+                        className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                        value={form.watch("brandId")}
+                        onChange={(event) => form.setValue("brandId", event.target.value, { shouldDirty: true })}
+                      >
+                        <option value="">Chọn thương hiệu</option>
+                        {brandOptions.map((brand) => (
+                          <option key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" className="text-left text-sm font-semibold text-emerald-700" onClick={() => setShowBrandCreator((prev) => !prev)}>
+                        + Thêm thương hiệu mới
+                      </button>
+                      {showBrandCreator ? (
+                        <div className="flex gap-2">
+                          <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} className="h-12 text-base" />
+                          <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
+                            Thêm
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                ) : null}
-                </div>
-                <div className="grid gap-2">
-                <select
-                  className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
-                  value={form.watch("brandId")}
-                  onChange={(event) => form.setValue("brandId", event.target.value, { shouldDirty: true })}
-                >
-                  <option value="">Chọn thương hiệu</option>
-                  {brandOptions.map((brand) => (
-                    <option key={brand.id} value={brand.id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="text-left text-sm font-semibold text-emerald-700"
-                  onClick={() => setShowBrandCreator((prev) => !prev)}
-                >
-                  + Thêm thương hiệu mới
-                </button>
-                {showBrandCreator ? (
-                  <div className="flex gap-2">
-                    <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} className="h-12 text-base" />
-                    <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
-                      Thêm
-                    </Button>
+                </section>
+
+                <section className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Hàng tồn</h4>
+
+                  <div className="grid gap-3 rounded-2xl bg-white p-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Số lượng tồn</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">{currentQuantity}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Kho / chi nhánh hiện tại</p>
+                      <p className="mt-1 text-lg font-semibold text-slate-900">{currentBranchName}</p>
+                    </div>
                   </div>
-                ) : null}
-                </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-1">
+                      <span className="text-sm font-semibold text-slate-700">Cập nhật tồn kho</span>
+                      <FormattedNumberInput
+                        min={0}
+                        value={Number(form.watch("stockAdjustmentQuantity") ?? 0)}
+                        onValueChange={(value) => form.setValue("stockAdjustmentQuantity", value, { shouldDirty: true })}
+                        className="h-14 text-xl"
+                        placeholder="Nhập thêm tồn"
+                      />
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-sm font-semibold text-slate-700">Kho / chi nhánh</span>
+                      <select
+                        className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                        value={form.watch("stockBranchId")}
+                        onChange={(event) => form.setValue("stockBranchId", event.target.value, { shouldDirty: true })}
+                      >
+                        <option value="">Chọn kho / chi nhánh</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {branch.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="grid gap-1">
+                    <span className="text-sm font-semibold text-slate-700">Ghi chú</span>
+                    <textarea
+                      className="rounded-2xl border border-slate-300 px-4 py-3 text-base sm:text-lg"
+                      rows={3}
+                      placeholder="Ghi chú cập nhật tồn kho"
+                      value={form.watch("stockNote")}
+                      onChange={(event) => form.setValue("stockNote", event.target.value, { shouldDirty: true })}
+                    />
+                  </label>
+                </section>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Input type="number" placeholder="Giá vốn" {...form.register("costPrice", { valueAsNumber: true })} className="h-14 text-xl" />
-                <Input
-                  type="number"
-                  placeholder="Giá bán"
-                  {...form.register("sellingPrice", { valueAsNumber: true })}
-                  className="h-14 text-xl"
-                />
-                <Input
-                  type="number"
-                  placeholder="Ngưỡng cảnh báo"
-                  {...form.register("lowStockAlert", { valueAsNumber: true })}
-                  className="h-14 text-xl"
-                />
-              </div>
-              <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" {...form.register("status")}>
-                <option value="ACTIVE">Đang bán</option>
-                <option value="INACTIVE">Ngưng bán</option>
-              </select>
-              <textarea
-                rows={4}
-                placeholder="Mô tả sản phẩm"
-                className="rounded-2xl border border-slate-300 px-4 py-4 text-xl"
-                {...form.register("description")}
-              />
-              <div className="sticky bottom-0 border-t border-slate-100 bg-white pt-4">
-              <div className="flex flex-col gap-3 sm:flex-row">
-              <Button className="h-14 w-full flex-1 text-2xl" loading={isPending}>
-                Lưu thay đổi
-              </Button>
-              {canDelete ? (
-                <Button
-                  type="button"
-                  onClick={handleDelete}
-                  loading={isPending}
-                  variant="destructive"
-                  className="h-14 px-6 text-2xl font-semibold"
-                >
-                  Xóa sản phẩm
-                </Button>
-              ) : null}
-              </div>
-              </div>
+
+              <div className="sticky bottom-0 z-10 mt-6 flex justify-between gap-3 border-t border-slate-100 bg-white px-0 py-4">
+                {canDelete ? (
+                  <Button variant="destructive" type="button" onClick={handleDelete} loading={isPending}>
+                    Xóa sản phẩm
+                  </Button>
+                ) : <span />}
+                <Button loading={isPending}>Lưu thay đổi</Button>
               </div>
             </form>
           </div>

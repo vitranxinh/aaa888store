@@ -25,18 +25,28 @@ export const posCheckoutSchema = z.object({
   items: z.array(posItemSchema).min(1, "Giỏ hàng đang trống")
 });
 
-export const productSchema = z.object({
+const baseProductFieldsSchema = z.object({
   name: z.string().min(2),
-  sku: z.string().min(3),
-  barcode: z.string().optional().or(z.literal("")),
   imageUrl: z.string().optional().or(z.literal("")),
   categoryId: z.string().optional().or(z.literal("")),
   brandId: z.string().optional().or(z.literal("")),
-  costPrice: z.number().nonnegative(),
-  sellingPrice: z.number().nonnegative(),
-  lowStockAlert: z.number().int().nonnegative(),
-  status: z.enum(["ACTIVE", "INACTIVE"]),
-  description: z.string().optional().or(z.literal(""))
+  sellingPrice: z.number().nonnegative()
+});
+
+export const productCreateSchema = baseProductFieldsSchema.extend({
+  sku: z.string().optional().or(z.literal("")),
+  initialStockQuantity: z.number().int().nonnegative().default(0),
+  stockBranchId: z.string().optional().or(z.literal("")),
+  batchNumber: z.string().optional().or(z.literal("")),
+  stockDate: z.string().optional().or(z.literal("")),
+  stockNote: z.string().optional().or(z.literal(""))
+});
+
+export const productUpdateSchema = baseProductFieldsSchema.extend({
+  sku: z.string().min(3),
+  stockAdjustmentQuantity: z.number().int().nonnegative().default(0),
+  stockBranchId: z.string().optional().or(z.literal("")),
+  stockNote: z.string().optional().or(z.literal(""))
 });
 
 export const customerSchema = z.object({

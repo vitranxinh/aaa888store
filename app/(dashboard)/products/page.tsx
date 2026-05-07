@@ -4,7 +4,6 @@ import { unstable_cache } from "next/cache";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { ProductEditModal } from "@/components/product-edit-modal";
-import { ProductStockAdjustModal } from "@/components/product-stock-adjust-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -112,19 +111,21 @@ const getCachedProductsPageData = unstable_cache(
 async function ProductsList({
   q,
   branchId,
+  branchName,
+  branches,
   page,
   pageSize,
   canEditProducts,
   canDeleteProducts,
-  canAdjustInventory,
 }: {
   q: string;
   branchId: string;
+  branchName: string;
+  branches: { id: string; name: string }[];
   page: number;
   pageSize: number;
   canEditProducts: boolean;
   canDeleteProducts: boolean;
-  canAdjustInventory: boolean;
 }) {
   const { products, hasNext } = await getCachedProductsPageData({
     q,
@@ -155,22 +156,16 @@ async function ProductsList({
                       <p className="text-[0.88rem] font-semibold uppercase tracking-wide text-slate-400">{product.sku}</p>
                       <p className="mt-1 text-[1.1rem] font-bold leading-snug text-slate-900">{product.name}</p>
                     </div>
-                    {canEditProducts || canAdjustInventory ? (
+                    {canEditProducts ? (
                       <div className="flex flex-col gap-2">
-                        {canEditProducts ? (
-                          <ProductEditModal
-                            product={product}
-                            canDelete={canDeleteProducts}
-                          />
-                        ) : null}
-                        {canAdjustInventory && branchId ? (
-                          <ProductStockAdjustModal
-                            productId={product.id}
-                            productName={product.name}
-                            branchId={branchId}
-                            currentQuantity={totalQuantity}
-                          />
-                        ) : null}
+                        <ProductEditModal
+                          product={product}
+                          branches={branches}
+                          defaultBranchId={branchId}
+                          currentQuantity={totalQuantity}
+                          currentBranchName={branchName}
+                          canDelete={canDeleteProducts}
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -211,7 +206,7 @@ async function ProductsList({
               <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Giá bán</th>
               <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Tồn kho</th>
               <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Cảnh báo</th>
-              {canEditProducts || canAdjustInventory ? <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Thao tác</th> : null}
+              {canEditProducts ? <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Thao tác</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -237,23 +232,17 @@ async function ProductsList({
                     {totalQuantity}
                   </td>
                   <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{product.lowStockAlert}</td>
-                  {canEditProducts || canAdjustInventory ? (
+                  {canEditProducts ? (
                     <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
                       <div className="flex justify-end gap-2">
-                        {canAdjustInventory && branchId ? (
-                          <ProductStockAdjustModal
-                            productId={product.id}
-                            productName={product.name}
-                            branchId={branchId}
-                            currentQuantity={totalQuantity}
-                          />
-                        ) : null}
-                        {canEditProducts ? (
-                          <ProductEditModal
-                            product={product}
-                            canDelete={canDeleteProducts}
-                          />
-                        ) : null}
+                        <ProductEditModal
+                          product={product}
+                          branches={branches}
+                          defaultBranchId={branchId}
+                          currentQuantity={totalQuantity}
+                          currentBranchName={branchName}
+                          canDelete={canDeleteProducts}
+                        />
                       </div>
                     </td>
                   ) : null}
@@ -296,11 +285,19 @@ export default async function ProductsPage({
   const canCreateProducts = true;
   const canEditProducts = session.role === "ADMIN" || session.role === "MANAGER";
   const canDeleteProducts = session.role === "ADMIN";
-  const canAdjustInventory = session.role === "ADMIN" || session.role === "MANAGER";
   const q = searchParams?.q ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 10;
-  const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
+  const [defaultBranchId, branches] = await Promise.all([
+    session.branchId ? Promise.resolve(session.branchId) : getDefaultBranchId(),
+    prisma.branch.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { createdAt: "asc" }
+    })
+  ]);
+  const branchId = defaultBranchId ?? "";
+  const branchName = branches.find((branch) => branch.id === branchId)?.name ?? "Chi nhánh hiện tại";
 
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -323,7 +320,7 @@ export default async function ProductsPage({
                 + Thêm SP
               </summary>
               <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] sm:top-20">
-                <ProductCreateFormLazy />
+                <ProductCreateFormLazy branches={branches} defaultBranchId={branchId} />
               </div>
             </details>
           </div>
@@ -334,11 +331,12 @@ export default async function ProductsPage({
         <ProductsList
           q={q}
           branchId={branchId}
+          branchName={branchName}
+          branches={branches}
           page={page}
           pageSize={pageSize}
           canEditProducts={canEditProducts}
           canDeleteProducts={canDeleteProducts}
-          canAdjustInventory={canAdjustInventory}
         />
       </Suspense>
     </div>

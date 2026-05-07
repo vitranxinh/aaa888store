@@ -4,15 +4,18 @@ import { ChangeEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { useToastStore } from "@/store/toast-store";
 
 type Props = {
   categories?: { id: string; name: string }[];
   brands?: { id: string; name: string }[];
+  branches: { id: string; name: string }[];
+  defaultBranchId?: string | null;
 };
 
-export function ProductCreateForm({ categories = [], brands = [] }: Props) {
+export function ProductCreateForm({ categories = [], brands = [], branches, defaultBranchId }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -25,16 +28,16 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newBrandName, setNewBrandName] = useState("");
   const [name, setName] = useState("");
-  const [sellingPrice, setSellingPrice] = useState<number | "">(0);
+  const [sellingPrice, setSellingPrice] = useState(0);
   const [sku, setSku] = useState("");
-  const [barcode, setBarcode] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
-  const [costPrice, setCostPrice] = useState<number | "">(0);
-  const [lowStockAlert, setLowStockAlert] = useState<number | "">(10);
-  const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
-  const [description, setDescription] = useState("");
+  const [initialStockQuantity, setInitialStockQuantity] = useState(0);
+  const [stockBranchId, setStockBranchId] = useState(defaultBranchId ?? branches[0]?.id ?? "");
+  const [batchNumber, setBatchNumber] = useState("");
+  const [stockDate, setStockDate] = useState(new Date().toISOString().slice(0, 10));
+  const [stockNote, setStockNote] = useState("");
   const pushToast = useToastStore((state) => state.push);
 
   useEffect(() => {
@@ -76,15 +79,15 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
     setName("");
     setSellingPrice(0);
     setSku("");
-    setBarcode("");
     setImageUrl("");
     setImagePreview("");
     setCategoryId("");
     setBrandId("");
-    setCostPrice(0);
-    setLowStockAlert(10);
-    setStatus("ACTIVE");
-    setDescription("");
+    setInitialStockQuantity(0);
+    setStockBranchId(defaultBranchId ?? branches[0]?.id ?? "");
+    setBatchNumber("");
+    setStockDate(new Date().toISOString().slice(0, 10));
+    setStockNote("");
   }
 
   async function createCategory() {
@@ -154,16 +157,16 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          sellingPrice: typeof sellingPrice === "number" ? sellingPrice : Number(sellingPrice || 0),
+          sellingPrice,
           sku: sku.trim(),
-          barcode: barcode.trim(),
           imageUrl: imageUrl.trim(),
           categoryId,
           brandId,
-          costPrice: typeof costPrice === "number" ? costPrice : Number(costPrice || 0),
-          lowStockAlert: typeof lowStockAlert === "number" ? lowStockAlert : Number(lowStockAlert || 10),
-          status,
-          description: description.trim()
+          initialStockQuantity,
+          stockBranchId,
+          batchNumber: batchNumber.trim(),
+          stockDate,
+          stockNote: stockNote.trim()
         })
       });
       const payload = await response.json();
@@ -192,142 +195,155 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
   return (
     <Card>
       <CardTitle>Tạo sản phẩm</CardTitle>
-      <CardDescription className="mt-1">Giữ form đầy đủ như cũ, nhưng chỉ cần điền tên sản phẩm và giá bán. Các ô còn lại là tùy chọn.</CardDescription>
-      <form className="mt-4 grid gap-3" onSubmit={onSubmit}>
-        <label className="grid gap-1">
-          <span className="text-sm font-semibold text-slate-700">Tên sản phẩm</span>
-          <span className="text-xs text-slate-500">Bắt buộc</span>
-          <Input placeholder="Tên sản phẩm" value={name} onChange={(event) => setName(event.target.value)} />
-        </label>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">SKU</span>
-            <span className="text-xs text-slate-500">Tùy chọn, để trống hệ thống tự tạo</span>
-            <Input placeholder="SKU" value={sku} onChange={(event) => setSku(event.target.value)} />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Barcode</span>
-            <span className="text-xs text-slate-500">Tùy chọn</span>
-            <Input placeholder="Barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} />
-          </label>
-        </div>
-
-        <label className="grid gap-1">
-          <span className="text-sm font-semibold text-slate-700">Ảnh sản phẩm URL</span>
-          <span className="text-xs text-slate-500">Tùy chọn</span>
-          <Input placeholder="Ảnh sản phẩm URL" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
-        </label>
-
-        <label className="grid gap-1">
-          <span className="text-sm font-semibold text-slate-700">Upload ảnh</span>
-          <span className="text-xs text-slate-500">Tùy chọn</span>
-          <input type="file" accept="image/*" onChange={handleFileChange} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-        </label>
-
-        {imagePreview || imageUrl ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imagePreview || imageUrl} alt="preview" className="h-28 w-28 rounded-xl object-cover" />
+      <CardDescription className="mt-1">Tạo sản phẩm và nhập tồn ban đầu ngay trong một form.</CardDescription>
+      <form className="mt-4 grid gap-5" onSubmit={onSubmit}>
+        <section className="grid gap-3">
+          <div>
+            <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Thông tin sản phẩm</h4>
           </div>
-        ) : null}
 
-        <div className="grid gap-3 md:grid-cols-2">
           <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Danh mục</span>
-            <span className="text-xs text-slate-500">Tùy chọn</span>
-            <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-              <option value="">Chọn danh mục</option>
-              {categoryOptions.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="text-left text-xs font-semibold text-emerald-700"
-              onClick={() => setShowCategoryCreator((prev) => !prev)}
-            >
-              + Thêm danh mục mới
-            </button>
-            {showCategoryCreator ? (
-              <div className="flex gap-2">
-                <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} />
-                <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
-                  Thêm
-                </Button>
-              </div>
-            ) : null}
+            <span className="text-sm font-semibold text-slate-700">Tên sản phẩm</span>
+            <Input placeholder="Tên sản phẩm" value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Mã sản phẩm / SKU</span>
+              <span className="text-xs text-slate-500">Để trống nếu muốn hệ thống tự tạo</span>
+              <Input placeholder="SKU" value={sku} onChange={(event) => setSku(event.target.value)} />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Giá bán</span>
+              <FormattedNumberInput
+                min={0}
+                value={sellingPrice}
+                onValueChange={setSellingPrice}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Giá bán"
+              />
+            </label>
+          </div>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-slate-700">Ảnh sản phẩm URL</span>
+            <Input placeholder="Ảnh sản phẩm URL" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
           </label>
 
           <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Thương hiệu</span>
-            <span className="text-xs text-slate-500">Tùy chọn</span>
-            <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={brandId} onChange={(event) => setBrandId(event.target.value)}>
-              <option value="">Chọn thương hiệu</option>
-              {brandOptions.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="text-left text-xs font-semibold text-emerald-700"
-              onClick={() => setShowBrandCreator((prev) => !prev)}
-            >
-              + Thêm thương hiệu mới
-            </button>
-            {showBrandCreator ? (
-              <div className="flex gap-2">
-                <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} />
-                <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
-                  Thêm
-                </Button>
-              </div>
-            ) : null}
+            <span className="text-sm font-semibold text-slate-700">Upload ảnh</span>
+            <input type="file" accept="image/*" onChange={handleFileChange} className="rounded-xl border border-slate-300 px-3 py-2 text-sm" />
           </label>
-        </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+          {imagePreview || imageUrl ? (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imagePreview || imageUrl} alt="preview" className="h-28 w-28 rounded-xl object-cover" />
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Danh mục</span>
+              <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+                <option value="">Chọn danh mục</option>
+                {categoryOptions.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="text-left text-xs font-semibold text-emerald-700" onClick={() => setShowCategoryCreator((prev) => !prev)}>
+                + Thêm danh mục mới
+              </button>
+              {showCategoryCreator ? (
+                <div className="flex gap-2">
+                  <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} />
+                  <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
+                    Thêm
+                  </Button>
+                </div>
+              ) : null}
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Thương hiệu</span>
+              <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={brandId} onChange={(event) => setBrandId(event.target.value)}>
+                <option value="">Chọn thương hiệu</option>
+                {brandOptions.map((brand) => (
+                  <option key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="text-left text-xs font-semibold text-emerald-700" onClick={() => setShowBrandCreator((prev) => !prev)}>
+                + Thêm thương hiệu mới
+              </button>
+              {showBrandCreator ? (
+                <div className="flex gap-2">
+                  <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} />
+                  <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
+                    Thêm
+                  </Button>
+                </div>
+              ) : null}
+            </label>
+          </div>
+        </section>
+
+        <section className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div>
+            <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Hàng tồn</h4>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Nhập tồn ban đầu</span>
+              <FormattedNumberInput
+                min={0}
+                value={initialStockQuantity}
+                onValueChange={setInitialStockQuantity}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Số lượng tồn ban đầu"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Kho / chi nhánh</span>
+              <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={stockBranchId} onChange={(event) => setStockBranchId(event.target.value)}>
+                <option value="">Chọn kho / chi nhánh</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Lô hàng</span>
+              <Input placeholder="Không bắt buộc" value={batchNumber} onChange={(event) => setBatchNumber(event.target.value)} />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-sm font-semibold text-slate-700">Ngày nhập tồn</span>
+              <Input type="date" value={stockDate} onChange={(event) => setStockDate(event.target.value)} />
+            </label>
+          </div>
+
           <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Giá vốn</span>
-            <span className="text-xs text-slate-500">Tùy chọn</span>
-            <Input type="number" placeholder="Giá vốn" value={costPrice} onChange={(event) => setCostPrice(event.target.value === "" ? "" : Number(event.target.value))} />
+            <span className="text-sm font-semibold text-slate-700">Ghi chú nhập tồn</span>
+            <textarea
+              className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              rows={3}
+              placeholder="Ghi chú nhập tồn"
+              value={stockNote}
+              onChange={(event) => setStockNote(event.target.value)}
+            />
           </label>
+        </section>
 
-          <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Giá bán</span>
-            <span className="text-xs text-slate-500">Bắt buộc</span>
-            <Input type="number" placeholder="Giá bán" value={sellingPrice} onChange={(event) => setSellingPrice(event.target.value === "" ? "" : Number(event.target.value))} />
-          </label>
-
-          <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Ngưỡng tồn</span>
-            <span className="text-xs text-slate-500">Tùy chọn</span>
-            <Input type="number" placeholder="Ngưỡng tồn" value={lowStockAlert} onChange={(event) => setLowStockAlert(event.target.value === "" ? "" : Number(event.target.value))} />
-          </label>
-        </div>
-
-        <label className="grid gap-1">
-          <span className="text-sm font-semibold text-slate-700">Trạng thái</span>
-          <span className="text-xs text-slate-500">Tùy chọn</span>
-          <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={status} onChange={(event) => setStatus(event.target.value as "ACTIVE" | "INACTIVE")}>
-            <option value="ACTIVE">Đang bán</option>
-            <option value="INACTIVE">Ngưng bán</option>
-          </select>
-        </label>
-
-        <label className="grid gap-1">
-          <span className="text-sm font-semibold text-slate-700">Mô tả</span>
-          <span className="text-xs text-slate-500">Tùy chọn</span>
-          <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Mô tả" value={description} onChange={(event) => setDescription(event.target.value)} />
-        </label>
-
-        <Button loading={isPending} disabled={!name.trim()}>
-          Thêm sản phẩm
-        </Button>
+        <Button loading={isPending}>Lưu sản phẩm</Button>
       </form>
     </Card>
   );
