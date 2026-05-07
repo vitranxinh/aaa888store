@@ -1,83 +1,22 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { unstable_cache } from "next/cache";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
 import { CustomerCreateForm } from "@/components/customer-create-form";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getCustomerDebtOverview } from "@/lib/customer-debt";
 import { getCustomerGroupOptions } from "@/lib/reference-data";
-import { formatCustomerDebt } from "@/lib/utils";
+import { formatCustomerDebt, formatDate } from "@/lib/utils";
 
 function displayCustomerPhone(phone: string | null) {
   return phone?.startsWith("AUTO_PHONE_") ? "" : phone ?? "";
 }
 
-const getCachedCustomersPageData = unstable_cache(
-  async ({
-    q,
-    page,
-    pageSize
-  }: {
-    q: string;
-    page: number;
-    pageSize: number;
-  }) => {
-    const startedAt = Date.now();
-    const customerWhere = {
-      NOT: { code: "KH000000" },
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" as const } },
-              { phone: { contains: q, mode: "insensitive" as const } },
-              { code: { contains: q, mode: "insensitive" as const } }
-            ]
-          }
-        : {})
-    };
-
-    const customers = await prisma.customer.findMany({
-      where: customerWhere,
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        phone: true,
-        email: true,
-        address: true,
-        note: true,
-        groupId: true,
-        openingDebt: true,
-        receivableDebt: true
-      },
-      orderBy: { code: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize + 1
-    });
-
-    const totalMs = Date.now() - startedAt;
-    const hasNext = customers.length > pageSize;
-    const visibleCustomers = hasNext ? customers.slice(0, pageSize) : customers;
-    console.info("[perf][customers-page]", {
-      q,
-      page,
-      pageSize,
-      rowCount: visibleCustomers.length,
-      totalMs
-    });
-
-    return { customers: visibleCustomers, hasNext };
-  },
-  ["customers-page-data"],
-  { revalidate: 15, tags: ["customers-page"] }
-);
-
-async function CustomersList({
+async function CustomerDebtList({
   q,
-  debtFilter,
+  sort,
   page,
   pageSize,
   canManageCustomers,
@@ -85,169 +24,174 @@ async function CustomersList({
   groupOptions
 }: {
   q: string;
-  debtFilter: string;
+  sort: "default" | "debt_desc" | "debt_asc";
   page: number;
   pageSize: number;
   canManageCustomers: boolean;
   canSeeCustomerPrivateFields: boolean;
   groupOptions: { id: string; name: string }[];
 }) {
-  const { customers, hasNext } = await getCachedCustomersPageData({
+  const { rows, hasNext } = await getCustomerDebtOverview({
     q,
     page,
-    pageSize
+    pageSize,
+    sort
   });
-
-  const filteredCustomers = customers
-    .map((customer) => ({
-      ...customer,
-      totalDebt: Number(customer.receivableDebt)
-    }))
-    .filter((customer) => (debtFilter === "has_debt" ? customer.totalDebt > 0 : true))
-    .sort((a, b) => {
-      if (debtFilter === "debt_desc") return b.totalDebt - a.totalDebt;
-      if (debtFilter === "debt_asc") return a.totalDebt - b.totalDebt;
-      return 0;
-    });
 
   return (
     <>
       <div className="grid gap-3 sm:hidden">
-        {filteredCustomers.map((customer) => (
-          <div key={customer.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[0.9rem] font-semibold uppercase tracking-wide text-slate-400">{customer.code}</p>
-                <Link prefetch={false} href={`/customers/${customer.id}`} className="mt-1 block text-[1.2rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline">
-                  {customer.name}
+        {rows.length === 0 ? (
+          <div className="rounded-[28px] border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500 shadow-soft">
+            Hiện chưa có khách hàng nào còn công nợ.
+          </div>
+        ) : (
+          rows.map((customer) => (
+            <div key={customer.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[0.9rem] font-semibold uppercase tracking-wide text-slate-400">{customer.code}</p>
+                  <Link prefetch={false} href={`/customers/${customer.id}`} className="mt-1 block text-[1.2rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline">
+                    {customer.name}
+                  </Link>
+                </div>
+                {canManageCustomers ? (
+                  <CustomerEditModal
+                    customer={{
+                      id: customer.id,
+                      code: customer.code,
+                      name: customer.name,
+                      phone: displayCustomerPhone(customer.phone),
+                      email: customer.email,
+                      address: customer.address,
+                      note: customer.note,
+                      groupId: customer.groupId,
+                      openingDebt: customer.openingDebt,
+                      currentDebt: customer.receivableDebt
+                    }}
+                    groups={groupOptions}
+                  />
+                ) : null}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
+                <div>
+                  <p className="text-[0.85rem] font-medium text-slate-400">Công nợ hiện tại</p>
+                  <p className="mt-1 text-[1.15rem] font-bold text-red-600">{formatCustomerDebt(customer.receivableDebt)}</p>
+                </div>
+                <div>
+                  <p className="text-[0.85rem] font-medium text-slate-400">Hóa đơn còn nợ</p>
+                  <p className="mt-1 text-[1rem] font-semibold text-slate-800">{customer.unpaidInvoiceCount}</p>
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-2 text-[0.95rem] text-slate-600">
+                <p>
+                  <span className="font-medium text-slate-500">{canSeeCustomerPrivateFields ? "SĐT" : "Thông tin"}:</span>{" "}
+                  {canSeeCustomerPrivateFields ? displayCustomerPhone(customer.phone) || "-" : "Đã ẩn với nhân viên"}
+                </p>
+                <p>
+                  <span className="font-medium text-slate-500">Hóa đơn gần nhất:</span>{" "}
+                  {customer.lastInvoiceDate ? formatDate(customer.lastInvoiceDate) : "-"}
+                </p>
+                <p>
+                  <span className="font-medium text-slate-500">Phiếu thu gần nhất:</span>{" "}
+                  {customer.lastReceiptDate ? formatDate(customer.lastReceiptDate) : "-"}
+                </p>
+              </div>
+
+              <div className="mt-3">
+                <Link
+                  prefetch={false}
+                  href={`/customers/${customer.id}`}
+                  className="inline-flex items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
+                >
+                  Xem chi tiết công nợ
                 </Link>
               </div>
-              {canManageCustomers ? (
-                <CustomerEditModal
-                  customer={{
-                    id: customer.id,
-                    code: customer.code,
-                    name: customer.name,
-                    phone: displayCustomerPhone(customer.phone),
-                    email: customer.email,
-                    address: customer.address,
-                    note: customer.note,
-                    groupId: customer.groupId,
-                    openingDebt: Number(customer.openingDebt),
-                    currentDebt: Number(customer.receivableDebt)
-                  }}
-                  groups={groupOptions}
-                />
-              ) : null}
             </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
-              <div>
-                <p className="text-[0.85rem] font-medium text-slate-400">{canSeeCustomerPrivateFields ? "Số điện thoại" : "Thông tin"}</p>
-                <p className="mt-1 text-[1rem] font-semibold text-slate-800">{canSeeCustomerPrivateFields ? displayCustomerPhone(customer.phone) || "-" : "Đã ẩn với nhân viên"}</p>
-              </div>
-              <div>
-                <p className="text-[0.85rem] font-medium text-slate-400">Công nợ</p>
-                <p className={`mt-1 text-[1.15rem] font-bold ${customer.totalDebt > 0 ? "text-red-600" : customer.totalDebt < 0 ? "text-emerald-700" : "text-slate-700"}`}>{formatCustomerDebt(customer.totalDebt)}</p>
-              </div>
-            </div>
-
-            {canSeeCustomerPrivateFields ? (
-              <div className="mt-3">
-                <p className="text-[0.85rem] font-medium text-slate-400">Địa chỉ</p>
-                <p className="mt-1 text-[1rem] leading-relaxed text-slate-700">{customer.address || "-"}</p>
-              </div>
-            ) : null}
-
-            <div className="mt-3">
-              <Link
-                prefetch={false}
-                href={`/customers/${customer.id}`}
-                className="inline-flex items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"
-              >
-                Xem chi tiết công nợ
-              </Link>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft sm:block">
-        <table
-          className={`w-full table-fixed text-left ${
-            canSeeCustomerPrivateFields ? "min-w-[980px]" : "min-w-[840px]"
-          }`}
-        >
+        <table className={`w-full table-fixed text-left ${canSeeCustomerPrivateFields ? "min-w-[1120px]" : "min-w-[980px]"}`}>
           <thead className="bg-slate-50 text-[15px] font-semibold text-slate-500 sm:text-xl">
             <tr>
-              <th className="w-[16%] px-3 py-3 sm:px-6 sm:py-4">Mã KH</th>
-              <th className={`${canSeeCustomerPrivateFields ? "w-[20%]" : "w-[28%]"} px-3 py-3 sm:px-6 sm:py-4`}>Tên</th>
-              {canSeeCustomerPrivateFields ? <th className="w-[17%] px-3 py-3 sm:px-6 sm:py-4">SĐT</th> : null}
-              {canSeeCustomerPrivateFields ? <th className="w-[23%] px-3 py-3 sm:px-6 sm:py-4">Địa chỉ</th> : null}
-              <th className="w-[12%] px-3 py-3 text-right text-red-600 sm:px-6 sm:py-4">Công nợ</th>
-              <th className="w-[12%] px-3 py-3 sm:px-6 sm:py-4">Chi tiết</th>
-              {canManageCustomers ? <th className="w-[12%] px-3 py-3 text-right sm:px-6 sm:py-4">Thao tác</th> : null}
+              <th className="w-[20%] px-3 py-3 sm:px-6 sm:py-4">Khách hàng</th>
+              {canSeeCustomerPrivateFields ? <th className="w-[14%] px-3 py-3 sm:px-6 sm:py-4">SĐT</th> : null}
+              <th className="w-[14%] px-3 py-3 text-right text-red-600 sm:px-6 sm:py-4">Công nợ hiện tại</th>
+              <th className="w-[14%] px-3 py-3 text-center sm:px-6 sm:py-4">Hóa đơn còn nợ</th>
+              <th className="w-[16%] px-3 py-3 sm:px-6 sm:py-4">Hóa đơn gần nhất</th>
+              <th className="w-[16%] px-3 py-3 sm:px-6 sm:py-4">Phiếu thu gần nhất</th>
+              <th className="w-[10%] px-3 py-3 sm:px-6 sm:py-4">Chi tiết</th>
+              {canManageCustomers ? <th className="w-[10%] px-3 py-3 text-right sm:px-6 sm:py-4">Thao tác</th> : null}
             </tr>
           </thead>
           <tbody>
-            {filteredCustomers.map((customer) => (
-              <tr key={customer.id} className="border-t border-slate-100 align-top text-[15px] text-slate-700 sm:text-2xl">
-                <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{customer.code}</td>
-                <td className="break-words px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">
-                  <Link prefetch={false} href={`/customers/${customer.id}`} className="underline-offset-2 hover:underline">
-                    {customer.name}
-                  </Link>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={canManageCustomers ? (canSeeCustomerPrivateFields ? 8 : 7) : canSeeCustomerPrivateFields ? 7 : 6} className="px-3 py-10 text-center text-sm text-slate-400 sm:px-6 sm:py-12 sm:text-2xl">
+                  Hiện chưa có khách hàng nào còn công nợ.
                 </td>
-                {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{displayCustomerPhone(customer.phone)}</td> : null}
-                {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{customer.address || "-"}</td> : null}
-                <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${customer.totalDebt > 0 ? "text-red-600" : customer.totalDebt < 0 ? "text-emerald-700" : "text-slate-700"}`}>
-                  {formatCustomerDebt(customer.totalDebt)}
-                </td>
-                <td className="px-3 py-3 sm:px-6 sm:py-4">
-                  <Link
-                    prefetch={false}
-                    href={`/customers/${customer.id}`}
-                    className="inline-flex max-w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-center text-sm font-semibold leading-snug text-red-700"
-                  >
-                    Xem chi tiết công nợ
-                  </Link>
-                </td>
-                {canManageCustomers ? (
-                  <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
-                    <CustomerEditModal
-                      customer={{
-                        id: customer.id,
-                        code: customer.code,
-                        name: customer.name,
-                        phone: displayCustomerPhone(customer.phone),
-                        email: customer.email,
-                        address: customer.address,
-                        note: customer.note,
-                        groupId: customer.groupId,
-                        openingDebt: Number(customer.openingDebt),
-                        currentDebt: Number(customer.receivableDebt)
-                      }}
-                      groups={groupOptions}
-                    />
-                  </td>
-                ) : null}
               </tr>
-            ))}
+            ) : (
+              rows.map((customer) => (
+                <tr key={customer.id} className="border-t border-slate-100 align-top text-[15px] text-slate-700 sm:text-2xl">
+                  <td className="break-words px-3 py-3 sm:px-6 sm:py-4">
+                    <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">{customer.code}</p>
+                    <Link prefetch={false} href={`/customers/${customer.id}`} className="mt-1 block font-semibold text-slate-900 underline-offset-2 hover:underline">
+                      {customer.name}
+                    </Link>
+                  </td>
+                  {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{displayCustomerPhone(customer.phone) || "-"}</td> : null}
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-red-600 sm:px-6 sm:py-4">
+                    {formatCustomerDebt(customer.receivableDebt)}
+                  </td>
+                  <td className="px-3 py-3 text-center font-semibold text-slate-900 sm:px-6 sm:py-4">{customer.unpaidInvoiceCount}</td>
+                  <td className="px-3 py-3 sm:px-6 sm:py-4">{customer.lastInvoiceDate ? formatDate(customer.lastInvoiceDate) : "-"}</td>
+                  <td className="px-3 py-3 sm:px-6 sm:py-4">{customer.lastReceiptDate ? formatDate(customer.lastReceiptDate) : "-"}</td>
+                  <td className="px-3 py-3 sm:px-6 sm:py-4">
+                    <Link
+                      prefetch={false}
+                      href={`/customers/${customer.id}`}
+                      className="inline-flex max-w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-center text-sm font-semibold leading-snug text-red-700"
+                    >
+                      Xem chi tiết công nợ
+                    </Link>
+                  </td>
+                  {canManageCustomers ? (
+                    <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
+                      <CustomerEditModal
+                        customer={{
+                          id: customer.id,
+                          code: customer.code,
+                          name: customer.name,
+                          phone: displayCustomerPhone(customer.phone),
+                          email: customer.email,
+                          address: customer.address,
+                          note: customer.note,
+                          groupId: customer.groupId,
+                          openingDebt: customer.openingDebt,
+                          currentDebt: customer.receivableDebt
+                        }}
+                        groups={groupOptions}
+                      />
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
-      <ServerPagination
-        pathname="/customers"
-        query={{ q, debt: debtFilter }}
-        page={page}
-        pageSize={pageSize}
-        hasNext={hasNext}
-      />
+
+      <ServerPagination pathname="/customers" query={{ q, debt: sort }} page={page} pageSize={pageSize} hasNext={hasNext} />
     </>
   );
 }
 
-function CustomersListFallback() {
+function CustomerDebtListFallback() {
   return (
     <div className="grid gap-3">
       {Array.from({ length: 6 }).map((_, index) => (
@@ -271,17 +215,16 @@ export default async function CustomersPage({
   const canManageCustomers = session.role !== "CASHIER";
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
   const q = searchParams?.q ?? "";
-  const debtFilter = searchParams?.debt ?? "default";
+  const sort = ((searchParams?.debt ?? "default") as "default" | "debt_desc" | "debt_asc");
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 20;
 
   const groups = await getCustomerGroupOptions();
-
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
 
   return (
     <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Khách hàng" description="Quản lý danh sách khách hàng và công nợ" session={session} />
+      <AppHeader title="Khách hàng" description="Công nợ hiện tại chỉ tính từ hóa đơn còn nợ và phiếu thu của khách" session={session} />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <form className="flex w-full max-w-4xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -296,13 +239,12 @@ export default async function CustomersPage({
           />
           <select
             name="debt"
-            defaultValue={debtFilter}
+            defaultValue={sort}
             className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:text-lg"
           >
             <option value="default">Mặc định</option>
             <option value="debt_desc">Nợ cao đến thấp</option>
             <option value="debt_asc">Nợ thấp đến cao</option>
-            <option value="has_debt">Chỉ khách còn nợ</option>
           </select>
           <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
             Lọc
@@ -322,10 +264,10 @@ export default async function CustomersPage({
         ) : null}
       </div>
 
-      <Suspense fallback={<CustomersListFallback />}>
-        <CustomersList
+      <Suspense fallback={<CustomerDebtListFallback />}>
+        <CustomerDebtList
           q={q}
-          debtFilter={debtFilter}
+          sort={sort}
           page={page}
           pageSize={pageSize}
           canManageCustomers={canManageCustomers}

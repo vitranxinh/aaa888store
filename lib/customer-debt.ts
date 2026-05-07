@@ -1,0 +1,351 @@
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { parseVietnamDateInput } from "@/lib/date-range";
+
+export type CustomerInvoiceHistoryStatus = "all" | "unpaid" | "partial" | "paid";
+
+export type CustomerDebtOverviewItem = {
+  id: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  note: string | null;
+  groupId: string | null;
+  openingDebt: number;
+  receivableDebt: number;
+  unpaidInvoiceCount: number;
+  lastInvoiceDate: Date | null;
+  lastReceiptDate: Date | null;
+};
+
+export type CustomerReceiptItem = {
+  id: string;
+  code: string;
+  createdAt: Date;
+  amount: number;
+  note: string | null;
+  orderId: string | null;
+  orderCode: string | null;
+  paymentMethodLabel: string;
+};
+
+export type CustomerInvoiceItem = {
+  id: string;
+  code: string;
+  createdAt: Date;
+  grandTotal: number;
+  paidAmount: number;
+  debtAmount: number;
+  status: string;
+  note: string | null;
+};
+
+function toNumber(value: Prisma.Decimal | number | null | undefined) {
+  return Number(value ?? 0);
+}
+
+function getPaymentMethodLabel(paymentMethod: string | null | undefined) {
+  if (paymentMethod === "BANK_TRANSFER") return "Chuyển khoản";
+  if (paymentMethod === "MIXED") return "Hỗn hợp";
+  if (paymentMethod === "CASH") return "Tiền mặt";
+  return "Không rõ";
+}
+
+export function resolveCustomerHistoryFilters(searchParams?: {
+  from?: string;
+  to?: string;
+  status?: string;
+  code?: string;
+  history?: string;
+}) {
+  const status = (searchParams?.status ?? "all") as CustomerInvoiceHistoryStatus;
+  const code = searchParams?.code?.trim() ?? "";
+  const history = searchParams?.history ?? "";
+  const from = searchParams?.from ?? "";
+  const to = searchParams?.to ?? "";
+
+  let gte: Date | undefined;
+  let lte: Date | undefined;
+
+  if (history !== "all") {
+    if (from || to) {
+      gte = from ? parseVietnamDateInput(from, false) : undefined;
+      lte = to ? parseVietnamDateInput(to, true) : undefined;
+    } else {
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(start.getDate() - 89);
+      start.setHours(0, 0, 0, 0);
+      gte = start;
+    }
+  }
+
+  return { status, code, history, from, to, gte, lte };
+}
+
+export function buildCustomerInvoiceHistoryWhere(
+  customerId: string,
+  filters: ReturnType<typeof resolveCustomerHistoryFilters>
+): Prisma.OrderWhereInput {
+  const where: Prisma.OrderWhereInput = {
+    customerId,
+    ...(filters.code
+      ? {
+          code: {
+            contains: filters.code,
+            mode: "insensitive"
+          }
+        }
+      : {}),
+    ...(filters.gte || filters.lte
+      ? {
+          createdAt: {
+            ...(filters.gte ? { gte: filters.gte } : {}),
+            ...(filters.lte ? { lte: filters.lte } : {})
+          }
+        }
+      : {})
+  };
+
+  if (filters.status === "unpaid") {
+    where.debtAmount = { gt: 0 };
+    where.paidAmount = { lte: 0 };
+  } else if (filters.status === "partial") {
+    where.debtAmount = { gt: 0 };
+    where.paidAmount = { gt: 0 };
+  } else if (filters.status === "paid") {
+    where.debtAmount = { lte: 0 };
+  }
+
+  return where;
+}
+
+export async function getCustomerDebtOverview({
+  q,
+  page,
+  pageSize,
+  sort
+}: {
+  q: string;
+  page: number;
+  pageSize: number;
+  sort: "default" | "debt_desc" | "debt_asc";
+}) {
+  const startedAt = Date.now();
+  const where: Prisma.CustomerWhereInput = {
+    NOT: { code: "KH000000" },
+    receivableDebt: { gt: 0 },
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { phone: { contains: q, mode: "insensitive" } },
+            { code: { contains: q, mode: "insensitive" } }
+          ]
+        }
+      : {})
+  };
+
+  const orderBy: Prisma.CustomerOrderByWithRelationInput =
+    sort === "debt_desc"
+      ? { receivableDebt: "desc" }
+      : sort === "debt_asc"
+        ? { receivableDebt: "asc" }
+        : { updatedAt: "desc" };
+
+  const customers = await prisma.customer.findMany({
+    where,
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      phone: true,
+      email: true,
+      address: true,
+      note: true,
+      groupId: true,
+      openingDebt: true,
+      receivableDebt: true
+    },
+    orderBy,
+    skip: (page - 1) * pageSize,
+    take: pageSize + 1
+  });
+
+  const hasNext = customers.length > pageSize;
+  const visibleCustomers = hasNext ? customers.slice(0, pageSize) : customers;
+  const customerIds = visibleCustomers.map((customer) => customer.id);
+
+  const [unpaidInvoiceGroups, receiptGroups] = await Promise.all([
+    customerIds.length
+      ? prisma.order.groupBy({
+          by: ["customerId"],
+          where: {
+            customerId: { in: customerIds },
+            debtAmount: { gt: 0 }
+          },
+          _count: { _all: true },
+          _max: { createdAt: true }
+        })
+      : Promise.resolve([]),
+    customerIds.length
+      ? prisma.cashTransaction.groupBy({
+          by: ["customerId"],
+          where: {
+            customerId: { in: customerIds },
+            type: "RECEIPT"
+          },
+          _max: { createdAt: true }
+        })
+      : Promise.resolve([])
+  ]);
+
+  const unpaidMap = new Map(
+    unpaidInvoiceGroups.map((item) => [
+      item.customerId ?? "",
+      {
+        count: item._count._all,
+        lastInvoiceDate: item._max.createdAt ?? null
+      }
+    ])
+  );
+
+  const receiptMap = new Map(
+    receiptGroups.map((item) => [item.customerId ?? "", item._max.createdAt ?? null])
+  );
+
+  const rows: CustomerDebtOverviewItem[] = visibleCustomers.map((customer) => {
+    const unpaid = unpaidMap.get(customer.id);
+    return {
+      ...customer,
+      openingDebt: toNumber(customer.openingDebt),
+      receivableDebt: toNumber(customer.receivableDebt),
+      unpaidInvoiceCount: unpaid?.count ?? 0,
+      lastInvoiceDate: unpaid?.lastInvoiceDate ?? null,
+      lastReceiptDate: receiptMap.get(customer.id) ?? null
+    };
+  });
+
+  console.info("[CustomerDebtPerformance][overview]", {
+    q,
+    page,
+    pageSize,
+    rowCount: rows.length,
+    totalMs: Date.now() - startedAt
+  });
+
+  return { rows, hasNext };
+}
+
+export async function getCustomerDebtDetail(customerId: string, filters: ReturnType<typeof resolveCustomerHistoryFilters>) {
+  const startedAt = Date.now();
+  const historyWhere = buildCustomerInvoiceHistoryWhere(customerId, filters);
+
+  const [customer, activeInvoices, receipts, invoiceHistory] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id: customerId }
+    }),
+    prisma.order.findMany({
+      where: {
+        customerId,
+        debtAmount: { gt: 0 }
+      },
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        grandTotal: true,
+        paidAmount: true,
+        debtAmount: true,
+        status: true,
+        note: true
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.cashTransaction.findMany({
+      where: {
+        customerId,
+        type: "RECEIPT"
+      },
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        amount: true,
+        note: true,
+        orderId: true,
+        order: {
+          select: {
+            code: true,
+            paymentMethod: true
+          }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.order.findMany({
+      where: historyWhere,
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        grandTotal: true,
+        paidAmount: true,
+        debtAmount: true,
+        status: true,
+        note: true
+      },
+      orderBy: { createdAt: "desc" }
+    })
+  ]);
+
+  const normalizedActiveInvoices: CustomerInvoiceItem[] = activeInvoices.map((invoice) => ({
+    id: invoice.id,
+    code: invoice.code,
+    createdAt: invoice.createdAt,
+    grandTotal: toNumber(invoice.grandTotal),
+    paidAmount: toNumber(invoice.paidAmount),
+    debtAmount: toNumber(invoice.debtAmount),
+    status: invoice.status,
+    note: invoice.note
+  }));
+
+  const normalizedReceipts: CustomerReceiptItem[] = receipts.map((receipt) => ({
+    id: receipt.id,
+    code: receipt.code,
+    createdAt: receipt.createdAt,
+    amount: toNumber(receipt.amount),
+    note: receipt.note,
+    orderId: receipt.orderId,
+    orderCode: receipt.order?.code ?? null,
+    paymentMethodLabel: getPaymentMethodLabel(receipt.order?.paymentMethod)
+  }));
+
+  const normalizedInvoiceHistory: CustomerInvoiceItem[] = invoiceHistory.map((invoice) => ({
+    id: invoice.id,
+    code: invoice.code,
+    createdAt: invoice.createdAt,
+    grandTotal: toNumber(invoice.grandTotal),
+    paidAmount: toNumber(invoice.paidAmount),
+    debtAmount: toNumber(invoice.debtAmount),
+    status: invoice.status,
+    note: invoice.note
+  }));
+
+  console.info("[CustomerDebtPerformance][detail]", {
+    customerId,
+    activeInvoiceCount: normalizedActiveInvoices.length,
+    receiptCount: normalizedReceipts.length,
+    historyCount: normalizedInvoiceHistory.length,
+    totalMs: Date.now() - startedAt
+  });
+
+  return {
+    customer,
+    activeInvoices: normalizedActiveInvoices,
+    receipts: normalizedReceipts,
+    invoiceHistory: normalizedInvoiceHistory
+  };
+}

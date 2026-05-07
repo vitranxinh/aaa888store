@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
 import { requireSession } from "@/lib/auth";
+import {
+  getCustomerDebtDetail,
+  resolveCustomerHistoryFilters,
+  type CustomerInvoiceHistoryStatus
+} from "@/lib/customer-debt";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatCustomerDebt, formatDate } from "@/lib/utils";
 
@@ -10,98 +15,36 @@ function displayCustomerPhone(phone: string | null) {
   return phone?.startsWith("AUTO_PHONE_") ? "" : phone ?? "";
 }
 
-type DebtHistoryItem = {
-  id: string;
-  code: string;
-  createdAt: Date;
-  kind: "ORDER_DEBT" | "RECEIPT";
-  orderCode?: string | null;
-  grandTotal?: number;
-  paidAmount?: number;
-  debtAmount?: number;
-  amount?: number;
-  note: string | null;
-};
+function getHistoryStatusLabel(status: CustomerInvoiceHistoryStatus) {
+  if (status === "unpaid") return "Chưa thanh toán";
+  if (status === "partial") return "Thanh toán một phần";
+  if (status === "paid") return "Đã thanh toán";
+  return "Tất cả";
+}
 
 export default async function CustomerDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: { id: string };
+  searchParams?: { from?: string; to?: string; status?: string; code?: string; history?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canManageCustomers = session.role !== "CASHIER";
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
+  const filters = resolveCustomerHistoryFilters(searchParams);
 
-  const [customer, groups, debtOrders, receiptTransactions] = await Promise.all([
-    prisma.customer.findUnique({
-      where: { id: params.id }
-    }),
+  const [groups, detail] = await Promise.all([
     prisma.customerGroup.findMany({ orderBy: { name: "asc" } }),
-    prisma.order.findMany({
-      where: {
-        customerId: params.id,
-        status: { in: ["COMPLETED", "PARTIAL"] }
-      },
-      select: {
-        id: true,
-        code: true,
-        createdAt: true,
-        grandTotal: true,
-        paidAmount: true,
-        debtAmount: true,
-        note: true
-      },
-      orderBy: [{ createdAt: "desc" }]
-    }),
-    prisma.cashTransaction.findMany({
-      where: {
-        customerId: params.id,
-        type: "RECEIPT"
-      },
-      select: {
-        id: true,
-        code: true,
-        createdAt: true,
-        amount: true,
-        note: true,
-        order: {
-          select: {
-            code: true
-          }
-        }
-      },
-      orderBy: [{ createdAt: "desc" }]
-    })
+    getCustomerDebtDetail(params.id, filters)
   ]);
 
-  if (!customer || customer.code === "KH000000") {
+  if (!detail.customer || detail.customer.code === "KH000000") {
     notFound();
   }
 
-  const debtHistory: DebtHistoryItem[] = [
-    ...debtOrders
-      .filter((order) => Number(order.debtAmount ?? 0) > 0)
-      .map((order) => ({
-        id: order.id,
-        code: order.code,
-        createdAt: order.createdAt,
-        kind: "ORDER_DEBT" as const,
-        grandTotal: Number(order.grandTotal),
-        paidAmount: Number(order.paidAmount),
-        debtAmount: Number(order.debtAmount),
-        note: order.note
-      })),
-    ...receiptTransactions.map((receipt) => ({
-      id: receipt.id,
-      code: receipt.code,
-      createdAt: receipt.createdAt,
-      kind: "RECEIPT" as const,
-      orderCode: receipt.order?.code ?? null,
-      amount: Number(receipt.amount),
-      note: receipt.note
-    }))
-  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
+  const customer = detail.customer;
+  const activeDebtTotal = detail.activeInvoices.reduce((sum, invoice) => sum + invoice.debtAmount, 0);
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
 
   return (
@@ -115,6 +58,7 @@ export default async function CustomerDetailPage({
       <div className="flex flex-wrap gap-2">
         <Link
           href="/customers"
+          prefetch={false}
           className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm sm:text-base"
         >
           Quay lại khách hàng
@@ -153,7 +97,7 @@ export default async function CustomerDetailPage({
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-medium text-slate-500">Công nợ hiện tại</p>
-            <p className={`mt-1 text-lg font-bold sm:text-xl ${Number(customer.receivableDebt) > 0 ? "text-red-600" : Number(customer.receivableDebt) < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+            <p className={`mt-1 text-lg font-bold sm:text-xl ${Number(customer.receivableDebt) > 0 ? "text-red-600" : "text-slate-700"}`}>
               {formatCustomerDebt(Number(customer.receivableDebt))}
             </p>
           </div>
@@ -173,72 +117,207 @@ export default async function CustomerDetailPage({
       </section>
 
       <section className="rounded-3xl border border-red-100 bg-red-50/60 p-4 shadow-soft sm:p-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Chi tiết công nợ</h2>
-            <p className="mt-1 text-sm text-slate-500 sm:text-base">Record cả hóa đơn còn nợ và các phiếu thu để dễ đối chiếu.</p>
+            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Công nợ hiện tại</h2>
+            <p className="mt-1 text-sm text-slate-500 sm:text-base">Chỉ tính từ hóa đơn còn nợ và phiếu thu của khách hàng.</p>
           </div>
           <div className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-red-600 sm:text-base">
-            {debtHistory.length} giao dịch
+            {formatCustomerDebt(activeDebtTotal)}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">Công nợ hiện tại</p>
+            <p className="mt-2 text-xl font-bold text-red-600">{formatCustomerDebt(activeDebtTotal)}</p>
+          </div>
+          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">Hóa đơn còn nợ</p>
+            <p className="mt-2 text-xl font-bold text-slate-900">{detail.activeInvoices.length}</p>
+          </div>
+          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">Phiếu thu</p>
+            <p className="mt-2 text-xl font-bold text-slate-900">{detail.receipts.length}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Hóa đơn còn nợ</h2>
+            <p className="mt-1 text-sm text-slate-500 sm:text-base">Chỉ hiện hóa đơn chưa thanh toán hoặc thanh toán một phần.</p>
           </div>
         </div>
 
         <div className="mt-4 space-y-3">
-          {debtHistory.length ? (
-            debtHistory.map((entry) => (
-              <div key={`${entry.kind}-${entry.id}`} className="rounded-2xl border border-white bg-white px-4 py-4 shadow-sm">
+          {detail.activeInvoices.length ? (
+            detail.activeInvoices.map((invoice) => (
+              <div key={invoice.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    {entry.kind === "ORDER_DEBT" ? (
-                      <Link href={`/orders/${entry.id}`} className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-lg">
-                        {entry.code}
-                      </Link>
-                    ) : (
-                      <p className="text-base font-bold text-emerald-700 sm:text-lg">{entry.code}</p>
-                    )}
-                    <p className="mt-1 text-sm text-slate-500 sm:text-base">Ngày tạo: {formatDate(entry.createdAt)}</p>
+                    <Link prefetch={false} href={`/orders/${invoice.id}`} className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-lg">
+                      {invoice.code}
+                    </Link>
+                    <p className="mt-1 text-sm text-slate-500 sm:text-base">Ngày tạo: {formatDate(invoice.createdAt)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-slate-500 sm:text-sm">{entry.kind === "ORDER_DEBT" ? "Còn nợ" : "Đã thu"}</p>
-                    <p className={`text-base font-bold sm:text-lg ${entry.kind === "ORDER_DEBT" ? "text-red-600" : "text-emerald-700"}`}>
-                      {formatCurrency(entry.kind === "ORDER_DEBT" ? (entry.debtAmount ?? 0) : (entry.amount ?? 0))}
-                    </p>
+                    <p className="text-xs text-slate-500 sm:text-sm">Còn nợ</p>
+                    <p className="text-base font-bold text-red-600 sm:text-lg">{formatCurrency(invoice.debtAmount)}</p>
                   </div>
                 </div>
-
-                {entry.kind === "ORDER_DEBT" ? (
-                  <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 sm:text-base">
-                    <div>
-                      <span className="font-medium text-slate-500">Tổng hóa đơn:</span> {formatCurrency(entry.grandTotal ?? 0)}
-                    </div>
-                    <div>
-                      <span className="font-medium text-slate-500">Đã trả:</span> {formatCurrency(entry.paidAmount ?? 0)}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-3 space-y-1 text-sm text-slate-600 sm:text-base">
-                    <div>
-                      <span className="font-medium text-slate-500">Loại giao dịch:</span>{" "}
-                      {entry.orderCode ? "Phiếu thu gắn hóa đơn" : "Phiếu thu không gắn hóa đơn"}
-                    </div>
-                    {entry.orderCode ? (
-                      <div>
-                        <span className="font-medium text-slate-500">Thu cho hóa đơn:</span> {entry.orderCode}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-
-                {entry.note ? (
+                <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3 sm:text-base">
+                  <div><span className="font-medium text-slate-500">Tổng hóa đơn:</span> {formatCurrency(invoice.grandTotal)}</div>
+                  <div><span className="font-medium text-slate-500">Đã trả:</span> {formatCurrency(invoice.paidAmount)}</div>
+                  <div><span className="font-medium text-slate-500">Trạng thái thanh toán:</span> {invoice.paidAmount > 0 ? "Thanh toán một phần" : "Chưa thanh toán"}</div>
+                </div>
+                {invoice.note ? (
                   <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
-                    <span className="font-medium">Ghi chú:</span> {entry.note}
+                    <span className="font-medium">Ghi chú:</span> {invoice.note}
                   </p>
                 ) : null}
               </div>
             ))
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:text-base">
-              Khách hàng này chưa có công nợ hoặc phiếu thu để đối chiếu.
+              Khách hàng này hiện không còn hóa đơn nào đang nợ.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Phiếu thu</h2>
+            <p className="mt-1 text-sm text-slate-500 sm:text-base">Lịch sử các phiếu thu đã ghi nhận cho khách hàng này.</p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {detail.receipts.length ? (
+            detail.receipts.map((receipt) => (
+              <div key={receipt.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-base font-bold text-emerald-700 sm:text-lg">{receipt.code}</p>
+                    <p className="mt-1 text-sm text-slate-500 sm:text-base">Ngày tạo: {formatDate(receipt.createdAt)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500 sm:text-sm">Số tiền</p>
+                    <p className="text-base font-bold text-emerald-700 sm:text-lg">{formatCurrency(receipt.amount)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 sm:text-base">
+                  <div>
+                    <span className="font-medium text-slate-500">Liên kết hóa đơn:</span>{" "}
+                    {receipt.orderId && receipt.orderCode ? (
+                      <Link prefetch={false} href={`/orders/${receipt.orderId}`} className="text-emerald-700 underline-offset-2 hover:underline">
+                        {receipt.orderCode}
+                      </Link>
+                    ) : (
+                      "Không gắn hóa đơn"
+                    )}
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-500">Phương thức thanh toán:</span> {receipt.paymentMethodLabel}
+                  </div>
+                </div>
+                {receipt.note ? (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
+                    <span className="font-medium">Ghi chú:</span> {receipt.note}
+                  </p>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:text-base">
+              Khách hàng này chưa có phiếu thu nào.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Lịch sử hóa đơn</h2>
+            <p className="mt-1 text-sm text-slate-500 sm:text-base">Hiển thị toàn bộ hóa đơn của khách, kể cả hóa đơn đã thanh toán đủ.</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600">
+            Bộ lọc hiện tại: {getHistoryStatusLabel(filters.status)}{filters.history === "all" ? " / Tất cả thời gian" : filters.from || filters.to ? " / Tự chọn ngày" : " / 90 ngày gần nhất"}
+          </div>
+        </div>
+
+        <form className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1.2fr_auto_auto] lg:items-end">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-500">Từ ngày</label>
+            <input name="from" type="date" defaultValue={filters.from} className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm shadow-soft outline-none sm:text-base" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-500">Đến ngày</label>
+            <input name="to" type="date" defaultValue={filters.to} className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm shadow-soft outline-none sm:text-base" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-500">Trạng thái thanh toán</label>
+            <select name="status" defaultValue={filters.status} className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm shadow-soft outline-none sm:text-base">
+              <option value="all">Tất cả</option>
+              <option value="unpaid">Chưa thanh toán</option>
+              <option value="partial">Thanh toán một phần</option>
+              <option value="paid">Đã thanh toán</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-500">Tìm theo mã hóa đơn</label>
+            <input name="code" defaultValue={filters.code} placeholder="VD: HD000123" className="h-11 w-full rounded-2xl border border-slate-200 px-4 text-sm shadow-soft outline-none sm:text-base" />
+          </div>
+          <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:text-base">
+            Lọc
+          </button>
+          <Link
+            prefetch={false}
+            href={`/customers/${customer.id}?history=all`}
+            className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:text-base"
+          >
+            Xóa bộ lọc
+          </Link>
+        </form>
+
+        <div className="mt-4 space-y-3">
+          {detail.invoiceHistory.length ? (
+            detail.invoiceHistory.map((invoice) => (
+              <div key={invoice.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <Link prefetch={false} href={`/orders/${invoice.id}`} className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-lg">
+                      {invoice.code}
+                    </Link>
+                    <p className="mt-1 text-sm text-slate-500 sm:text-base">Ngày tạo: {formatDate(invoice.createdAt)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500 sm:text-sm">Tổng hóa đơn</p>
+                    <p className="text-base font-bold text-slate-900 sm:text-lg">{formatCurrency(invoice.grandTotal)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3 sm:text-base">
+                  <div><span className="font-medium text-slate-500">Đã trả:</span> {formatCurrency(invoice.paidAmount)}</div>
+                  <div><span className="font-medium text-slate-500">Còn nợ:</span> {formatCurrency(invoice.debtAmount)}</div>
+                  <div>
+                    <span className="font-medium text-slate-500">Trạng thái thanh toán:</span>{" "}
+                    {invoice.debtAmount <= 0 ? "Đã thanh toán" : invoice.paidAmount > 0 ? "Thanh toán một phần" : "Chưa thanh toán"}
+                  </div>
+                </div>
+                {invoice.note ? (
+                  <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
+                    <span className="font-medium">Ghi chú:</span> {invoice.note}
+                  </p>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:text-base">
+              Không có hóa đơn nào khớp bộ lọc hiện tại.
             </div>
           )}
         </div>
