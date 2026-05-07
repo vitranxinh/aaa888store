@@ -328,6 +328,10 @@ model Order {
   paidAmount      Decimal                @db.Decimal(14, 2)
   debtAmount      Decimal                @default(0) @db.Decimal(14, 2)
   note            String?
+  pdfUrl          String?
+  pdfFileName     String?
+  pdfSize         Int?
+  pdfGeneratedAt  DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   branch          Branch                 @relation(fields: [branchId], references: [id])

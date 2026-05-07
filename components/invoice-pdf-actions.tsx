@@ -34,6 +34,8 @@ type Props = {
   debtAmount: number;
   grandTotal: number;
   items: InvoiceItem[];
+  pdfUrl?: string | null;
+  pdfFileName?: string | null;
 };
 
 export function InvoicePdfActions(props: Props) {
@@ -87,6 +89,17 @@ export function InvoicePdfActions(props: Props) {
   async function sharePdf() {
     try {
       setIsBusy(true);
+
+      if (props.pdfUrl) {
+        const anchor = document.createElement("a");
+        anchor.href = props.pdfUrl;
+        anchor.target = "_blank";
+        anchor.rel = "noreferrer";
+        anchor.download = props.pdfFileName || `${props.code.toLowerCase()}-hoa-don.pdf`;
+        anchor.click();
+        return;
+      }
+
       const file = await buildPdfFile();
 
       if (

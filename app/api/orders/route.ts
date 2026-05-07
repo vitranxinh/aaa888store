@@ -1,67 +1,24 @@
 import { NextResponse } from "next/server";
-
-export const preferredRegion = 'sin1';
-import { Prisma } from "@prisma/client";
-import { requireApiSession, resolveActorUserId } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
+import { requireApiSession } from "@/lib/auth";
+import { generateAndStoreInvoicePdf } from "@/lib/invoice-pdf";
 import { createOrderFromPayload } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { posCheckoutSchema } from "@/lib/validations";
 
-function isBusinessValidationError(message: string) {
-  return /không tìm thấy|không đủ|không hợp lệ|giỏ hàng|tồn kho|khách hàng|sản phẩm/i.test(message);
-}
-
-function apiErrorResponse(error: unknown, startedAt: number) {
-  const message = error instanceof Error ? error.message : String(error || "");
-
-  if (message === "UNAUTHORIZED") {
-    return NextResponse.json({ error: "Bạn cần đăng nhập" }, { status: 401 });
-  }
-
-  if (message === "FORBIDDEN") {
-    return NextResponse.json({ error: "Bạn không có quyền thao tác" }, { status: 403 });
-  }
-
-  if (isBusinessValidationError(message)) {
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
-
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    if (error.code === "P2003") {
-      return NextResponse.json({ error: "Dữ liệu hóa đơn tham chiếu không hợp lệ" }, { status: 400 });
-    }
-
-    if (error.code === "P2002") {
-      return NextResponse.json({ error: "Mã hóa đơn bị trùng, vui lòng thử lại" }, { status: 409 });
-    }
-  }
-
-  console.error("[CreateOrderError]", {
-    totalMs: Date.now() - startedAt,
-    message,
-    code: error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined,
-    stack: error instanceof Error ? error.stack : String(error)
-  });
-
-  return NextResponse.json(
-    {
-      error: /prisma|transaction|timed out|already closed|write conflict|deadlock/i.test(message)
-        ? "Tạo hóa đơn đang chậm hơn bình thường, vui lòng thử lại."
-        : message || "Không thể tạo hóa đơn"
-    },
-    { status: 500 }
-  );
-}
-
 export async function POST(request: Request) {
   const startedAt = Date.now();
-
   try {
+    console.info("[CreateOrderTiming] request received", { at: new Date(startedAt).toISOString() });
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const bodyStartedAt = Date.now();
     const body = await request.json();
+    const requestBodyMs = Date.now() - bodyStartedAt;
+
     let branchId = typeof body?.branchId === "string" ? body.branchId.trim() : "";
 
     if (!branchId) {
+      const branchLookupStartedAt = Date.now();
       branchId =
         session.branchId ??
         (await prisma.branch.findFirst({
@@ -70,12 +27,19 @@ export async function POST(request: Request) {
           select: { id: true }
         }))?.id ??
         "";
+      console.info("[perf][orders-route][branch-lookup]", {
+        branchId,
+        ms: Date.now() - branchLookupStartedAt
+      });
     }
 
+    const validationStartedAt = Date.now();
     const parsed = posCheckoutSchema.safeParse({
       ...body,
       branchId
     });
+    const validationMs = Date.now() - validationStartedAt;
+    console.info("[CreateOrderTiming] validation", { ms: validationMs, requestBodyMs });
 
     if (!parsed.success) {
       const flattened = parsed.error.flatten();
@@ -84,22 +48,90 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: message, details: flattened.fieldErrors }, { status: 400 });
     }
 
-    const { order } = await createOrderFromPayload({
+    const createOrderStartedAt = Date.now();
+    const { order, timing } = await createOrderFromPayload({
       ...parsed.data,
-      createdById: session.id, // Dùng trực tiếp ID từ session, không cần gọi DB nữa
-      branchId: parsed.data.branchId || session.branchId || ""
+      createdById: session.id
     });
-
-    const totalMs = Date.now() - startedAt;
-    if (totalMs > 1000) {
-      console.info("[perf][orders-route][slow-create]", {
-        totalMs,
-        orderId: order.id
+    let pdfMeta: {
+      pdfUrl: string | null;
+      pdfFileName: string | null;
+      pdfSize: number | null;
+      pdfGeneratedAt: Date | null;
+    } | null = null;
+    let pdfWarning: string | null = null;
+    const pdfStartedAt = Date.now();
+    try {
+      pdfMeta = await generateAndStoreInvoicePdf(order.id);
+    } catch (pdfError) {
+      pdfWarning = pdfError instanceof Error ? pdfError.message : "Không thể tạo PDF hóa đơn tự động";
+      console.warn("[CreateOrderPdfWarning]", {
+        orderId: order.id,
+        code: order.code,
+        pdfWarning,
+        stack: pdfError instanceof Error ? pdfError.stack : String(pdfError)
       });
     }
 
-    return NextResponse.json({ ok: true, order });
+    const revalidateRedirectStartedAt = Date.now();
+    revalidatePath("/orders");
+    revalidatePath(`/orders/${order.id}`);
+    revalidatePath(`/invoice/${order.id}`);
+    const revalidateRedirectMs = Date.now() - revalidateRedirectStartedAt;
+    console.info("[perf][orders-route][create]", {
+      requestBodyMs,
+      validationMs,
+      createOrderMs: Date.now() - createOrderStartedAt,
+      pdfMs: Date.now() - pdfStartedAt,
+      revalidateRedirectMs,
+      totalMs: Date.now() - startedAt,
+      orderId: order.id
+    });
+    console.info("[CreateOrderTiming] transaction wait/start", { ms: timing.transactionWaitMs ?? 0 });
+    console.info("[CreateOrderTiming] create order/invoice", { ms: timing.createOrderMs ?? 0 });
+    console.info("[CreateOrderTiming] create order items", { ms: timing.createOrderItemsMs ?? 0 });
+    console.info("[CreateOrderTiming] inventory update", {
+      validationMs: timing.inventoryValidationMs ?? 0,
+      updateMs: timing.inventoryUpdateMs ?? 0,
+      batchFetchMs: timing.batchFetchMs ?? 0,
+      batchPersistMs: timing.batchPersistMs ?? 0,
+      batchAllocationMs: timing.batchAllocationMs ?? 0
+    });
+    console.info("[CreateOrderTiming] customer debt update", { ms: timing.customerDebtUpdateMs ?? 0 });
+    console.info("[CreateOrderTiming] cashTransaction create", { ms: timing.cashTransactionMs ?? 0 });
+    console.info("[CreateOrderTiming] transaction total", { ms: timing.transactionMs ?? 0 });
+    console.info("[CreateOrderTiming] revalidatePath/router refresh", { ms: revalidateRedirectMs });
+    console.info("[CreateOrderTiming] total request duration", { ms: Date.now() - startedAt, orderId: order.id });
+    console.info(
+      `[CreateOrderTiming] summary:\n- validation: ${Math.round(validationMs)} ms\n- transaction wait/start: ${Math.round(
+        timing.transactionWaitMs ?? 0
+      )} ms\n- create invoice: ${Math.round(timing.createOrderMs ?? 0)} ms\n- create items: ${Math.round(
+        timing.createOrderItemsMs ?? 0
+      )} ms\n- inventory update: ${Math.round(
+        (timing.inventoryValidationMs ?? 0) +
+          (timing.inventoryUpdateMs ?? 0) +
+          (timing.batchAllocationMs ?? 0)
+      )} ms\n- debt update: ${Math.round(timing.customerDebtUpdateMs ?? 0)} ms\n- cash transaction: ${Math.round(
+        timing.cashTransactionMs ?? 0
+      )} ms\n- transaction total: ${Math.round(timing.transactionMs ?? 0)} ms\n- revalidate/redirect: ${Math.round(
+        revalidateRedirectMs
+      )} ms\n- total: ${Math.round(Date.now() - startedAt)} ms`
+    );
+    return NextResponse.json({ ok: true, order: { ...order, ...pdfMeta }, pdfWarning });
   } catch (error) {
-    return apiErrorResponse(error, startedAt);
+    const message = error instanceof Error ? error.message : "";
+    console.error("[CreateOrderError]", {
+      totalMs: Date.now() - startedAt,
+      message,
+      stack: error instanceof Error ? error.stack : String(error)
+    });
+    return NextResponse.json(
+      {
+        error: /prisma|transaction|timed out|already closed/i.test(message)
+          ? "Tạo hóa đơn đang chậm hơn bình thường, vui lòng thử lại."
+          : message || "Không thể tạo hóa đơn"
+      },
+      { status: 500 }
+    );
   }
 }

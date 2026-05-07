@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { InvoicePdfActions } from "@/components/invoice-pdf-actions";
+import { InvoiceSavedPdfControls } from "@/components/invoice-saved-pdf-controls";
 import { OrderEditModal } from "@/components/order-edit-modal";
 import { OrderPaymentButton } from "@/components/order-payment-button";
 import { OrderStatusActions } from "@/components/order-status-actions";
@@ -49,6 +50,12 @@ export default async function OrderDetailPage({
       {created ? (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 sm:text-base">
           Đã tạo hóa đơn thành công. Bạn có thể kiểm tra lại chi tiết hoặc xuất hóa đơn ngay từ màn này.
+        </div>
+      ) : null}
+
+      {!order.pdfUrl ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 sm:text-base">
+          Hóa đơn này chưa có PDF đã lưu. Bạn có thể tạo lại PDF lưu trữ từ màn này bất kỳ lúc nào.
         </div>
       ) : null}
 
@@ -120,6 +127,8 @@ export default async function OrderDetailPage({
             paidAmount={Number(order.paidAmount)}
             debtAmount={Number(order.debtAmount)}
             grandTotal={Number(order.grandTotal)}
+            pdfUrl={order.pdfUrl}
+            pdfFileName={order.pdfFileName}
             items={order.items.map((item) => ({
               sku: item.product.sku,
               name: item.product.name,
@@ -128,6 +137,7 @@ export default async function OrderDetailPage({
               total: Number(item.total)
             }))}
           />
+          <InvoiceSavedPdfControls orderId={order.id} pdfUrl={order.pdfUrl} />
         </div>
       </div>
 

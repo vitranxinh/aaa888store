@@ -235,6 +235,13 @@ export function OrderCreateModal({ branchId }: Props) {
         }
 
         pushToast({ title: "Đã tạo hóa đơn", description: payload.order.code });
+        if (payload.pdfWarning) {
+          pushToast({
+            title: "Hóa đơn đã tạo nhưng PDF chưa lưu",
+            description: payload.pdfWarning,
+            variant: "error"
+          });
+        }
         setOpen(false);
         setLines([]);
         setNote("");
