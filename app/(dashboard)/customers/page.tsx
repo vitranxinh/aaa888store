@@ -6,9 +6,9 @@ import { CustomerCreateForm } from "@/components/customer-create-form";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
-import { getCustomerDebtOverview } from "@/lib/customer-debt";
+import { getAllCustomers } from "@/lib/customer-debt";
 import { getCustomerGroupOptions } from "@/lib/reference-data";
-import { formatCustomerDebt, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 function displayCustomerPhone(phone: string | null) {
   return phone?.startsWith("AUTO_PHONE_") ? "" : phone ?? "";
@@ -31,7 +31,7 @@ async function CustomerDebtList({
   canSeeCustomerPrivateFields: boolean;
   groupOptions: { id: string; name: string }[];
 }) {
-  const { rows, hasNext } = await getCustomerDebtOverview({
+  const { rows, hasNext } = await getAllCustomers({
     q,
     page,
     pageSize,
@@ -77,7 +77,9 @@ async function CustomerDebtList({
               <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
                 <div>
                   <p className="text-[0.85rem] font-medium text-slate-400">Công nợ hiện tại</p>
-                  <p className="mt-1 text-[1.15rem] font-bold text-red-600">{formatCustomerDebt(customer.receivableDebt)}</p>
+                  <p className={`mt-1 text-[1.15rem] font-bold ${customer.receivableDebt > 0 ? "text-red-600" : "text-slate-700"}`}>
+                    {customer.receivableDebt > 0 ? formatCurrency(customer.receivableDebt) : "Không có công nợ"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[0.85rem] font-medium text-slate-400">Hóa đơn còn nợ</p>
@@ -145,8 +147,8 @@ async function CustomerDebtList({
                     </Link>
                   </td>
                   {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{displayCustomerPhone(customer.phone) || "-"}</td> : null}
-                  <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-red-600 sm:px-6 sm:py-4">
-                    {formatCustomerDebt(customer.receivableDebt)}
+                  <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${customer.receivableDebt > 0 ? "text-red-600" : "text-slate-700"}`}>
+                    {customer.receivableDebt > 0 ? formatCurrency(customer.receivableDebt) : "Không có công nợ"}
                   </td>
                   <td className="px-3 py-3 text-center font-semibold text-slate-900 sm:px-6 sm:py-4">{customer.unpaidInvoiceCount}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{customer.lastInvoiceDate ? formatDate(customer.lastInvoiceDate) : "-"}</td>

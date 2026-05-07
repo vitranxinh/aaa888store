@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/auth";
-import { buildCustomerInvoiceHistoryWhere, resolveCustomerHistoryFilters } from "@/lib/customer-debt";
-import { prisma } from "@/lib/prisma";
+import { getCustomerInvoiceHistory, resolveCustomerHistoryFilters } from "@/lib/customer-debt";
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -15,36 +14,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
       history: searchParams.get("history") ?? ""
     });
 
-    const startedAt = Date.now();
-    const rows = await prisma.order.findMany({
-      where: buildCustomerInvoiceHistoryWhere(params.id, filters),
-      select: {
-        id: true,
-        code: true,
-        createdAt: true,
-        grandTotal: true,
-        paidAmount: true,
-        debtAmount: true,
-        status: true,
-        note: true
-      },
-      orderBy: { createdAt: "desc" }
-    });
-
-    console.info("[CustomerDebtPerformance][invoice-history-api]", {
-      customerId: params.id,
-      count: rows.length,
-      totalMs: Date.now() - startedAt
-    });
-
-    return NextResponse.json(
-      rows.map((row) => ({
-        ...row,
-        grandTotal: Number(row.grandTotal),
-        paidAmount: Number(row.paidAmount),
-        debtAmount: Number(row.debtAmount)
-      }))
-    );
+    const rows = await getCustomerInvoiceHistory(params.id, filters);
+    return NextResponse.json(rows);
   } catch (error) {
     console.error("[CustomerDebtError][invoice-history-api]", {
       customerId: params.id,

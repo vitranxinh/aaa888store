@@ -122,7 +122,7 @@ export function buildCustomerInvoiceHistoryWhere(
   return where;
 }
 
-export async function getCustomerDebtOverview({
+export async function getAllCustomers({
   q,
   page,
   pageSize,
@@ -136,7 +136,6 @@ export async function getCustomerDebtOverview({
   const startedAt = Date.now();
   const where: Prisma.CustomerWhereInput = {
     NOT: { code: "KH000000" },
-    receivableDebt: { gt: 0 },
     ...(q
       ? {
           OR: [
@@ -239,14 +238,9 @@ export async function getCustomerDebtOverview({
   return { rows, hasNext };
 }
 
-export async function getCustomerDebtDetail(customerId: string, filters: ReturnType<typeof resolveCustomerHistoryFilters>) {
+export async function getCustomerOutstandingDebt(customerId: string) {
   const startedAt = Date.now();
-  const historyWhere = buildCustomerInvoiceHistoryWhere(customerId, filters);
-
-  const [customer, activeInvoices, receipts, invoiceHistory] = await Promise.all([
-    prisma.customer.findUnique({
-      where: { id: customerId }
-    }),
+  const [activeInvoices, receipts] = await Promise.all([
     prisma.order.findMany({
       where: {
         customerId,
@@ -284,20 +278,6 @@ export async function getCustomerDebtDetail(customerId: string, filters: ReturnT
         }
       },
       orderBy: { createdAt: "desc" }
-    }),
-    prisma.order.findMany({
-      where: historyWhere,
-      select: {
-        id: true,
-        code: true,
-        createdAt: true,
-        grandTotal: true,
-        paidAmount: true,
-        debtAmount: true,
-        status: true,
-        note: true
-      },
-      orderBy: { createdAt: "desc" }
     })
   ]);
 
@@ -323,6 +303,36 @@ export async function getCustomerDebtDetail(customerId: string, filters: ReturnT
     paymentMethodLabel: getPaymentMethodLabel(receipt.order?.paymentMethod)
   }));
 
+  console.info("[CustomerDebtPerformance][outstanding]", {
+    customerId,
+    activeInvoiceCount: normalizedActiveInvoices.length,
+    receiptCount: normalizedReceipts.length,
+    totalMs: Date.now() - startedAt
+  });
+
+  return {
+    activeInvoices: normalizedActiveInvoices,
+    receipts: normalizedReceipts
+  };
+}
+
+export async function getCustomerInvoiceHistory(customerId: string, filters: ReturnType<typeof resolveCustomerHistoryFilters>) {
+  const startedAt = Date.now();
+  const invoiceHistory = await prisma.order.findMany({
+    where: buildCustomerInvoiceHistoryWhere(customerId, filters),
+    select: {
+      id: true,
+      code: true,
+      createdAt: true,
+      grandTotal: true,
+      paidAmount: true,
+      debtAmount: true,
+      status: true,
+      note: true
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
   const normalizedInvoiceHistory: CustomerInvoiceItem[] = invoiceHistory.map((invoice) => ({
     id: invoice.id,
     code: invoice.code,
@@ -334,18 +344,37 @@ export async function getCustomerDebtDetail(customerId: string, filters: ReturnT
     note: invoice.note
   }));
 
+  console.info("[CustomerDebtPerformance][history]", {
+    customerId,
+    historyCount: normalizedInvoiceHistory.length,
+    totalMs: Date.now() - startedAt
+  });
+
+  return normalizedInvoiceHistory;
+}
+
+export async function getCustomerDebtDetail(customerId: string, filters: ReturnType<typeof resolveCustomerHistoryFilters>) {
+  const startedAt = Date.now();
+  const [customer, outstanding, invoiceHistory] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id: customerId }
+    }),
+    getCustomerOutstandingDebt(customerId),
+    getCustomerInvoiceHistory(customerId, filters)
+  ]);
+
   console.info("[CustomerDebtPerformance][detail]", {
     customerId,
-    activeInvoiceCount: normalizedActiveInvoices.length,
-    receiptCount: normalizedReceipts.length,
-    historyCount: normalizedInvoiceHistory.length,
+    activeInvoiceCount: outstanding.activeInvoices.length,
+    receiptCount: outstanding.receipts.length,
+    historyCount: invoiceHistory.length,
     totalMs: Date.now() - startedAt
   });
 
   return {
     customer,
-    activeInvoices: normalizedActiveInvoices,
-    receipts: normalizedReceipts,
-    invoiceHistory: normalizedInvoiceHistory
+    activeInvoices: outstanding.activeInvoices,
+    receipts: outstanding.receipts,
+    invoiceHistory
   };
 }

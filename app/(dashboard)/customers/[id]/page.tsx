@@ -119,7 +119,7 @@ export default async function CustomerDetailPage({
       <section className="rounded-3xl border border-red-100 bg-red-50/60 p-4 shadow-soft sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Công nợ hiện tại</h2>
+            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Khoản còn nợ</h2>
             <p className="mt-1 text-sm text-slate-500 sm:text-base">Chỉ tính từ hóa đơn còn nợ và phiếu thu của khách hàng.</p>
           </div>
           <div className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-red-600 sm:text-base">
@@ -129,7 +129,7 @@ export default async function CustomerDetailPage({
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Công nợ hiện tại</p>
+            <p className="text-sm font-medium text-slate-500">Khoản còn nợ</p>
             <p className="mt-2 text-xl font-bold text-red-600">{formatCustomerDebt(activeDebtTotal)}</p>
           </div>
           <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
