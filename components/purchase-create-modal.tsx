@@ -161,21 +161,24 @@ export function PurchaseCreateModal({
             <div className="flex items-start justify-between border-b border-slate-100 px-4 py-4 sm:px-7 sm:py-6">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900 sm:text-5xl">Tạo phiếu nhập</h3>
-                <p className="mt-1 text-sm text-slate-500 sm:text-lg">Nhập hàng nhanh ngay trong form.</p>
+                <p className="mt-1 text-sm text-slate-500 sm:text-lg">Tạo đơn nhập hàng ngay trong form.</p>
               </div>
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl"
-                placeholder="Tìm theo tên hàng..."
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                name="purchase-product-search"
-              />
+              <label className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">Sản phẩm</span>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl"
+                  placeholder="Tìm theo tên hàng..."
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  name="purchase-product-search"
+                />
+              </label>
               {search ? (
                 <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200">
                   {isSearchingProducts ? (
