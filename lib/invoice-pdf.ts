@@ -267,7 +267,7 @@ export async function generateAndStoreInvoicePdf(orderId: string) {
   const pathname = `invoices/${order.id}/${Date.now()}-${pdfFileName}`;
 
   const blob = await put(pathname, pdfBuffer, {
-    access: "public",
+    access: "private",
     contentType: "application/pdf"
   });
 
