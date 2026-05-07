@@ -146,12 +146,18 @@ export function PurchaseCreateModal({
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
+      <button
+        onClick={() => {
+          resetForm();
+          setOpen(true);
+        }}
+        className="rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl"
+      >
         + Tạo phiếu nhập
       </button>
       {open ? (
         <div className="fixed inset-0 z-50 bg-black/45 p-0 sm:flex sm:items-center sm:justify-center sm:p-4">
-          <div className="flex h-full w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-[28px]">
+          <div className="flex h-full w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-[28px]" data-form-role="purchase-create">
             <div className="flex items-start justify-between border-b border-slate-100 px-4 py-4 sm:px-7 sm:py-6">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900 sm:text-5xl">Tạo phiếu nhập</h3>
@@ -160,7 +166,16 @@ export function PurchaseCreateModal({
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl" placeholder="Tìm theo tên hàng..." />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-base sm:h-16 sm:px-5 sm:text-2xl"
+                placeholder="Tìm theo tên hàng..."
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                name="purchase-product-search"
+              />
               {search ? (
                 <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200">
                   {isSearchingProducts ? (
