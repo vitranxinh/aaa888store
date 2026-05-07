@@ -14,6 +14,12 @@ function displayCustomerPhone(phone: string | null) {
   return phone?.startsWith("AUTO_PHONE_") ? "" : phone ?? "";
 }
 
+function renderBalanceLabel(balance: number) {
+  if (balance > 0) return formatCurrency(balance);
+  if (balance < 0) return `Khách trả trước / trả dư ${formatCurrency(Math.abs(balance))}`;
+  return "Không có công nợ";
+}
+
 async function CustomerDebtList({
   q,
   sort,
@@ -43,7 +49,7 @@ async function CustomerDebtList({
       <div className="grid gap-3 sm:hidden">
         {rows.length === 0 ? (
           <div className="rounded-[28px] border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500 shadow-soft">
-            Hiện chưa có khách hàng nào còn công nợ.
+            Hiện chưa có khách hàng nào.
           </div>
         ) : (
           rows.map((customer) => (
@@ -77,8 +83,16 @@ async function CustomerDebtList({
               <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
                 <div>
                   <p className="text-[0.85rem] font-medium text-slate-400">Công nợ hiện tại</p>
-                  <p className={`mt-1 text-[1.15rem] font-bold ${customer.receivableDebt > 0 ? "text-red-600" : "text-slate-700"}`}>
-                    {customer.receivableDebt > 0 ? formatCurrency(customer.receivableDebt) : "Không có công nợ"}
+                  <p
+                    className={`mt-1 text-[1.15rem] font-bold ${
+                      customer.receivableDebt > 0
+                        ? "text-red-600"
+                        : customer.receivableDebt < 0
+                          ? "text-emerald-600"
+                          : "text-slate-700"
+                    }`}
+                  >
+                    {renderBalanceLabel(customer.receivableDebt)}
                   </p>
                 </div>
                 <div>
@@ -134,7 +148,7 @@ async function CustomerDebtList({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={canManageCustomers ? (canSeeCustomerPrivateFields ? 8 : 7) : canSeeCustomerPrivateFields ? 7 : 6} className="px-3 py-10 text-center text-sm text-slate-400 sm:px-6 sm:py-12 sm:text-2xl">
-                  Hiện chưa có khách hàng nào còn công nợ.
+                  Hiện chưa có khách hàng nào.
                 </td>
               </tr>
             ) : (
@@ -147,8 +161,16 @@ async function CustomerDebtList({
                     </Link>
                   </td>
                   {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{displayCustomerPhone(customer.phone) || "-"}</td> : null}
-                  <td className={`whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${customer.receivableDebt > 0 ? "text-red-600" : "text-slate-700"}`}>
-                    {customer.receivableDebt > 0 ? formatCurrency(customer.receivableDebt) : "Không có công nợ"}
+                  <td
+                    className={`whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${
+                      customer.receivableDebt > 0
+                        ? "text-red-600"
+                        : customer.receivableDebt < 0
+                          ? "text-emerald-600"
+                          : "text-slate-700"
+                    }`}
+                  >
+                    {renderBalanceLabel(customer.receivableDebt)}
                   </td>
                   <td className="px-3 py-3 text-center font-semibold text-slate-900 sm:px-6 sm:py-4">{customer.unpaidInvoiceCount}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{customer.lastInvoiceDate ? formatDate(customer.lastInvoiceDate) : "-"}</td>

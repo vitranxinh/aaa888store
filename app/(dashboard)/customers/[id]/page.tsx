@@ -22,6 +22,13 @@ function getHistoryStatusLabel(status: CustomerInvoiceHistoryStatus) {
   return "Tất cả";
 }
 
+function getTrackingTypeLabel(type: "INVOICE" | "RECEIPT" | "PREPAYMENT" | "OVERPAYMENT") {
+  if (type === "INVOICE") return "Hóa đơn";
+  if (type === "RECEIPT") return "Phiếu thu";
+  if (type === "OVERPAYMENT") return "Trả dư";
+  return "Trả trước";
+}
+
 export default async function CustomerDetailPage({
   params,
   searchParams
@@ -44,7 +51,9 @@ export default async function CustomerDetailPage({
   }
 
   const customer = detail.customer;
+  const currentBalance = Number(customer.receivableDebt);
   const activeDebtTotal = detail.activeInvoices.reduce((sum, invoice) => sum + invoice.debtAmount, 0);
+  const trackingRows = currentBalance === 0 ? [] : detail.trackingRows;
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
 
   return (
@@ -97,8 +106,14 @@ export default async function CustomerDetailPage({
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-sm font-medium text-slate-500">Công nợ hiện tại</p>
-            <p className={`mt-1 text-lg font-bold sm:text-xl ${Number(customer.receivableDebt) > 0 ? "text-red-600" : "text-slate-700"}`}>
-              {formatCustomerDebt(Number(customer.receivableDebt))}
+            <p
+              className={`mt-1 text-lg font-bold sm:text-xl ${
+                currentBalance > 0 ? "text-red-600" : currentBalance < 0 ? "text-emerald-600" : "text-slate-700"
+              }`}
+            >
+              {currentBalance < 0
+                ? `Khách trả trước / trả dư ${formatCurrency(Math.abs(currentBalance))}`
+                : formatCustomerDebt(currentBalance)}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -116,126 +131,171 @@ export default async function CustomerDetailPage({
         ) : null}
       </section>
 
-      <section className="rounded-3xl border border-red-100 bg-red-50/60 p-4 shadow-soft sm:p-6">
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Khoản còn nợ</h2>
-            <p className="mt-1 text-sm text-slate-500 sm:text-base">Chỉ tính từ hóa đơn còn nợ và phiếu thu của khách hàng.</p>
+            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Theo dõi công nợ</h2>
+            <p className="mt-1 text-sm text-slate-500 sm:text-base">
+              Chỉ hiển thị các khoản còn đang ảnh hưởng đến số dư hiện tại của khách hàng.
+            </p>
           </div>
-          <div className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-red-600 sm:text-base">
-            {formatCustomerDebt(activeDebtTotal)}
+          <div
+            className={`rounded-2xl px-4 py-2 text-sm font-semibold sm:text-base ${
+              currentBalance > 0
+                ? "bg-red-50 text-red-600"
+                : currentBalance < 0
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-slate-100 text-slate-700"
+            }`}
+          >
+            {currentBalance > 0
+              ? `Khách còn nợ ${formatCurrency(currentBalance)}`
+              : currentBalance < 0
+                ? `Khách trả trước / trả dư ${formatCurrency(Math.abs(currentBalance))}`
+                : "Không có công nợ"}
           </div>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Khoản còn nợ</p>
-            <p className="mt-2 text-xl font-bold text-red-600">{formatCustomerDebt(activeDebtTotal)}</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">Số dư hiện tại</p>
+            <p className={`mt-2 text-xl font-bold ${currentBalance > 0 ? "text-red-600" : currentBalance < 0 ? "text-emerald-700" : "text-slate-800"}`}>
+              {currentBalance > 0
+                ? formatCurrency(currentBalance)
+                : currentBalance < 0
+                  ? `-${formatCurrency(Math.abs(currentBalance))}`
+                  : formatCurrency(0)}
+            </p>
           </div>
-          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-500">Hóa đơn còn nợ</p>
             <p className="mt-2 text-xl font-bold text-slate-900">{detail.activeInvoices.length}</p>
           </div>
-          <div className="rounded-2xl border border-white bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Phiếu thu</p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+            <p className="text-sm font-medium text-slate-500">Phiếu thu còn ảnh hưởng số dư</p>
             <p className="mt-2 text-xl font-bold text-slate-900">{detail.receipts.length}</p>
           </div>
         </div>
-      </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Hóa đơn còn nợ</h2>
-            <p className="mt-1 text-sm text-slate-500 sm:text-base">Chỉ hiện hóa đơn chưa thanh toán hoặc thanh toán một phần.</p>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {detail.activeInvoices.length ? (
-            detail.activeInvoices.map((invoice) => (
-              <div key={invoice.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="flex items-start justify-between gap-4">
+        <div className="mt-6 grid gap-3 lg:hidden">
+          {trackingRows.length ? (
+            trackingRows.map((row) => (
+              <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <Link prefetch={false} href={`/orders/${invoice.id}`} className="text-base font-bold text-emerald-700 underline-offset-2 hover:underline sm:text-lg">
-                      {invoice.code}
-                    </Link>
-                    <p className="mt-1 text-sm text-slate-500 sm:text-base">Ngày tạo: {formatDate(invoice.createdAt)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500 sm:text-sm">Còn nợ</p>
-                    <p className="text-base font-bold text-red-600 sm:text-lg">{formatCurrency(invoice.debtAmount)}</p>
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3 sm:text-base">
-                  <div><span className="font-medium text-slate-500">Tổng hóa đơn:</span> {formatCurrency(invoice.grandTotal)}</div>
-                  <div><span className="font-medium text-slate-500">Đã trả:</span> {formatCurrency(invoice.paidAmount)}</div>
-                  <div><span className="font-medium text-slate-500">Trạng thái thanh toán:</span> {invoice.paidAmount > 0 ? "Thanh toán một phần" : "Chưa thanh toán"}</div>
-                </div>
-                {invoice.note ? (
-                  <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
-                    <span className="font-medium">Ghi chú:</span> {invoice.note}
-                  </p>
-                ) : null}
-              </div>
-            ))
-          ) : (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:text-base">
-              Khách hàng này hiện không còn hóa đơn nào đang nợ.
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Phiếu thu</h2>
-            <p className="mt-1 text-sm text-slate-500 sm:text-base">Lịch sử các phiếu thu đã ghi nhận cho khách hàng này.</p>
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {detail.receipts.length ? (
-            detail.receipts.map((receipt) => (
-              <div key={receipt.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-base font-bold text-emerald-700 sm:text-lg">{receipt.code}</p>
-                    <p className="mt-1 text-sm text-slate-500 sm:text-base">Ngày tạo: {formatDate(receipt.createdAt)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500 sm:text-sm">Số tiền</p>
-                    <p className="text-base font-bold text-emerald-700 sm:text-lg">{formatCurrency(receipt.amount)}</p>
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 sm:text-base">
-                  <div>
-                    <span className="font-medium text-slate-500">Liên kết hóa đơn:</span>{" "}
-                    {receipt.orderId && receipt.orderCode ? (
-                      <Link prefetch={false} href={`/orders/${receipt.orderId}`} className="text-emerald-700 underline-offset-2 hover:underline">
-                        {receipt.orderCode}
+                    <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">{getTrackingTypeLabel(row.type)}</p>
+                    {row.orderId ? (
+                      <Link prefetch={false} href={`/orders/${row.orderId}`} className="mt-1 block text-base font-bold text-emerald-700 underline-offset-2 hover:underline">
+                        {row.code}
                       </Link>
                     ) : (
-                      "Không gắn hóa đơn"
+                      <p className="mt-1 text-base font-bold text-slate-900">{row.code}</p>
                     )}
+                    <p className="mt-1 text-sm text-slate-500">{formatDate(row.date)}</p>
+                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      row.remainingBalance > 0
+                        ? "bg-red-50 text-red-600"
+                        : row.remainingBalance < 0
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {row.status}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">{row.description}</p>
+                <div className="mt-3 grid grid-cols-2 gap-3 rounded-2xl bg-white p-3">
+                  <div>
+                    <p className="text-xs font-medium text-slate-400">Ghi nợ</p>
+                    <p className="mt-1 text-sm font-semibold text-red-600">{row.debitAmount > 0 ? formatCurrency(row.debitAmount) : "-"}</p>
                   </div>
                   <div>
-                    <span className="font-medium text-slate-500">Phương thức thanh toán:</span> {receipt.paymentMethodLabel}
+                    <p className="text-xs font-medium text-slate-400">Ghi có</p>
+                    <p className="mt-1 text-sm font-semibold text-emerald-700">{row.creditAmount > 0 ? formatCurrency(row.creditAmount) : "-"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-xs font-medium text-slate-400">Số dư còn lại</p>
+                    <p className={`mt-1 text-sm font-semibold ${row.remainingBalance > 0 ? "text-red-600" : row.remainingBalance < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+                      {row.remainingBalance > 0
+                        ? formatCurrency(row.remainingBalance)
+                        : row.remainingBalance < 0
+                          ? `-${formatCurrency(Math.abs(row.remainingBalance))}`
+                          : formatCurrency(0)}
+                    </p>
                   </div>
                 </div>
-                {receipt.note ? (
-                  <p className="mt-2 text-sm leading-relaxed text-slate-500 sm:text-base">
-                    <span className="font-medium">Ghi chú:</span> {receipt.note}
-                  </p>
-                ) : null}
               </div>
             ))
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:text-base">
-              Khách hàng này chưa có phiếu thu nào.
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Khách hàng này hiện không có giao dịch nào còn ảnh hưởng đến số dư công nợ.
             </div>
           )}
+        </div>
+
+        <div className="mt-6 hidden overflow-hidden rounded-2xl border border-slate-200 lg:block">
+          <table className="w-full table-fixed bg-white text-left">
+            <thead className="bg-slate-50 text-sm font-semibold text-slate-500">
+              <tr>
+                <th className="w-[12%] px-4 py-3">Ngày</th>
+                <th className="w-[12%] px-4 py-3">Loại</th>
+                <th className="w-[14%] px-4 py-3">Mã</th>
+                <th className="w-[24%] px-4 py-3">Diễn giải</th>
+                <th className="w-[12%] px-4 py-3 text-right">Ghi nợ</th>
+                <th className="w-[12%] px-4 py-3 text-right">Ghi có</th>
+                <th className="w-[14%] px-4 py-3 text-right">Số dư còn lại</th>
+                <th className="w-[12%] px-4 py-3">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trackingRows.length ? (
+                trackingRows.map((row) => (
+                  <tr key={row.id} className="border-t border-slate-100 align-top text-sm text-slate-700">
+                    <td className="px-4 py-3">{formatDate(row.date)}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{getTrackingTypeLabel(row.type)}</td>
+                    <td className="px-4 py-3">
+                      {row.orderId ? (
+                        <Link prefetch={false} href={`/orders/${row.orderId}`} className="font-semibold text-emerald-700 underline-offset-2 hover:underline">
+                          {row.code}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-slate-900">{row.code}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{row.description}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-red-600">{row.debitAmount > 0 ? formatCurrency(row.debitAmount) : "-"}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-emerald-700">{row.creditAmount > 0 ? formatCurrency(row.creditAmount) : "-"}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${row.remainingBalance > 0 ? "text-red-600" : row.remainingBalance < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+                      {row.remainingBalance > 0
+                        ? formatCurrency(row.remainingBalance)
+                        : row.remainingBalance < 0
+                          ? `-${formatCurrency(Math.abs(row.remainingBalance))}`
+                          : formatCurrency(0)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        row.remainingBalance > 0
+                          ? "bg-red-50 text-red-600"
+                          : row.remainingBalance < 0
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-slate-100 text-slate-700"
+                      }`}>
+                        {row.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Khách hàng này hiện không có giao dịch nào còn ảnh hưởng đến số dư công nợ.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 

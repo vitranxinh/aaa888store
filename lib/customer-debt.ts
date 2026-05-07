@@ -42,6 +42,19 @@ export type CustomerInvoiceItem = {
   note: string | null;
 };
 
+export type CustomerDebtTrackingItem = {
+  id: string;
+  date: Date;
+  type: "INVOICE" | "RECEIPT" | "PREPAYMENT" | "OVERPAYMENT";
+  code: string;
+  description: string;
+  debitAmount: number;
+  creditAmount: number;
+  remainingBalance: number;
+  status: string;
+  orderId?: string | null;
+};
+
 function toNumber(value: Prisma.Decimal | number | null | undefined) {
   return Number(value ?? 0);
 }
@@ -316,6 +329,108 @@ export async function getCustomerOutstandingDebt(customerId: string) {
   };
 }
 
+export async function getCustomerDebtTracking(customerId: string) {
+  const startedAt = Date.now();
+  const [invoices, receipts] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        customerId,
+        debtAmount: { gt: 0 }
+      },
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        grandTotal: true,
+        paidAmount: true,
+        debtAmount: true
+      },
+      orderBy: { createdAt: "asc" }
+    }),
+    prisma.cashTransaction.findMany({
+      where: {
+        customerId,
+        type: "RECEIPT",
+        orderId: null
+      },
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        amount: true,
+        note: true
+      },
+      orderBy: { createdAt: "asc" }
+    })
+  ]);
+
+  const entries = [
+    ...invoices.map((invoice) => ({
+      id: invoice.id,
+      date: invoice.createdAt,
+      type: "INVOICE" as const,
+      code: invoice.code,
+      description:
+        Number(invoice.paidAmount) > 0
+          ? `Hóa đơn thanh toán một phần, còn nợ ${toNumber(invoice.debtAmount).toLocaleString("vi-VN")} đ`
+          : "Hóa đơn chưa thanh toán",
+      debitAmount: toNumber(invoice.debtAmount),
+      creditAmount: 0,
+      status: Number(invoice.paidAmount) > 0 ? "Thanh toán một phần" : "Chưa thanh toán",
+      orderId: invoice.id
+    })),
+    ...receipts.map((receipt) => {
+      const amount = toNumber(receipt.amount);
+      return {
+        id: receipt.id,
+        date: receipt.createdAt,
+        type: "PREPAYMENT" as const,
+        code: receipt.code,
+        description: receipt.note?.trim() || "Khách trả trước / chưa gắn hóa đơn",
+        debitAmount: 0,
+        creditAmount: amount,
+        status: "Khách trả trước",
+        orderId: null
+      };
+    })
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  let runningBalance = 0;
+  const rows: CustomerDebtTrackingItem[] = entries.map((entry) => {
+    runningBalance += entry.debitAmount - entry.creditAmount;
+    const normalizedType =
+      entry.type === "PREPAYMENT" && runningBalance < 0
+        ? "OVERPAYMENT"
+        : entry.type;
+
+    return {
+      id: entry.id,
+      date: entry.date,
+      type: normalizedType,
+      code: entry.code,
+      description: entry.description,
+      debitAmount: entry.debitAmount,
+      creditAmount: entry.creditAmount,
+      remainingBalance: runningBalance,
+      status:
+        normalizedType === "OVERPAYMENT"
+          ? "Khách trả dư"
+          : normalizedType === "PREPAYMENT"
+            ? "Khách trả trước"
+            : entry.status,
+      orderId: entry.orderId
+    };
+  });
+
+  console.info("[CustomerDebtPerformance][tracking]", {
+    customerId,
+    rowCount: rows.length,
+    totalMs: Date.now() - startedAt
+  });
+
+  return rows.sort((a, b) => b.date.getTime() - a.date.getTime());
+}
+
 export async function getCustomerInvoiceHistory(customerId: string, filters: ReturnType<typeof resolveCustomerHistoryFilters>) {
   const startedAt = Date.now();
   const invoiceHistory = await prisma.order.findMany({
@@ -355,11 +470,12 @@ export async function getCustomerInvoiceHistory(customerId: string, filters: Ret
 
 export async function getCustomerDebtDetail(customerId: string, filters: ReturnType<typeof resolveCustomerHistoryFilters>) {
   const startedAt = Date.now();
-  const [customer, outstanding, invoiceHistory] = await Promise.all([
+  const [customer, outstanding, trackingRows, invoiceHistory] = await Promise.all([
     prisma.customer.findUnique({
       where: { id: customerId }
     }),
     getCustomerOutstandingDebt(customerId),
+    getCustomerDebtTracking(customerId),
     getCustomerInvoiceHistory(customerId, filters)
   ]);
 
@@ -367,6 +483,7 @@ export async function getCustomerDebtDetail(customerId: string, filters: ReturnT
     customerId,
     activeInvoiceCount: outstanding.activeInvoices.length,
     receiptCount: outstanding.receipts.length,
+    trackingCount: trackingRows.length,
     historyCount: invoiceHistory.length,
     totalMs: Date.now() - startedAt
   });
@@ -375,6 +492,7 @@ export async function getCustomerDebtDetail(customerId: string, filters: ReturnT
     customer,
     activeInvoices: outstanding.activeInvoices,
     receipts: outstanding.receipts,
+    trackingRows,
     invoiceHistory
   };
 }
