@@ -6,7 +6,7 @@ import { InvoiceSavedPdfControls } from "@/components/invoice-saved-pdf-controls
 import { OrderEditModal } from "@/components/order-edit-modal";
 import { OrderPaymentButton } from "@/components/order-payment-button";
 import { OrderStatusActions } from "@/components/order-status-actions";
-import { getOrderDetail } from "@/lib/order-detail";
+import { getOrderDetail, getOrderPdfMetadata } from "@/lib/order-detail";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -20,8 +20,9 @@ export default async function OrderDetailPage({
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
-  const [order, deleteRequest] = await Promise.all([
+  const [order, pdfMeta, deleteRequest] = await Promise.all([
     getOrderDetail(params.id),
+    getOrderPdfMetadata(params.id),
     prisma.orderDeleteRequest.findUnique({
       where: { orderId: params.id },
       include: {
@@ -53,7 +54,7 @@ export default async function OrderDetailPage({
         </div>
       ) : null}
 
-      {!order.pdfUrl ? (
+      {!pdfMeta.pdfUrl ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 sm:text-base">
           Hóa đơn này chưa có PDF đã lưu. Bạn có thể tạo lại PDF lưu trữ từ màn này bất kỳ lúc nào.
         </div>
@@ -127,8 +128,8 @@ export default async function OrderDetailPage({
             paidAmount={Number(order.paidAmount)}
             debtAmount={Number(order.debtAmount)}
             grandTotal={Number(order.grandTotal)}
-            pdfUrl={order.pdfUrl}
-            pdfFileName={order.pdfFileName}
+            pdfUrl={pdfMeta.pdfUrl}
+            pdfFileName={pdfMeta.pdfFileName}
             items={order.items.map((item) => ({
               sku: item.product.sku,
               name: item.product.name,
@@ -137,7 +138,7 @@ export default async function OrderDetailPage({
               total: Number(item.total)
             }))}
           />
-          <InvoiceSavedPdfControls orderId={order.id} pdfUrl={order.pdfUrl} />
+          <InvoiceSavedPdfControls orderId={order.id} pdfUrl={pdfMeta.pdfUrl} />
         </div>
       </div>
 
