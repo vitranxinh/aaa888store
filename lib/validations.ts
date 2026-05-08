@@ -35,18 +35,12 @@ const baseProductFieldsSchema = z.object({
 
 export const productCreateSchema = baseProductFieldsSchema.extend({
   sku: z.string().optional().or(z.literal("")),
-  initialStockQuantity: z.number().int().nonnegative().default(0),
-  stockBranchId: z.string().optional().or(z.literal("")),
-  batchNumber: z.string().optional().or(z.literal("")),
-  stockDate: z.string().optional().or(z.literal("")),
-  stockNote: z.string().optional().or(z.literal(""))
+  initialStockQuantity: z.number().int().nonnegative().default(0)
 });
 
 export const productUpdateSchema = baseProductFieldsSchema.extend({
   sku: z.string().min(3),
-  stockAdjustmentQuantity: z.number().int().nonnegative().default(0),
-  stockBranchId: z.string().optional().or(z.literal("")),
-  stockNote: z.string().optional().or(z.literal(""))
+  stockAdjustmentQuantity: z.number().int().nonnegative().default(0)
 });
 
 export const customerSchema = z.object({

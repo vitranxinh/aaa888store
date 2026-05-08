@@ -15,7 +15,7 @@ const ProductCreateFormLazy = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div className="absolute left-0 right-0 top-16 z-20 w-auto max-w-full overflow-x-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:left-auto sm:right-0 sm:top-20 sm:w-[92vw] sm:max-w-[500px] sm:p-6">
         <div className="h-6 w-40 animate-pulse rounded bg-slate-100" />
         <div className="mt-4 h-10 animate-pulse rounded bg-slate-100" />
         <div className="mt-3 h-10 animate-pulse rounded bg-slate-100" />
@@ -111,8 +111,6 @@ const getCachedProductsPageData = unstable_cache(
 async function ProductsList({
   q,
   branchId,
-  branchName,
-  branches,
   page,
   pageSize,
   canEditProducts,
@@ -120,8 +118,6 @@ async function ProductsList({
 }: {
   q: string;
   branchId: string;
-  branchName: string;
-  branches: { id: string; name: string }[];
   page: number;
   pageSize: number;
   canEditProducts: boolean;
@@ -160,10 +156,7 @@ async function ProductsList({
                       <div className="flex flex-col gap-2">
                         <ProductEditModal
                           product={product}
-                          branches={branches}
-                          defaultBranchId={branchId}
                           currentQuantity={totalQuantity}
-                          currentBranchName={branchName}
                           canDelete={canDeleteProducts}
                         />
                       </div>
@@ -237,10 +230,7 @@ async function ProductsList({
                       <div className="flex justify-end gap-2">
                         <ProductEditModal
                           product={product}
-                          branches={branches}
-                          defaultBranchId={branchId}
                           currentQuantity={totalQuantity}
-                          currentBranchName={branchName}
                           canDelete={canDeleteProducts}
                         />
                       </div>
@@ -288,23 +278,13 @@ export default async function ProductsPage({
   const q = searchParams?.q ?? "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 10;
-  const [defaultBranchId, branches] = await Promise.all([
-    session.branchId ? Promise.resolve(session.branchId) : getDefaultBranchId(),
-    prisma.branch.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { createdAt: "asc" }
-    })
-  ]);
-  const branchId = defaultBranchId ?? "";
-  const branchName = branches.find((branch) => branch.id === branchId)?.name ?? "Chi nhánh hiện tại";
-
+  const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
   return (
-    <div className="space-y-5 sm:space-y-8">
+    <div className="max-w-full space-y-5 overflow-x-hidden sm:space-y-8">
       <AppHeader title="Hàng hóa" description="Quản lý danh mục sản phẩm" session={session} />
 
       <div className="flex min-h-[56px] flex-col gap-3 lg:min-h-[64px] lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-        <form className="w-full max-w-xl">
+        <form className="min-w-0 w-full max-w-xl">
           <AutocompleteSearchInput
             name="q"
             defaultValue={q}
@@ -315,12 +295,12 @@ export default async function ProductsPage({
         </form>
         {canCreateProducts ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <details className="relative">
-              <summary className="cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
+            <details className="relative w-full sm:w-auto">
+              <summary className="w-full cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-center text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
                 + Thêm SP
               </summary>
-              <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[500px] sm:top-20">
-                <ProductCreateFormLazy branches={branches} defaultBranchId={branchId} />
+              <div className="absolute left-0 right-0 top-16 z-20 w-auto max-w-full overflow-x-hidden sm:left-auto sm:right-0 sm:top-20 sm:w-[92vw] sm:max-w-[500px]">
+                <ProductCreateFormLazy />
               </div>
             </details>
           </div>
@@ -331,8 +311,6 @@ export default async function ProductsPage({
         <ProductsList
           q={q}
           branchId={branchId}
-          branchName={branchName}
-          branches={branches}
           page={page}
           pageSize={pageSize}
           canEditProducts={canEditProducts}

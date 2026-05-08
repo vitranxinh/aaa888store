@@ -45,11 +45,7 @@ export async function POST(request: Request) {
       categoryId: body.categoryId || "",
       brandId: body.brandId || "",
       sellingPrice: typeof body.sellingPrice === "number" ? body.sellingPrice : Number(body.sellingPrice ?? 0),
-      initialStockQuantity: typeof body.initialStockQuantity === "number" ? body.initialStockQuantity : Number(body.initialStockQuantity ?? 0),
-      stockBranchId: body.stockBranchId || "",
-      batchNumber: body.batchNumber || "",
-      stockDate: body.stockDate || "",
-      stockNote: body.stockNote || ""
+      initialStockQuantity: typeof body.initialStockQuantity === "number" ? body.initialStockQuantity : Number(body.initialStockQuantity ?? 0)
     };
     const parsed = productCreateSchema.safeParse(productInput);
     if (!parsed.success) {
@@ -59,7 +55,7 @@ export async function POST(request: Request) {
     const slug = `${parsed.data.name}-${resolvedSku}`.toLowerCase().replace(/\//g, "-").replace(/ /g, "-").replace(/-+/g, "-");
     const branchId =
       parsed.data.initialStockQuantity > 0
-        ? parsed.data.stockBranchId || session.branchId || (await prisma.branch.findFirst({
+        ? session.branchId || (await prisma.branch.findFirst({
             where: { isActive: true },
             orderBy: { createdAt: "asc" },
             select: { id: true }
@@ -108,34 +104,16 @@ export async function POST(request: Request) {
           });
         }
 
-        let batchId: string | undefined;
-        if (parsed.data.batchNumber) {
-          const batch = await tx.productBatch.create({
-            data: {
-              branchId,
-              productId: createdProduct.id,
-              batchNumber: parsed.data.batchNumber.trim(),
-              expiryDate: null,
-              quantity: parsed.data.initialStockQuantity,
-              importPrice: 0
-            },
-            select: { id: true }
-          });
-          batchId = batch.id;
-        }
-
         await tx.inventoryTransaction.create({
           data: {
             branchId,
             productId: createdProduct.id,
             variantId: null,
-            batchId,
             type: "IMPORT",
             quantity: parsed.data.initialStockQuantity,
-            note: parsed.data.stockNote?.trim() || "Nhập tồn ban đầu khi tạo sản phẩm",
+            note: "Nhập tồn ban đầu",
             referenceCode: createdProduct.sku,
-            createdById: actorUserId ?? undefined,
-            createdAt: parsed.data.stockDate ? new Date(parsed.data.stockDate) : undefined
+            createdById: actorUserId ?? undefined
           }
         });
       }

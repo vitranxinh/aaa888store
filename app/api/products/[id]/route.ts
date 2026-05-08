@@ -48,7 +48,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     const branchId =
       parsed.data.stockAdjustmentQuantity > 0
-        ? parsed.data.stockBranchId || session.branchId || (await prisma.branch.findFirst({
+        ? session.branchId || (await prisma.branch.findFirst({
             where: { isActive: true },
             orderBy: { createdAt: "asc" },
             select: { id: true }
@@ -100,7 +100,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
             variantId: null,
             type: "IMPORT",
             quantity: parsed.data.stockAdjustmentQuantity,
-            note: parsed.data.stockNote?.trim() || "Cập nhật tồn kho trong form sản phẩm",
+            note: "Cập nhật tồn kho",
             referenceCode: updatedProduct.sku,
             createdById: actorUserId ?? undefined
           }

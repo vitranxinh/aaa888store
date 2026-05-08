@@ -27,7 +27,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi">
-      <body>
+      <body className="max-w-full overflow-x-hidden">
         {children}
         <Toaster />
       </body>

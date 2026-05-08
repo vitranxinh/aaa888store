@@ -11,11 +11,9 @@ import { useToastStore } from "@/store/toast-store";
 type Props = {
   categories?: { id: string; name: string }[];
   brands?: { id: string; name: string }[];
-  branches: { id: string; name: string }[];
-  defaultBranchId?: string | null;
 };
 
-export function ProductCreateForm({ categories = [], brands = [], branches, defaultBranchId }: Props) {
+export function ProductCreateForm({ categories = [], brands = [] }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -34,10 +32,6 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
   const [initialStockQuantity, setInitialStockQuantity] = useState(0);
-  const [stockBranchId, setStockBranchId] = useState(defaultBranchId ?? branches[0]?.id ?? "");
-  const [batchNumber, setBatchNumber] = useState("");
-  const [stockDate, setStockDate] = useState(new Date().toISOString().slice(0, 10));
-  const [stockNote, setStockNote] = useState("");
   const pushToast = useToastStore((state) => state.push);
 
   useEffect(() => {
@@ -84,10 +78,6 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
     setCategoryId("");
     setBrandId("");
     setInitialStockQuantity(0);
-    setStockBranchId(defaultBranchId ?? branches[0]?.id ?? "");
-    setBatchNumber("");
-    setStockDate(new Date().toISOString().slice(0, 10));
-    setStockNote("");
   }
 
   async function createCategory() {
@@ -162,11 +152,7 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
           imageUrl: imageUrl.trim(),
           categoryId,
           brandId,
-          initialStockQuantity,
-          stockBranchId,
-          batchNumber: batchNumber.trim(),
-          stockDate,
-          stockNote: stockNote.trim()
+          initialStockQuantity
         })
       });
       const payload = await response.json();
@@ -193,11 +179,11 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
   }
 
   return (
-    <Card>
+    <Card className="min-w-0 w-full max-w-full overflow-x-hidden p-4 sm:p-5">
       <CardTitle>Tạo sản phẩm</CardTitle>
       <CardDescription className="mt-1">Tạo sản phẩm và nhập tồn ban đầu ngay trong một form.</CardDescription>
-      <form className="mt-4 grid gap-5" onSubmit={onSubmit}>
-        <section className="grid gap-3">
+      <form className="mt-4 grid min-w-0 gap-5" onSubmit={onSubmit}>
+        <section className="grid min-w-0 gap-3">
           <div>
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Thông tin sản phẩm</h4>
           </div>
@@ -207,7 +193,7 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
             <Input placeholder="Tên sản phẩm" value={name} onChange={(event) => setName(event.target.value)} />
           </label>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2">
             <label className="grid gap-1">
               <span className="text-sm font-semibold text-slate-700">Mã sản phẩm / SKU</span>
               <span className="text-xs text-slate-500">Để trống nếu muốn hệ thống tự tạo</span>
@@ -242,7 +228,7 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
             </div>
           ) : null}
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2">
             <label className="grid gap-1">
               <span className="text-sm font-semibold text-slate-700">Danh mục</span>
               <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
@@ -257,9 +243,9 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
                 + Thêm danh mục mới
               </button>
               {showCategoryCreator ? (
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <Input placeholder="Tên danh mục mới" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} />
-                  <Button type="button" className="shrink-0" loading={isAddingCategory} onClick={createCategory}>
+                  <Button type="button" className="w-full shrink-0 sm:w-auto" loading={isAddingCategory} onClick={createCategory}>
                     Thêm
                   </Button>
                 </div>
@@ -280,9 +266,9 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
                 + Thêm thương hiệu mới
               </button>
               {showBrandCreator ? (
-                <div className="flex gap-2">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <Input placeholder="Tên thương hiệu mới" value={newBrandName} onChange={(event) => setNewBrandName(event.target.value)} />
-                  <Button type="button" className="shrink-0" loading={isAddingBrand} onClick={createBrand}>
+                  <Button type="button" className="w-full shrink-0 sm:w-auto" loading={isAddingBrand} onClick={createBrand}>
                     Thêm
                   </Button>
                 </div>
@@ -291,59 +277,24 @@ export function ProductCreateForm({ categories = [], brands = [], branches, defa
           </div>
         </section>
 
-        <section className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <section className="grid min-w-0 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div>
             <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Hàng tồn</h4>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm font-semibold text-slate-700">Nhập tồn ban đầu</span>
-              <FormattedNumberInput
-                min={0}
-                value={initialStockQuantity}
-                onValueChange={setInitialStockQuantity}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Số lượng tồn ban đầu"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-sm font-semibold text-slate-700">Kho / chi nhánh</span>
-              <select className="rounded-xl border border-slate-300 px-3 py-2 text-sm" value={stockBranchId} onChange={(event) => setStockBranchId(event.target.value)}>
-                <option value="">Chọn kho / chi nhánh</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm font-semibold text-slate-700">Lô hàng</span>
-              <Input placeholder="Không bắt buộc" value={batchNumber} onChange={(event) => setBatchNumber(event.target.value)} />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-sm font-semibold text-slate-700">Ngày nhập tồn</span>
-              <Input type="date" value={stockDate} onChange={(event) => setStockDate(event.target.value)} />
-            </label>
-          </div>
-
           <label className="grid gap-1">
-            <span className="text-sm font-semibold text-slate-700">Ghi chú nhập tồn</span>
-            <textarea
+            <span className="text-sm font-semibold text-slate-700">Nhập tồn ban đầu</span>
+            <FormattedNumberInput
+              min={0}
+              value={initialStockQuantity}
+              onValueChange={setInitialStockQuantity}
               className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
-              rows={3}
-              placeholder="Ghi chú nhập tồn"
-              value={stockNote}
-              onChange={(event) => setStockNote(event.target.value)}
+              placeholder="Số lượng tồn"
             />
           </label>
         </section>
 
-        <Button loading={isPending}>Lưu sản phẩm</Button>
+        <Button loading={isPending} className="w-full sm:w-auto">Lưu sản phẩm</Button>
       </form>
     </Card>
   );
