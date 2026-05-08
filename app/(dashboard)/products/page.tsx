@@ -27,28 +27,33 @@ const ProductCreateFormLazy = dynamic(
 const getCachedProductsPageData = unstable_cache(
   async ({
     q,
+    status,
     branchId,
     page,
     pageSize
   }: {
     q: string;
+    status: "all" | "active" | "inactive";
     branchId: string;
     page: number;
     pageSize: number;
   }) => {
     const startedAt = Date.now();
-    const productWhere = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { sku: { contains: q, mode: "insensitive" as const } },
-            { barcode: { contains: q, mode: "insensitive" as const } },
-            { category: { name: { contains: q, mode: "insensitive" as const } } }
-          ]
-        }
-      : undefined;
+    const productWhere = {
+      ...(status === "active" ? { status: "ACTIVE" as const } : {}),
+      ...(status === "inactive" ? { status: "INACTIVE" as const } : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" as const } },
+              { sku: { contains: q, mode: "insensitive" as const } },
+              { barcode: { contains: q, mode: "insensitive" as const } },
+              { category: { name: { contains: q, mode: "insensitive" as const } } }
+            ]
+          }
+        : {})
+    };
 
-    // Tối ưu: Sử dụng include để lấy Category và Inventory (theo chi nhánh) trong 1 query duy nhất
     const products = await prisma.product.findMany({
       where: productWhere,
       include: {
@@ -61,6 +66,15 @@ const getCachedProductsPageData = unstable_cache(
             variantId: null
           },
           select: { quantity: true }
+        },
+        _count: {
+          select: {
+            inventories: true,
+            batches: true,
+            orderItems: true,
+            purchaseItems: true,
+            inventoryTxns: true
+          }
         }
       },
       orderBy: { sku: "asc" },
@@ -72,8 +86,13 @@ const getCachedProductsPageData = unstable_cache(
     const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
 
     const result = visibleProducts.map((product) => {
-      // Tính tổng tồn kho từ mảng inventories (thường chỉ có 1 row vì đã filter theo branchId và variantId: null)
       const quantity = product.inventories.reduce((sum, inv) => sum + inv.quantity, 0);
+      const hasRelatedHistory =
+        product._count.inventories > 0 ||
+        product._count.batches > 0 ||
+        product._count.orderItems > 0 ||
+        product._count.purchaseItems > 0 ||
+        product._count.inventoryTxns > 0;
       
       return {
         id: product.id,
@@ -89,12 +108,14 @@ const getCachedProductsPageData = unstable_cache(
         status: product.status,
         description: product.description,
         categoryName: product.category?.name ?? null,
-        quantity
+        quantity,
+        hasRelatedHistory
       };
     });
 
     console.info("[perf][products-page]", {
       q,
+      status,
       rowCount: result.length,
       fullDurationMs: Date.now() - startedAt
     });
@@ -110,6 +131,7 @@ const getCachedProductsPageData = unstable_cache(
 
 async function ProductsList({
   q,
+  status,
   branchId,
   page,
   pageSize,
@@ -117,6 +139,7 @@ async function ProductsList({
   canDeleteProducts,
 }: {
   q: string;
+  status: "all" | "active" | "inactive";
   branchId: string;
   page: number;
   pageSize: number;
@@ -125,6 +148,7 @@ async function ProductsList({
 }) {
   const { products, hasNext } = await getCachedProductsPageData({
     q,
+    status,
     branchId,
     page,
     pageSize
@@ -157,13 +181,22 @@ async function ProductsList({
                         <ProductEditModal
                           product={product}
                           currentQuantity={totalQuantity}
+                          status={product.status}
+                          hasRelatedHistory={product.hasRelatedHistory}
                           canDelete={canDeleteProducts}
                         />
                       </div>
                     ) : null}
                   </div>
 
-                  <p className="mt-2 text-[0.95rem] text-slate-500">{product.categoryName ?? "Chưa có nhóm"}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <p className="text-[0.95rem] text-slate-500">{product.categoryName ?? "Chưa có nhóm"}</p>
+                    {product.status === "INACTIVE" ? (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-[0.76rem] font-semibold text-amber-700">
+                        Đã ẩn khỏi danh sách bán
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
@@ -224,13 +257,23 @@ async function ProductsList({
                   <td className={`px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${totalQuantity <= product.lowStockAlert ? "text-red-500" : "text-slate-900"}`}>
                     {totalQuantity}
                   </td>
-                  <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{product.lowStockAlert}</td>
+                  <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
+                    {product.status === "INACTIVE" ? (
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">
+                        Đã ẩn khỏi danh sách bán
+                      </span>
+                    ) : (
+                      product.lowStockAlert
+                    )}
+                  </td>
                   {canEditProducts ? (
                     <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
                       <div className="flex justify-end gap-2">
                         <ProductEditModal
                           product={product}
                           currentQuantity={totalQuantity}
+                          status={product.status}
+                          hasRelatedHistory={product.hasRelatedHistory}
                           canDelete={canDeleteProducts}
                         />
                       </div>
@@ -242,7 +285,7 @@ async function ProductsList({
           </tbody>
         </table>
       </div>
-      <ServerPagination pathname="/products" query={{ q }} page={page} pageSize={pageSize} hasNext={hasNext} />
+      <ServerPagination pathname="/products" query={{ q, status }} page={page} pageSize={pageSize} hasNext={hasNext} />
     </>
   );
 }
@@ -269,13 +312,16 @@ function ProductsListFallback() {
 export default async function ProductsPage({
   searchParams
 }: {
-  searchParams?: { q?: string; page?: string };
+  searchParams?: { q?: string; page?: string; status?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canCreateProducts = true;
   const canEditProducts = session.role === "ADMIN" || session.role === "MANAGER";
   const canDeleteProducts = session.role === "ADMIN";
   const q = searchParams?.q ?? "";
+  const rawStatus = searchParams?.status;
+  const status: "all" | "active" | "inactive" =
+    rawStatus === "all" || rawStatus === "inactive" ? rawStatus : "active";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 10;
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
@@ -290,10 +336,37 @@ export default async function ProductsPage({
             defaultValue={q}
             placeholder="Tìm theo tên, mã, nhóm hàng..."
             suggestions={[]}
-            fetchUrl="/api/products/search?limit=30"
+            fetchUrl={`/api/products/search?limit=30${status !== "all" ? `&status=${status}` : ""}`}
           />
         </form>
-        {canCreateProducts ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "all" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                status === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Tất cả
+            </a>
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "active" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                status === "active" ? "bg-emerald-600 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Đang bán
+            </a>
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "inactive" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                status === "inactive" ? "bg-amber-500 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Đã ẩn
+            </a>
+          </div>
+          {canCreateProducts ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <details className="relative w-full sm:w-auto">
               <summary className="w-full cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-center text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
@@ -304,12 +377,14 @@ export default async function ProductsPage({
               </div>
             </details>
           </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <Suspense fallback={<ProductsListFallback />}>
         <ProductsList
           q={q}
+          status={status}
           branchId={branchId}
           page={page}
           pageSize={pageSize}

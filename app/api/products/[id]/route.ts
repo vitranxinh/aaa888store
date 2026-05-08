@@ -133,8 +133,11 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       select: {
         id: true,
         name: true,
+        status: true,
         _count: {
           select: {
+            inventories: true,
+            batches: true,
             orderItems: true,
             purchaseItems: true,
             inventoryTxns: true
@@ -147,11 +150,31 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Không tìm thấy sản phẩm" }, { status: 404 });
     }
 
-    if (product._count.orderItems > 0 || product._count.purchaseItems > 0 || product._count.inventoryTxns > 0) {
-      return NextResponse.json(
-        { error: "Không thể xóa sản phẩm đã phát sinh hóa đơn, nhập hàng hoặc lịch sử kho" },
-        { status: 400 }
-      );
+    const hasRelatedHistory =
+      product._count.inventories > 0 ||
+      product._count.batches > 0 ||
+      product._count.orderItems > 0 ||
+      product._count.purchaseItems > 0 ||
+      product._count.inventoryTxns > 0;
+
+    if (hasRelatedHistory) {
+      const hiddenProduct = await prisma.product.update({
+        where: { id: params.id },
+        data: { status: "INACTIVE" },
+        select: { name: true, status: true }
+      });
+
+      revalidateTag("products-page");
+      revalidateTag("pos-data");
+      revalidatePath("/products");
+      revalidatePath("/pos");
+
+      return NextResponse.json({
+        ok: true,
+        action: "hidden",
+        name: hiddenProduct.name,
+        status: hiddenProduct.status
+      });
     }
 
     await prisma.$transaction(async (tx) => {
@@ -167,7 +190,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     revalidatePath("/products");
     revalidatePath("/pos");
 
-    return NextResponse.json({ ok: true, name: product.name });
+    return NextResponse.json({ ok: true, action: "deleted", name: product.name });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Không thể xóa sản phẩm" },

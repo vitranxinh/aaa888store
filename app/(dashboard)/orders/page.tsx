@@ -48,8 +48,10 @@ const getCachedOrdersPageData = unstable_cache(
     const requestStartedAt = Date.now();
     const normalizedQuery = q.trim();
     let matchedCustomerIds: string[] = [];
+    const countQueryMs = 0;
 
     if (normalizedQuery) {
+      const customerFilterLookupStartedAt = Date.now();
       matchedCustomerIds = (
         await prisma.customer.findMany({
           where: { name: { contains: normalizedQuery, mode: "insensitive" } },
@@ -57,6 +59,12 @@ const getCachedOrdersPageData = unstable_cache(
           take: 50
         })
       ).map((customer) => customer.id);
+      console.info("[OrdersPerformance]", {
+        phase: "customer-filter-lookup",
+        q: normalizedQuery,
+        durationMs: Date.now() - customerFilterLookupStartedAt,
+        matchedCustomerCount: matchedCustomerIds.length
+      });
     }
 
     const orderWhere: Prisma.OrderWhereInput = {
@@ -89,16 +97,13 @@ const getCachedOrdersPageData = unstable_cache(
     const mainQueryStartedAt = Date.now();
     const orders = await prisma.order.findMany({
       where: orderWhere,
-      include: {
-        customer: {
-          select: { id: true, name: true, receivableDebt: true }
-        },
-        createdBy: {
-          select: { id: true, name: true }
-        },
-        deleteRequest: role === "ADMIN" ? {
-          select: { status: true }
-        } : false
+      select: {
+        id: true,
+        code: true,
+        createdAt: true,
+        grandTotal: true,
+        customerId: true,
+        createdById: true
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
@@ -108,6 +113,48 @@ const getCachedOrdersPageData = unstable_cache(
 
     const hasNext = orders.length > pageSize;
     const visibleOrders = hasNext ? orders.slice(0, pageSize) : orders;
+    const visibleCustomerIds = Array.from(new Set(visibleOrders.map((order) => order.customerId).filter(Boolean))) as string[];
+    const visibleUserIds = Array.from(new Set(visibleOrders.map((order) => order.createdById).filter(Boolean))) as string[];
+    const visibleOrderIds = visibleOrders.map((order) => order.id);
+
+    const customerLookupStartedAt = Date.now();
+    const customers = visibleCustomerIds.length > 0
+      ? await prisma.customer.findMany({
+          where: { id: { in: visibleCustomerIds } },
+          select: { id: true, name: true, receivableDebt: true }
+        })
+      : [];
+    const customerLookupMs = Date.now() - customerLookupStartedAt;
+
+    const userLookupStartedAt = Date.now();
+    const users = visibleUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: visibleUserIds } },
+          select: { id: true, name: true }
+        })
+      : [];
+    const userLookupMs = Date.now() - userLookupStartedAt;
+
+    const deleteRequestLookupStartedAt = Date.now();
+    const deleteRequests =
+      role === "ADMIN" && visibleOrderIds.length > 0
+        ? await prisma.orderDeleteRequest.findMany({
+            where: {
+              orderId: { in: visibleOrderIds },
+              status: "PENDING"
+            },
+            select: { orderId: true, status: true }
+          })
+        : [];
+    const deleteRequestLookupMs = Date.now() - deleteRequestLookupStartedAt;
+
+    const productLookupMs = 0;
+    const nestedItemsQueryMs = 0;
+    const totalsCalculationsMs = 0;
+
+    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+    const usersById = new Map(users.map((user) => [user.id, user]));
+    const deleteRequestsByOrderId = new Map(deleteRequests.map((deleteRequest) => [deleteRequest.orderId, deleteRequest]));
 
     const serializationStartedAt = Date.now();
     const serializedOrders = visibleOrders.map((order) => ({
@@ -115,16 +162,23 @@ const getCachedOrdersPageData = unstable_cache(
       code: order.code,
       createdAt: order.createdAt,
       grandTotal: order.grandTotal,
-      customer: order.customer ?? { id: "-", name: "-", receivableDebt: 0 },
-      createdBy: order.createdBy ?? null,
-      deleteRequest: order.deleteRequest ?? null
+      customer: customersById.get(order.customerId) ?? { id: "-", name: "-", receivableDebt: 0 },
+      createdBy: order.createdById ? usersById.get(order.createdById) ?? null : null,
+      deleteRequest: deleteRequestsByOrderId.get(order.id) ?? null
     }));
     const serializationMs = Date.now() - serializationStartedAt;
 
     console.info("[OrdersPerformance]", {
       q: normalizedQuery,
+      countQueryMs,
       rowCount: serializedOrders.length,
       mainOrdersQueryMs,
+      nestedItemsQueryMs,
+      customerLookupMs,
+      userLookupMs,
+      deleteRequestLookupMs,
+      productLookupMs,
+      totalsCalculationsMs,
       serializationMs,
       fullRequestDurationMs: Date.now() - requestStartedAt
     });
@@ -135,6 +189,58 @@ const getCachedOrdersPageData = unstable_cache(
     };
   },
   ["orders-page-data"],
+  { revalidate: 15 }
+);
+
+const getCachedPendingDeleteRequests = unstable_cache(
+  async (branchId: string | null, createdAtKey: string) => {
+    const startedAt = Date.now();
+    const parsedCreatedAt = createdAtKey ? (JSON.parse(createdAtKey) as Prisma.DateTimeFilter) : undefined;
+    try {
+      const pendingDeleteRequests = await prisma.orderDeleteRequest.findMany({
+        where: {
+          status: "PENDING",
+          order: {
+            branchId: branchId ?? undefined,
+            ...(parsedCreatedAt ? { createdAt: parsedCreatedAt } : {})
+          }
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          order: {
+            select: {
+              id: true,
+              code: true,
+              grandTotal: true,
+              createdAt: true,
+              customer: { select: { name: true } }
+            }
+          },
+          requestedBy: {
+            select: { name: true, email: true }
+          }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+
+      console.info("[OrdersPerformance]", {
+        section: "pendingDeleteRequests",
+        rowCount: pendingDeleteRequests.length,
+        fullRequestDurationMs: Date.now() - startedAt
+      });
+
+      return pendingDeleteRequests;
+    } catch (error) {
+      console.error("[OrdersPerformance]", {
+        section: "pendingDeleteRequests",
+        error: error instanceof Error ? error.message : "Unknown error",
+        fullRequestDurationMs: Date.now() - startedAt
+      });
+      return [];
+    }
+  },
+  ["orders-pending-delete-requests"],
   { revalidate: 15 }
 );
 
@@ -288,36 +394,7 @@ async function PendingDeleteRequestsSection({
   branchId: string | null;
   createdAt?: Prisma.DateTimeFilter;
 }) {
-  const startedAt = Date.now();
-  const pendingDeleteRequests = await prisma.orderDeleteRequest.findMany({
-    where: {
-      status: "PENDING",
-      order: {
-        branchId: branchId ?? undefined,
-        ...(createdAt ? { createdAt } : {})
-      }
-    },
-    include: {
-      order: {
-        select: {
-          id: true,
-          code: true,
-          grandTotal: true,
-          createdAt: true,
-          customer: { select: { name: true } }
-        }
-      },
-      requestedBy: {
-        select: { name: true, email: true }
-      }
-    },
-    orderBy: { createdAt: "desc" }
-  });
-  console.info("[OrdersPerformance]", {
-    section: "pendingDeleteRequests",
-    rowCount: pendingDeleteRequests.length,
-    fullRequestDurationMs: Date.now() - startedAt
-  });
+  const pendingDeleteRequests = await getCachedPendingDeleteRequests(branchId, createdAt ? JSON.stringify(createdAt) : "");
 
   if (pendingDeleteRequests.length === 0) return null;
 

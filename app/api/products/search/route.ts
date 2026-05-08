@@ -12,6 +12,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim() ?? "";
     const limit = Math.min(Number(searchParams.get("limit") ?? "40") || 40, 100);
+    const salesOnly = searchParams.get("salesOnly") === "1";
+    const status = searchParams.get("status");
 
     if (!query) {
       return NextResponse.json([]);
@@ -19,6 +21,13 @@ export async function GET(request: Request) {
 
     const products = await prisma.product.findMany({
       where: {
+        ...(salesOnly
+          ? { status: "ACTIVE" as const }
+          : status === "active"
+            ? { status: "ACTIVE" as const }
+            : status === "inactive"
+              ? { status: "INACTIVE" as const }
+              : {}),
         OR: [
           { name: { contains: query, mode: "insensitive" } },
           { sku: { contains: query, mode: "insensitive" } },

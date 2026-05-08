@@ -26,6 +26,8 @@ type Props = {
   categories?: { id: string; name: string }[];
   brands?: { id: string; name: string }[];
   currentQuantity: number;
+  status: "ACTIVE" | "INACTIVE";
+  hasRelatedHistory: boolean;
   canDelete?: boolean;
 };
 
@@ -34,6 +36,8 @@ export function ProductEditModal({
   categories = [],
   brands = [],
   currentQuantity,
+  status,
+  hasRelatedHistory,
   canDelete = false
 }: Props) {
   const router = useRouter();
@@ -155,7 +159,10 @@ export function ProductEditModal({
         return;
       }
 
-      pushToast({ title: "Đã xóa sản phẩm", description: payload.name ?? product.name });
+      pushToast({
+        title: payload.action === "hidden" ? "Đã ẩn khỏi danh sách bán" : "Đã xóa sản phẩm",
+        description: payload.name ?? product.name
+      });
       setOpen(false);
       router.refresh();
     });
@@ -357,8 +364,19 @@ export function ProductEditModal({
 
               <div className="sticky bottom-0 z-10 mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 bg-white px-0 py-4 sm:flex-row sm:justify-between">
                 {canDelete ? (
-                  <Button variant="destructive" type="button" onClick={handleDelete} loading={isPending} className="w-full sm:w-auto">
-                    Xóa sản phẩm
+                  <Button
+                    variant={hasRelatedHistory ? "outline" : "destructive"}
+                    type="button"
+                    onClick={handleDelete}
+                    loading={isPending}
+                    className="w-full sm:w-auto"
+                    disabled={isPending || status === "INACTIVE"}
+                  >
+                    {status === "INACTIVE"
+                      ? "Đã ẩn khỏi danh sách bán"
+                      : hasRelatedHistory
+                        ? "Ẩn khỏi danh sách bán"
+                        : "Xóa sản phẩm"}
                   </Button>
                 ) : <span />}
                 <Button loading={isPending} className="w-full sm:w-auto">Lưu thay đổi</Button>

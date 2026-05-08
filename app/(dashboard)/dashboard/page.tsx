@@ -111,7 +111,7 @@ export default async function DashboardPage({
                 {data.recentOrders.map((order) => (
                   <tr key={order.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
                     <td className="px-3 py-3 font-semibold text-emerald-600 sm:px-6 sm:py-4">{order.code}</td>
-                    <td className="px-3 py-3 sm:px-6 sm:py-4">{order.customer.name}</td>
+                    <td className="px-3 py-3 sm:px-6 sm:py-4">{order.customer?.name ?? "Khách lẻ"}</td>
                     <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(order.grandTotal))}</td>
                     <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(order.paidAmount))}</td>
                   </tr>
@@ -126,7 +126,7 @@ export default async function DashboardPage({
                   <p className="text-lg font-bold text-emerald-600">{order.code}</p>
                   <p className="text-xs font-semibold whitespace-nowrap text-slate-500">{formatCurrency(Number(order.grandTotal))}</p>
                 </div>
-                <p className="mt-2 text-lg font-semibold text-slate-900">{order.customer.name}</p>
+                <p className="mt-2 text-lg font-semibold text-slate-900">{order.customer?.name ?? "Khách lẻ"}</p>
                 <p className="mt-1 text-xs whitespace-nowrap text-slate-500">Đã trả {formatCurrency(Number(order.paidAmount))}</p>
               </div>
             ))}

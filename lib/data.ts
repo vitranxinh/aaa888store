@@ -15,74 +15,109 @@ function resolveRange(range: DashboardRange) {
 }
 
 async function fetchDashboardData(branchId: string | undefined, range: DashboardRange = "today") {
+  const startedAt = Date.now();
   const { start, end } = resolveRange(range);
   const branchWhere = branchId ? { branchId } : {};
   const customerWhere = {
     NOT: { code: "KH000000" }
   };
+  const summaryStartedAt = Date.now();
+  let customerCount = 0;
+  let productCount = 0;
+  let lowStockCount = 0;
+  let invoiceCount = 0;
+  let revenue = 0;
+  let debt = 0;
+  let recentOrders: Array<{
+    id: string;
+    code: string;
+    grandTotal: Prisma.Decimal;
+    paidAmount: Prisma.Decimal;
+    customer: { name: string } | null;
+  }> = [];
+  let chartOrders: Array<{ createdAt: Date; grandTotal: Prisma.Decimal }> = [];
 
-  const [
+  try {
+    const [
+      countedCustomers,
+      countedProducts,
+      aggregatedOrders,
+      countedLowStock,
+      fetchedRecentOrders,
+      fetchedChartOrders
+    ] = await prisma.$transaction([
+      prisma.customer.count({ where: customerWhere }),
+      prisma.product.count(),
+      prisma.order.aggregate({
+        where: {
+          ...branchWhere,
+          createdAt: { gte: start, lte: end },
+          status: { in: ["COMPLETED", "PARTIAL"] }
+        },
+        _sum: {
+          grandTotal: true,
+          debtAmount: true
+        },
+        _count: {
+          id: true
+        }
+      }),
+      prisma.inventory.count({
+        where: {
+          ...branchWhere,
+          product: {
+            lowStockAlert: { gte: 0 }
+          },
+          quantity: { lte: 0 }
+        }
+      }),
+      prisma.order.findMany({
+        where: branchWhere,
+        select: {
+          id: true,
+          code: true,
+          grandTotal: true,
+          paidAmount: true,
+          customer: { select: { name: true } }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 6
+      }),
+      prisma.order.findMany({
+        where: {
+          ...branchWhere,
+          createdAt: { gte: start, lte: end },
+          status: { in: ["COMPLETED", "PARTIAL"] }
+        },
+        select: {
+          createdAt: true,
+          grandTotal: true
+        }
+      })
+    ]);
+
+    customerCount = countedCustomers;
+    productCount = countedProducts;
+    lowStockCount = countedLowStock;
+    invoiceCount = aggregatedOrders._count.id;
+    revenue = Number(aggregatedOrders._sum.grandTotal ?? 0);
+    debt = Number(aggregatedOrders._sum.debtAmount ?? 0);
+    recentOrders = fetchedRecentOrders;
+    chartOrders = fetchedChartOrders;
+  } catch (error) {
+    console.error("[DashboardPerformance]", {
+      phase: "summary",
+      error: error instanceof Error ? error.message : "Unknown error",
+      durationMs: Date.now() - summaryStartedAt
+    });
+  }
+
+  console.info("[DashboardPerformance]", {
+    phase: "summary",
+    durationMs: Date.now() - summaryStartedAt,
     customerCount,
     productCount,
-    orderAggregate,
-    lowStockCount,
-    recentOrders
-  ] = await Promise.all([
-    prisma.customer.count({ where: customerWhere }),
-    prisma.product.count(),
-    prisma.order.aggregate({
-      where: {
-        ...branchWhere,
-        createdAt: { gte: start, lte: end },
-        status: { in: ["COMPLETED", "PARTIAL"] }
-      },
-      _sum: {
-        grandTotal: true,
-        debtAmount: true
-      },
-      _count: {
-        id: true
-      }
-    }),
-    prisma.inventory.count({
-      where: {
-        ...branchWhere,
-        product: {
-          lowStockAlert: { gte: 0 }
-        },
-        quantity: { lte: 0 } // Assuming low stock means <= 0 or below alert
-      }
-    }),
-    prisma.order.findMany({
-      where: branchWhere,
-      select: {
-        id: true,
-        code: true,
-        grandTotal: true,
-        paidAmount: true,
-        customer: { select: { name: true } }
-      },
-      orderBy: { createdAt: "desc" },
-      take: 6
-    })
-  ]);
-
-  const revenue = Number(orderAggregate._sum.grandTotal ?? 0);
-  const debt = Number(orderAggregate._sum.debtAmount ?? 0);
-  const invoiceCount = orderAggregate._count.id;
-
-  // For the chart, we still need the individual order totals within the period
-  // but we only fetch what's needed for the chart.
-  const chartOrders = await prisma.order.findMany({
-    where: {
-      ...branchWhere,
-      createdAt: { gte: start, lte: end },
-      status: { in: ["COMPLETED", "PARTIAL"] }
-    },
-    select: {
-      createdAt: true,
-      grandTotal: true
-    }
+    invoiceCount
   });
 
   const intervalDays = eachDayOfInterval({ start, end });
@@ -100,7 +135,7 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     };
   });
 
-  return {
+  const result = {
     range,
     customerCount,
     productCount,
@@ -111,6 +146,15 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     revenueByPeriod,
     recentOrders
   };
+
+  console.info("[DashboardPerformance]", {
+    phase: "full-request",
+    durationMs: Date.now() - startedAt,
+    range,
+    branchId: branchId ?? "all"
+  });
+
+  return result;
 }
 
 export async function getDashboardData(branchId: string | undefined, range: DashboardRange = "today") {

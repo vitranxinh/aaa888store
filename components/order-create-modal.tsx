@@ -114,7 +114,7 @@ export function OrderCreateModal({ branchId }: Props) {
     const timeoutId = window.setTimeout(async () => {
       setIsSearchingProducts(true);
       try {
-        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=30`, {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=30&salesOnly=1`, {
           signal: controller.signal,
           credentials: "same-origin"
         });

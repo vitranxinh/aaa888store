@@ -19,8 +19,8 @@ npm install
 1. Tìm file `.env.example` trong thư mục gốc.
 2. Tạo một file mới tên là `.env` và copy nội dung từ `.env.example` sang.
 3. Cập nhật các thông số trong file `.env`:
-   - `DATABASE_URL`: Đường dẫn kết nối database PostgreSQL của bạn.
-   - `DIRECT_URL`: Thường giống với DATABASE_URL (dùng cho Prisma migration).
+   - `DATABASE_URL`: Đường dẫn kết nối database PostgreSQL của bạn. Nếu dùng Vercel + Neon thì nên dùng **pooled URL** cho runtime.
+   - `DIRECT_URL`: Dùng cho Prisma migration / `db push`. Nếu dùng Neon thì nên dùng **direct URL** (không qua pooler).
    - `JWT_SECRET`: Một chuỗi ký tự bất kỳ để bảo mật phiên đăng nhập.
 
 ### Bước 3: Đồng bộ Database với Prisma
