@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
@@ -11,6 +12,8 @@ type Props = {
 };
 
 export function OrderStatusActions({ id, role, hasPendingDeleteRequest = false }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
 
@@ -53,7 +56,12 @@ export function OrderStatusActions({ id, role, hasPendingDeleteRequest = false }
         });
       }
 
-      window.location.reload();
+      if (payload.mode === "deleted" && pathname?.startsWith(`/orders/${id}`)) {
+        router.replace("/orders");
+        return;
+      }
+
+      router.refresh();
     });
   }
 
@@ -68,7 +76,7 @@ export function OrderStatusActions({ id, role, hasPendingDeleteRequest = false }
   return (
     <div className="flex gap-2">
       <Button variant="destructive" disabled={isPending} onClick={handleDelete}>
-        {role === "ADMIN" ? "Xóa" : "Yêu cầu xóa"}
+        {isPending ? (role === "ADMIN" ? "Đang xóa..." : "Đang gửi...") : role === "ADMIN" ? "Xóa" : "Yêu cầu xóa"}
       </Button>
     </div>
   );
