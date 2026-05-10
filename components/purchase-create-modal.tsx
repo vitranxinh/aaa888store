@@ -52,7 +52,7 @@ export function PurchaseCreateModal({
     const timeoutId = window.setTimeout(async () => {
       setIsSearchingProducts(true);
       try {
-        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=20`, {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=20&salesOnly=1`, {
           signal: controller.signal,
           credentials: "same-origin"
         });

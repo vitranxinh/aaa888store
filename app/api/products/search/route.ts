@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const limit = Math.min(Number(searchParams.get("limit") ?? "40") || 40, 100);
     const salesOnly = searchParams.get("salesOnly") === "1";
     const status = searchParams.get("status");
+    const includeInactive = searchParams.get("includeInactive") === "1";
 
     if (!query) {
       return NextResponse.json([]);
@@ -27,7 +28,9 @@ export async function GET(request: Request) {
             ? { status: "ACTIVE" as const }
             : status === "inactive"
               ? { status: "INACTIVE" as const }
-              : {}),
+              : includeInactive
+                ? {}
+                : { status: "ACTIVE" as const }),
         OR: [
           { name: { contains: query, mode: "insensitive" } },
           { sku: { contains: query, mode: "insensitive" } },
