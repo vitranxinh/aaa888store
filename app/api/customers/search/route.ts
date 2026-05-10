@@ -10,6 +10,32 @@ function displayCustomerPhone(phone: string | null) {
   return phone?.startsWith("AUTO_PHONE_") ? "" : phone;
 }
 
+type CustomerCandidate = {
+  id: string;
+  name: string;
+  code: string;
+  phone: string | null;
+};
+
+function buildCustomerSuggestions(customers: CustomerCandidate[], query: string) {
+  return customers
+    .map((customer) => {
+      const phone = displayCustomerPhone(customer.phone);
+      return {
+        customer: { ...customer, phone },
+        score: getSearchScore(`${customer.name} ${customer.code} ${phone ?? ""}`, query)
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) =>
+      compareSearchResults(
+        { label: a.customer.name, score: a.score, searchText: `${a.customer.name} ${a.customer.code} ${a.customer.phone ?? ""}` },
+        { label: b.customer.name, score: b.score, searchText: `${b.customer.name} ${b.customer.code} ${b.customer.phone ?? ""}` },
+        query
+      )
+    );
+}
+
 export async function GET(request: Request) {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
@@ -40,19 +66,36 @@ export async function GET(request: Request) {
       take: 200
     });
 
-    const results = customers
-      .map((customer) => ({
-        customer: { ...customer, phone: displayCustomerPhone(customer.phone) },
-        score: getSearchScore(`${customer.name} ${customer.code} ${displayCustomerPhone(customer.phone) ?? ""}`, query)
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) =>
-        compareSearchResults(
-          { label: a.customer.name, score: a.score, searchText: `${a.customer.name} ${a.customer.code} ${a.customer.phone ?? ""}` },
-          { label: b.customer.name, score: b.score, searchText: `${b.customer.name} ${b.customer.code} ${b.customer.phone ?? ""}` },
-          query
-        )
-      )
+    let rankedCustomers = buildCustomerSuggestions(customers, query);
+
+    if (rankedCustomers.length < limit) {
+      const fallbackCustomers = await prisma.customer.findMany({
+        where: {
+          NOT: { code: "KH000000" }
+        },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          phone: true
+        },
+        orderBy: { name: "asc" },
+        take: 1000
+      });
+
+      const uniqueCustomers = Array.from(
+        new Map(
+          [...customers, ...fallbackCustomers].map((customer) => [
+            customer.id,
+            customer
+          ])
+        ).values()
+      );
+
+      rankedCustomers = buildCustomerSuggestions(uniqueCustomers, query);
+    }
+
+    const results = rankedCustomers
       .slice(0, limit)
       .map((entry) => ({
         id: entry.customer.id,
