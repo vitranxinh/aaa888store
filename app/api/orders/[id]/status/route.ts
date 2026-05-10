@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSession } from "@/lib/auth";
-import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
-import { prisma } from "@/lib/prisma";
+import { deleteOrderById } from "@/lib/order-delete";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -11,28 +10,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Trạng thái không hợp lệ" }, { status: 400 });
     }
 
-    const order = await prisma.order.findUnique({
-      where: { id: params.id },
-      include: { items: true }
-    });
-
-    if (!order) {
-      return NextResponse.json({ error: "Không tìm thấy đơn hàng" }, { status: 404 });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.order.update({
-        where: { id: params.id },
-        data: {
-          status: body.status,
-          debtAmount: 0
-        }
-      });
-
-      await recalculateCustomerReceivableDebt(tx, order.customerId);
-    });
-
-    return NextResponse.json({ ok: true });
+    const cancelledOrder = await deleteOrderById(params.id);
+    return NextResponse.json({ ok: true, code: cancelledOrder.code, mode: "cancelled", alreadyCancelled: cancelledOrder.mode === "already_cancelled" });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

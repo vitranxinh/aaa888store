@@ -6,13 +6,12 @@ import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { OrderDeleteRequestActions } from "@/components/order-delete-request-actions";
 import { OrdersFilterBar } from "@/components/orders-filter-bar";
-import { ServerPagination } from "@/components/server-pagination";
-import { OrderStatusActions } from "@/components/order-status-actions";
+import { OrdersListClient } from "@/components/orders-list-client";
 import { requireSession } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
-import { formatCurrency, formatCustomerDebt, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
 const OrderCreateModal = dynamic(
   () => import("@/components/order-create-modal").then((module) => module.OrderCreateModal),
@@ -71,6 +70,7 @@ const getCachedOrdersPageData = unstable_cache(
       AND: [
         { branchId: branchId ?? undefined },
         ...(createdAt ? [{ createdAt }] : []),
+        { status: { not: "CANCELLED" as const } },
         ...(role !== "ADMIN"
           ? [
               {
@@ -161,8 +161,13 @@ const getCachedOrdersPageData = unstable_cache(
       id: order.id,
       code: order.code,
       createdAt: order.createdAt,
-      grandTotal: order.grandTotal,
-      customer: customersById.get(order.customerId) ?? { id: "-", name: "-", receivableDebt: 0 },
+      grandTotal: Number(order.grandTotal),
+      customer: customersById.get(order.customerId)
+        ? {
+            ...customersById.get(order.customerId)!,
+            receivableDebt: Number(customersById.get(order.customerId)!.receivableDebt)
+          }
+        : { id: "-", name: "-", receivableDebt: 0 },
       createdBy: order.createdById ? usersById.get(order.createdById) ?? null : null,
       deleteRequest: deleteRequestsByOrderId.get(order.id) ?? null
     }));
@@ -271,99 +276,7 @@ async function OrdersList({
   });
 
   return (
-    <>
-      <div className="grid gap-3 sm:hidden">
-        {orders.map((order) => (
-          <div key={order.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <Link
-                  href={`/orders/${order.id}`}
-                  prefetch={false}
-                  className="text-[0.9rem] font-semibold uppercase tracking-wide text-emerald-600 underline-offset-2 hover:underline"
-                >
-                  {order.code}
-                </Link>
-                <p className="mt-1 text-[0.95rem] text-slate-500">{formatDate(order.createdAt)}</p>
-              </div>
-              <div className="rounded-2xl bg-emerald-50 px-3 py-1 text-[0.9rem] font-semibold text-emerald-700">
-                {formatCurrency(Number(order.grandTotal))}
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <Link
-                href={`/orders/${order.id}`}
-                prefetch={false}
-                className="text-[1.15rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline"
-              >
-                {order.customer.name}
-              </Link>
-              <p className="mt-1 text-[0.92rem] text-slate-500">Lập bởi: {order.createdBy?.name ?? "Không rõ"}</p>
-              <p className="mt-1 text-[0.92rem] font-semibold text-red-600">
-                Công nợ KH: {formatCustomerDebt(Number(order.customer.receivableDebt))}
-              </p>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <OrderStatusActions
-                id={order.id}
-                role={role}
-                hasPendingDeleteRequest={order.deleteRequest?.status === "PENDING"}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-soft sm:block">
-        <table className="min-w-[920px] text-left">
-          <thead className="bg-slate-50 text-sm font-semibold text-slate-500 sm:text-xl">
-            <tr>
-              <th className="px-3 py-3 sm:px-6 sm:py-4">Mã HĐ</th>
-              <th className="px-3 py-3 sm:px-6 sm:py-4">Ngày</th>
-              <th className="px-3 py-3 sm:px-6 sm:py-4">Khách hàng</th>
-              <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Công nợ KH</th>
-              <th className="px-3 py-3 sm:px-6 sm:py-4">Người tạo</th>
-              <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Tổng tiền</th>
-              <th className="px-3 py-3 sm:px-6 sm:py-4">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((order) => (
-              <tr key={order.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
-                <td className="px-3 py-3 font-semibold text-emerald-600 sm:px-6 sm:py-4">
-                  <Link href={`/orders/${order.id}`} prefetch={false} className="underline-offset-2 hover:underline">
-                    {order.code}
-                  </Link>
-                </td>
-                <td className="px-3 py-3 sm:px-6 sm:py-4">{formatDate(order.createdAt)}</td>
-                <td className="px-3 py-3 font-medium text-slate-900 sm:px-6 sm:py-4">
-                  <Link href={`/orders/${order.id}`} prefetch={false} className="underline-offset-2 hover:underline">
-                    {order.customer.name}
-                  </Link>
-                </td>
-                <td className={`px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${Number(order.customer.receivableDebt) > 0 ? "text-red-600" : Number(order.customer.receivableDebt) < 0 ? "text-emerald-700" : "text-slate-700"}`}>
-                  {formatCustomerDebt(Number(order.customer.receivableDebt))}
-                </td>
-                <td className="px-3 py-3 sm:px-6 sm:py-4">{order.createdBy?.name ?? "-"}</td>
-                <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(order.grandTotal))}</td>
-                <td className="px-3 py-3 sm:px-6 sm:py-4">
-                  <div className="flex flex-wrap gap-2">
-                    <OrderStatusActions
-                      id={order.id}
-                      role={role}
-                      hasPendingDeleteRequest={order.deleteRequest?.status === "PENDING"}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <ServerPagination pathname="/orders" query={query} page={page} pageSize={pageSize} hasNext={hasNext} />
-    </>
+    <OrdersListClient initialOrders={orders} role={role} query={query} page={page} pageSize={pageSize} hasNext={hasNext} />
   );
 }
 
@@ -402,7 +315,7 @@ async function PendingDeleteRequestsSection({
     <section className="rounded-3xl border border-amber-200 bg-amber-50/70 p-4 shadow-soft sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Yêu cầu xóa hóa đơn</h2>
+          <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Yêu cầu hủy hóa đơn</h2>
           <p className="mt-1 text-sm text-slate-600 sm:text-base">
             Nhân viên đã gửi {pendingDeleteRequests.length} yêu cầu chờ sếp duyệt.
           </p>

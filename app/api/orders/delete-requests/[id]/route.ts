@@ -4,6 +4,7 @@ import { deleteOrderById } from "@/lib/order-delete";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  const startedAt = Date.now();
   try {
     const session = await requireApiSession(["ADMIN"]);
     const actorUserId = await resolveActorUserId(session);
@@ -31,6 +32,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     if (action === "approve") {
       const deletedOrder = await deleteOrderById(deleteRequest.orderId);
+      console.info("[CancelOrderTiming]", {
+        phase: "approve-delete-request",
+        deleteRequestId: deleteRequest.id,
+        orderId: deleteRequest.orderId,
+        totalDurationMs: Date.now() - startedAt
+      });
       return NextResponse.json({
         ok: true,
         mode: "approved",
@@ -57,6 +64,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     return NextResponse.json({ error: "Hành động không hợp lệ" }, { status: 400 });
   } catch (error) {
+    console.error("[CancelOrderError]", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Không thể xử lý yêu cầu xóa" },
       { status: 500 }

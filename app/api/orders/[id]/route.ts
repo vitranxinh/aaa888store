@@ -31,9 +31,20 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+  const startedAt = Date.now();
   try {
+    console.info("[CancelOrderTiming]", {
+      phase: "api-request-received",
+      orderId: params.id
+    });
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const actorUserId = await resolveActorUserId(session);
+    console.info("[CancelOrderTiming]", {
+      phase: "authorization",
+      orderId: params.id,
+      role: session.role,
+      durationMs: Date.now() - startedAt
+    });
     const order = await prisma.order.findUnique({
       where: { id: params.id },
       select: {
@@ -51,8 +62,14 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     }
 
     if (session.role === "ADMIN") {
-      const deletedOrder = await deleteOrderById(params.id);
-      return NextResponse.json({ ok: true, code: deletedOrder.code, mode: "deleted" });
+      const cancelledOrder = await deleteOrderById(params.id);
+      console.info("[CancelOrderTiming]", {
+        phase: "api-response",
+        orderId: params.id,
+        mode: cancelledOrder.mode,
+        totalDurationMs: Date.now() - startedAt
+      });
+      return NextResponse.json({ ok: true, code: cancelledOrder.code, mode: "cancelled", alreadyCancelled: cancelledOrder.mode === "already_cancelled" });
     }
 
     await prisma.orderDeleteRequest.upsert({
@@ -70,8 +87,14 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       }
     });
 
+    console.info("[CancelOrderTiming]", {
+      phase: "request-delete-created",
+      orderId: params.id,
+      totalDurationMs: Date.now() - startedAt
+    });
     return NextResponse.json({ ok: true, code: order.code, mode: "requested" });
   } catch (error) {
+    console.error("[CancelOrderError]", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Không thể xóa hóa đơn" },
       { status: 500 }

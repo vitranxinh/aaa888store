@@ -62,7 +62,7 @@ export default async function OrderDetailPage({
 
       {deleteRequest?.status === "PENDING" ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 sm:text-base">
-          Hóa đơn này đang có yêu cầu xóa từ {deleteRequest.requestedBy.name}. Chỉ tài khoản sếp mới có thể duyệt hoặc từ chối.
+          Hóa đơn này đang có yêu cầu hủy từ {deleteRequest.requestedBy.name}. Chỉ tài khoản sếp mới có thể duyệt hoặc từ chối.
         </div>
       ) : null}
 
