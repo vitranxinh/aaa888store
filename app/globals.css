@@ -13,6 +13,24 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.mobile-safe-bottom {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.mobile-bottom-nav {
+  padding-bottom: calc(0.35rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 1024px) {
+  .mobile-safe-bottom {
+    padding-bottom: 0;
+  }
+
+  .mobile-bottom-nav {
+    padding-bottom: 0;
+  }
+}
+
 @media (max-width: 640px) {
   html {
     font-size: 19px;

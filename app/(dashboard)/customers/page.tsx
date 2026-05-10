@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
-import { CustomerCreateForm } from "@/components/customer-create-form";
+import { CustomerCreateLauncher } from "@/components/customer-create-launcher";
 import { CustomerEditModal } from "@/components/customer-edit-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
@@ -276,14 +276,7 @@ export default async function CustomersPage({
         </form>
         {canCreateCustomers ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <details className="relative">
-              <summary className="cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
-                + Thêm KH
-              </summary>
-              <div className="absolute right-0 top-16 z-20 w-[92vw] max-w-[460px] sm:top-20">
-                <CustomerCreateForm groups={groupOptions} />
-              </div>
-            </details>
+            <CustomerCreateLauncher groups={groupOptions} />
           </div>
         ) : null}
       </div>

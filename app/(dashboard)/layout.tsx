@@ -6,12 +6,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await requireSession();
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-slate-50">
       <AppSidebar session={session} />
-      <div className="flex-1 pb-24 lg:pb-0">
+      <div className="mobile-safe-bottom flex-1 max-w-full overflow-x-hidden">
         <MobileNav session={session} />
-        <div className="p-4 sm:p-5 lg:p-8">
-        {children}
+        <div className="max-w-full overflow-x-hidden px-4 py-4 sm:px-5 sm:py-5 lg:p-8">
+          {children}
         </div>
       </div>
     </div>

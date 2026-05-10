@@ -14,6 +14,12 @@ import { cn } from "@/lib/utils";
 export function MobileNav({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname() ?? "";
+  const quickLabels: Record<string, string> = {
+    dashboard: "Tổng quan",
+    customers: "Khách",
+    products: "Hàng",
+    orders: "Hóa đơn"
+  };
   const quickItems = navigationItems
     .filter(
       (item) =>
@@ -99,7 +105,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/98 px-2 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+      <div className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/90 px-2 pt-2 shadow-[0_-6px_20px_rgba(15,23,42,0.08)] backdrop-blur-md lg:hidden">
         <div className="grid grid-cols-4 gap-1">
           {quickItems.map((item) => {
             const Icon = item.icon;
@@ -110,12 +116,12 @@ export function MobileNav({ session }: { session: SessionUser }) {
                 href={item.href}
                 prefetch={false}
                 className={cn(
-                  "flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-2 text-[14px] font-semibold",
-                  active ? "bg-emerald-50 text-emerald-600" : "text-slate-500"
+                  "flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-2xl px-1.5 py-2 text-[12px] font-semibold transition-colors",
+                  active ? "bg-emerald-50 text-emerald-600 shadow-sm" : "text-slate-500"
                 )}
               >
-                <Icon className="h-6 w-6" />
-                <span className="line-clamp-1">{item.title}</span>
+                <Icon className={cn("h-5 w-5", active ? "text-emerald-600" : "text-slate-500")} />
+                <span className="w-full text-center leading-tight">{quickLabels[item.key] ?? item.title}</span>
               </PrefetchNavLink>
             );
           })}
