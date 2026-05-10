@@ -258,7 +258,7 @@ export default async function CustomersPage({
             placeholder="Tìm theo tên, mã, SĐT..."
             suggestions={[]}
             fetchUrl="/api/customers/search?limit=20"
-            autoSubmitDelayMs={300}
+            autoSubmitDelayMs={10000}
             className="sm:min-w-[280px]"
           />
           <select
