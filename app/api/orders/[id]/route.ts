@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiSession, resolveActorUserId } from "@/lib/auth";
+import { revalidateTag } from "next/cache";
 import { deleteOrderById } from "@/lib/order-delete";
 import { updateOrderFromPayload } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
@@ -69,6 +70,9 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
         mode: cancelledOrder.mode,
         totalDurationMs: Date.now() - startedAt
       });
+      revalidateTag("orders-page-data");
+      revalidateTag("orders-pending-delete-requests");
+      
       return NextResponse.json({ ok: true, code: cancelledOrder.code, mode: "cancelled", alreadyCancelled: cancelledOrder.mode === "already_cancelled" });
     }
 
