@@ -254,7 +254,8 @@ export async function getInvoicePdfOrder(orderId: string): Promise<InvoicePdfOrd
 
 export async function generateAndStoreInvoicePdf(orderId: string) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    throw new Error("BLOB_READ_WRITE_TOKEN is missing");
+    console.warn("[PDF] Skipping PDF upload to Vercel Blob because BLOB_READ_WRITE_TOKEN is not set.");
+    return null;
   }
 
   const order = await getInvoicePdfOrder(orderId);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireApiSession } from "@/lib/auth";
 import { generateAndStoreInvoicePdf } from "@/lib/invoice-pdf";
 import { createOrderFromPayload } from "@/lib/order-service";
@@ -117,6 +117,7 @@ export async function POST(request: Request) {
         revalidateRedirectMs
       )} ms\n- total: ${Math.round(Date.now() - startedAt)} ms`
     );
+    revalidateTag("orders-page-data");
     return NextResponse.json({ ok: true, order: { ...order, ...pdfMeta }, pdfWarning });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

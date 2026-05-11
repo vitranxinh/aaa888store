@@ -251,7 +251,7 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
     ]);
     await applyOrderEffects(tx, { id: orderId, code: nextCodeVersion, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, receiptCode);
     return { id: orderId, code: nextCodeVersion };
-  });
+  }, { maxWait: 20000, timeout: 60000 });
 }
 
 export async function createOrderFromPayload(payload: OrderPayload): Promise<{ order: { id: string; code: string }; timing: CreateOrderTiming }> {
@@ -307,7 +307,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
 
       tSteps.transactionTotalMs = Date.now() - transactionStartedAt;
       return { order: { id: orderId, code: realCode }, transactionSteps: tSteps };
-    }, { maxWait: 10000, timeout: 30000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
+    }, { maxWait: 20000, timeout: 60000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
   steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
   Object.assign(steps, transactionSteps);
   steps.totalMs = Date.now() - totalStartedAt;

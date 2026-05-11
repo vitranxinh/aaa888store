@@ -1,3 +1,4 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { requireApiSession, resolveActorUserId } from "@/lib/auth";
 import { deleteOrderById } from "@/lib/order-delete";
@@ -38,6 +39,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         orderId: deleteRequest.orderId,
         totalDurationMs: Date.now() - startedAt
       });
+      revalidateTag("orders-page-data");
+      revalidateTag("orders-pending-delete-requests");
       return NextResponse.json({
         ok: true,
         mode: "approved",
@@ -55,6 +58,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         }
       });
 
+      revalidateTag("orders-pending-delete-requests");
       return NextResponse.json({
         ok: true,
         mode: "rejected",
