@@ -3,6 +3,7 @@ import { AppHeader } from "@/components/app-header";
 import { ChartCard } from "@/components/chart-card";
 import { requireSession } from "@/lib/auth";
 import { getDashboardData, type DashboardRange } from "@/lib/data";
+import { canAccess } from "@/lib/permissions";
 import { formatCurrency } from "@/lib/utils";
 
 const ranges: { label: string; value: DashboardRange }[] = [
@@ -41,7 +42,7 @@ export default async function DashboardPage({
   const mobileQuickLinks = [
     { href: "/cashflow", label: "Thu / Chi", icon: "💸", tone: "bg-amber-50 text-amber-700 border-amber-100" },
     { href: "/inventory", label: "Nhập hàng", icon: "📥", tone: "bg-violet-50 text-violet-700 border-violet-100" }
-  ];
+  ].filter((item) => (item.href === "/inventory" ? canAccess(session.role, "inventory") : true));
 
   return (
     <div className="space-y-5 sm:space-y-8">
