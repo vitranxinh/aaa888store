@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   try {
     const steps: PerfSteps = {};
     const totalStartedAt = Date.now();
-    const session = await requireApiSession(["ADMIN", "MANAGER"]);
+    const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const body = await measureStep(steps, "requestBodyMs", () => request.json());
     const parsed = purchaseSchema.safeParse(body);
     if (!parsed.success) {

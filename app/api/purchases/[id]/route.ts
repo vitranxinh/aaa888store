@@ -106,7 +106,7 @@ async function applyPurchaseInventory(
 
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await requireApiSession(["ADMIN", "MANAGER"]);
+    const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const body = await request.json();
     const parsed = purchaseSchema.safeParse(body);
 
@@ -262,7 +262,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER"]);
+    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
 
     const existing = await prisma.purchaseOrder.findUnique({
       where: { id: params.id },

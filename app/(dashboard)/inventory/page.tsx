@@ -256,7 +256,7 @@ export default async function InventoryPage({
 }: {
   searchParams?: { q?: string; range?: string; dateFrom?: string; dateTo?: string; page?: string };
 }) {
-  const session = await requireSession(["ADMIN", "MANAGER"]);
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const q = searchParams?.q ?? "";
   const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
   const dateFrom = searchParams?.dateFrom ?? "";

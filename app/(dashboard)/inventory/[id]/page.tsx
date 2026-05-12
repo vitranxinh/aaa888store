@@ -11,7 +11,7 @@ export default async function PurchaseDetailPage({
 }: {
   params: { id: string };
 }) {
-  const session = await requireSession(["ADMIN", "MANAGER"]);
+  const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const purchase = await prisma.purchaseOrder.findUnique({
     where: { id: params.id },
     select: {
