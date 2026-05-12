@@ -3,10 +3,12 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { supplierSchema } from "@/lib/validations";
 import { useToastStore } from "@/store/toast-store";
@@ -51,7 +53,18 @@ export function SupplierCreateForm() {
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <Input placeholder="Số điện thoại" {...form.register("phone")} />
-          <Input type="number" placeholder="Công nợ đầu kỳ" {...form.register("openingDebt", { valueAsNumber: true })} />
+          <Controller
+            control={form.control}
+            name="openingDebt"
+            render={({ field }) => (
+              <FormattedNumberInput
+                placeholder="Công nợ đầu kỳ"
+                min={0}
+                value={Number(field.value ?? 0)}
+                onValueChange={field.onChange}
+              />
+            )}
+          />
         </div>
         <Input placeholder="Địa chỉ" {...form.register("address")} />
         <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Ghi chú" {...form.register("note")} />

@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { useToastStore } from "@/store/toast-store";
 
 type Props = {
@@ -126,11 +127,10 @@ export function ProductStockAdjustModal({ productId, productName, branchId, curr
 
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-900 sm:text-lg">Tồn mới</label>
-                  <input
-                    type="number"
-                    min="0"
+                  <FormattedNumberInput
+                    min={0}
                     value={targetQuantity}
-                    onChange={(event) => setTargetQuantity(Number(event.target.value))}
+                    onValueChange={setTargetQuantity}
                     className="h-14 w-full rounded-2xl border border-slate-300 px-4 text-xl"
                     placeholder="Nhập tồn mới"
                   />

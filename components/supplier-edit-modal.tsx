@@ -3,9 +3,11 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { supplierSchema } from "@/lib/validations";
 import { useToastStore } from "@/store/toast-store";
@@ -118,11 +120,18 @@ export function SupplierEditModal({ supplier }: Props) {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <Input placeholder="Số điện thoại" {...form.register("phone")} className="h-14 text-xl" />
-                <Input
-                  type="number"
-                  placeholder="Công nợ đầu kỳ"
-                  {...form.register("openingDebt", { valueAsNumber: true })}
-                  className="h-14 text-xl"
+                <Controller
+                  control={form.control}
+                  name="openingDebt"
+                  render={({ field }) => (
+                    <FormattedNumberInput
+                      placeholder="Công nợ đầu kỳ"
+                      min={0}
+                      value={Number(field.value ?? 0)}
+                      onValueChange={field.onChange}
+                      className="h-14 text-xl"
+                    />
+                  )}
                 />
               </div>
               <Input placeholder="Địa chỉ" {...form.register("address")} className="h-14 text-xl" />

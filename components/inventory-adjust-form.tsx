@@ -3,10 +3,12 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { inventoryAdjustmentSchema } from "@/lib/validations";
 import { useToastStore } from "@/store/toast-store";
@@ -79,7 +81,18 @@ export function InventoryAdjustForm({ branches, products, defaultBranchId }: Pro
             <option value="TRANSFER_OUT">Chuyển đi</option>
             <option value="TRANSFER_IN">Nhận chuyển</option>
           </select>
-          <Input type="number" {...form.register("quantity", { valueAsNumber: true })} />
+          <Controller
+            control={form.control}
+            name="quantity"
+            render={({ field }) => (
+              <FormattedNumberInput
+                value={Number(field.value ?? 0)}
+                onValueChange={field.onChange}
+                min={0}
+                allowNegative={form.watch("type") === "ADJUSTMENT"}
+              />
+            )}
+          />
         </div>
         <Input placeholder="Mã tham chiếu" {...form.register("referenceCode")} />
         <textarea className="rounded-xl border border-slate-300 px-3 py-2 text-sm" rows={3} placeholder="Ghi chú" {...form.register("note")} />

@@ -1,28 +1,14 @@
-import dynamic from "next/dynamic";
 import { Suspense } from "react";
 import { unstable_cache } from "next/cache";
 import { AppHeader } from "@/components/app-header";
 import { AutocompleteSearchInput } from "@/components/autocomplete-search-input";
+import { ProductCreateLauncher } from "@/components/product-create-launcher";
 import { ProductEditModal } from "@/components/product-edit-modal";
 import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
 import { formatCurrency } from "@/lib/utils";
-
-const ProductCreateFormLazy = dynamic(
-  () => import("@/components/product-create-form").then((module) => module.ProductCreateForm),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="absolute left-0 right-0 top-16 z-20 w-auto max-w-full overflow-x-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl sm:left-auto sm:right-0 sm:top-20 sm:w-[92vw] sm:max-w-[500px] sm:p-6">
-        <div className="h-6 w-40 animate-pulse rounded bg-slate-100" />
-        <div className="mt-4 h-10 animate-pulse rounded bg-slate-100" />
-        <div className="mt-3 h-10 animate-pulse rounded bg-slate-100" />
-      </div>
-    )
-  }
-);
 
 const getCachedProductsPageData = unstable_cache(
   async ({
@@ -367,16 +353,9 @@ export default async function ProductsPage({
             </a>
           </div>
           {canCreateProducts ? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <details className="relative w-full sm:w-auto">
-              <summary className="w-full cursor-pointer list-none rounded-2xl bg-emerald-600 px-4 py-3 text-center text-base font-semibold text-white shadow-soft sm:px-6 sm:py-4 sm:text-2xl">
-                + Thêm SP
-              </summary>
-              <div className="absolute left-0 right-0 top-16 z-20 w-auto max-w-full overflow-x-hidden sm:left-auto sm:right-0 sm:top-20 sm:w-[92vw] sm:max-w-[500px]">
-                <ProductCreateFormLazy />
-              </div>
-            </details>
-          </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <ProductCreateLauncher />
+            </div>
           ) : null}
         </div>
       </div>

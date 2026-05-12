@@ -1,5 +1,7 @@
 
 
+import { formatDate } from "@/lib/utils";
+
 function formatInvoiceAmount(value: number) {
   return new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: 0
@@ -78,6 +80,7 @@ export function InvoiceDocument({
   }
 
   const isPdf = mode === "pdf";
+  const createdAtLabel = formatDate(createdAt);
 
   return (
     <div
@@ -96,19 +99,40 @@ export function InvoiceDocument({
       </div>
 
       <div className={isPdf ? "grid gap-2 border border-slate-400 p-2 text-[11px]" : "grid gap-4 border border-slate-400 p-4 text-[14px] text-slate-700 sm:text-[15px] print:gap-2 print:p-2 print:text-[10px]"}>
-        <div className="space-y-1.5">
-          <p>
-            <span className="font-semibold text-slate-900">Mã khách hàng:</span> {customerCode}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-900">Khách hàng:</span> {customerName}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-900">Địa chỉ:</span> {customerAddress}
-          </p>
-          <p>
-            <span className="font-semibold text-slate-900">SĐT:</span> {customerPhone}
-          </p>
+        <div className={isPdf ? "grid gap-2 md:grid-cols-[1.5fr,1fr]" : "grid gap-4 md:grid-cols-[1.5fr,1fr]"}>
+          <div className="space-y-1.5">
+            <p>
+              <span className="font-semibold text-slate-900">Mã khách hàng:</span> {customerCode}
+            </p>
+            <p>
+              <span className="font-semibold text-slate-900">Khách hàng:</span> {customerName}
+            </p>
+            <p>
+              <span className="font-semibold text-slate-900">Địa chỉ:</span> {customerAddress}
+            </p>
+            <p>
+              <span className="font-semibold text-slate-900">SĐT:</span> {customerPhone}
+            </p>
+          </div>
+          <div
+            className={
+              isPdf
+                ? "rounded-md border border-slate-300 bg-slate-50 px-2 py-2 text-[11px]"
+                : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 print:rounded-none print:border-slate-400 print:bg-transparent print:px-2 print:py-2"
+            }
+          >
+            <div className="space-y-1.5">
+              <p>
+                <span className="font-semibold text-slate-900">Ngày tạo:</span> {createdAtLabel}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-900">Người lập:</span> {createdByName}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-900">Thanh toán:</span> {paymentMethodLabel}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
