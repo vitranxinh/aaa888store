@@ -17,19 +17,19 @@ export function CashflowCreateModal({
   const [type, setType] = useState<"RECEIPT" | "PAYMENT">("RECEIPT");
   const [amount, setAmount] = useState(0);
   const [orderId, setOrderId] = useState("");
-  const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [supplierId, setSupplierId] = useState("");
   const [note, setNote] = useState("");
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
 
   function submit() {
     startTransition(async () => {
+      const body =
+        type === "RECEIPT" ? { branchId, type, amount, orderId, customerId, note } : { branchId, type, amount, note };
       const response = await fetch("/api/cash-transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branchId, type, amount, orderId, purchaseOrderId, customerId, supplierId, note })
+        body: JSON.stringify(body)
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -56,8 +56,17 @@ export function CashflowCreateModal({
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
             <div className="grid gap-4">
-              <select className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" value={type} onChange={(e) => setType(e.target.value as "RECEIPT" | "PAYMENT")}>
-                <option value="RECEIPT">Phiếu thu</option>
+              <select
+                className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                value={type}
+                onChange={(e) => {
+                  const nextType = e.target.value as "RECEIPT" | "PAYMENT";
+                  setType(nextType);
+                  setOrderId("");
+                  setCustomerId("");
+                }}
+              >
+                <option value="RECEIPT">Phiếu thu khách hàng</option>
                 <option value="PAYMENT">Phiếu chi</option>
               </select>
               <FormattedNumberInput className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" min={0} value={amount} onValueChange={setAmount} placeholder="Số tiền" />
@@ -77,22 +86,16 @@ export function CashflowCreateModal({
                   />
                 </>
               ) : (
-                <>
-                  <AsyncLookupInput
-                    value={supplierId}
-                    onChange={(nextValue) => setSupplierId(nextValue)}
-                    fetchUrl="/api/cashflow/options?kind=supplier"
-                    placeholder="Chọn NCC"
-                  />
-                  <AsyncLookupInput
-                    value={purchaseOrderId}
-                    onChange={(nextValue) => setPurchaseOrderId(nextValue)}
-                    fetchUrl="/api/cashflow/options?kind=purchase"
-                    placeholder="Chọn phiếu nhập"
-                  />
-                </>
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-500">
+                  Phiếu chi hiện chỉ lưu số tiền và ghi chú nội bộ, không còn gắn với nhà cung cấp.
+                </div>
               )}
-              <textarea className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Lý do / ghi chú" />
+              <textarea
+                className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={type === "RECEIPT" ? "Ghi chú phiếu thu" : "Lý do chi / ghi chú"}
+              />
               <div className="sticky bottom-0 border-t border-slate-100 bg-white pt-4">
                 <Button className="h-16 w-full text-3xl" onClick={submit} loading={isPending} disabled={amount <= 0}>Lưu phiếu</Button>
               </div>

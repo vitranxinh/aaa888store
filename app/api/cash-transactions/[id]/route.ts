@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireApiSession } from "@/lib/auth";
-import {
-  recalculateCustomerReceivableDebtForCustomer,
-  recalculateOrderPaymentStateForOrder,
-  recalculatePurchasePaymentStateForPurchase,
-  recalculateSupplierPayableDebtForSupplier
-} from "@/lib/debt-service";
+import { recalculateCustomerReceivableDebtForCustomer, recalculateOrderPaymentStateForOrder } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 import { cashTransactionSchema } from "@/lib/validations";
 
@@ -30,42 +25,48 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 
     const payload = parsed.data;
+    const normalizedPayload =
+      payload.type === "RECEIPT"
+        ? {
+            ...payload,
+            supplierId: undefined,
+            purchaseOrderId: undefined
+          }
+        : {
+            ...payload,
+            customerId: undefined,
+            orderId: undefined,
+            supplierId: undefined,
+            purchaseOrderId: undefined
+          };
 
     const transaction = await prisma.$transaction(async (tx) => {
       return tx.cashTransaction.update({
         where: { id: params.id },
         data: {
-          branchId: payload.branchId,
-          type: payload.type,
-          amount: new Prisma.Decimal(payload.amount),
-          note: payload.note,
-          customerId: payload.customerId || null,
-          supplierId: payload.supplierId || null,
-          orderId: payload.orderId || null,
-          purchaseOrderId: payload.purchaseOrderId || null
+          branchId: normalizedPayload.branchId,
+          type: normalizedPayload.type,
+          amount: new Prisma.Decimal(normalizedPayload.amount),
+          note: normalizedPayload.note,
+          customerId: normalizedPayload.customerId || null,
+          supplierId: normalizedPayload.supplierId || null,
+          orderId: normalizedPayload.orderId || null,
+          purchaseOrderId: normalizedPayload.purchaseOrderId || null
         }
       });
     });
 
     const orderIds = new Set<string>();
-    const purchaseIds = new Set<string>();
     const customerIds = new Set<string>();
-    const supplierIds = new Set<string>();
 
     if (existing.orderId) orderIds.add(existing.orderId);
-    if (payload.orderId) orderIds.add(payload.orderId);
-    if (existing.purchaseOrderId) purchaseIds.add(existing.purchaseOrderId);
-    if (payload.purchaseOrderId) purchaseIds.add(payload.purchaseOrderId);
+    if (normalizedPayload.orderId) orderIds.add(normalizedPayload.orderId);
     if (existing.customerId) customerIds.add(existing.customerId);
-    if (payload.customerId) customerIds.add(payload.customerId);
-    if (existing.supplierId) supplierIds.add(existing.supplierId);
-    if (payload.supplierId) supplierIds.add(payload.supplierId);
+    if (normalizedPayload.customerId) customerIds.add(normalizedPayload.customerId);
 
     await Promise.all([
       ...Array.from(orderIds).map((orderId) => recalculateOrderPaymentStateForOrder(orderId)),
-      ...Array.from(purchaseIds).map((purchaseId) => recalculatePurchasePaymentStateForPurchase(purchaseId)),
-      ...Array.from(customerIds).map((customerId) => recalculateCustomerReceivableDebtForCustomer(customerId)),
-      ...Array.from(supplierIds).map((supplierId) => recalculateSupplierPayableDebtForSupplier(supplierId))
+      ...Array.from(customerIds).map((customerId) => recalculateCustomerReceivableDebtForCustomer(customerId))
     ]);
 
     revalidateTag("customers-page");
@@ -102,9 +103,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
 
     await Promise.all([
       existing.orderId ? recalculateOrderPaymentStateForOrder(existing.orderId) : Promise.resolve(),
-      existing.purchaseOrderId ? recalculatePurchasePaymentStateForPurchase(existing.purchaseOrderId) : Promise.resolve(),
-      existing.customerId ? recalculateCustomerReceivableDebtForCustomer(existing.customerId) : Promise.resolve(),
-      existing.supplierId ? recalculateSupplierPayableDebtForSupplier(existing.supplierId) : Promise.resolve()
+      existing.customerId ? recalculateCustomerReceivableDebtForCustomer(existing.customerId) : Promise.resolve()
     ]);
 
     revalidateTag("customers-page");

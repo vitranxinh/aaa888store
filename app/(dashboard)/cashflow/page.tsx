@@ -215,12 +215,12 @@ async function CashflowContent({
               <div>
                 <p className="text-[0.85rem] font-medium text-slate-400">Đối tượng</p>
                 <p className="mt-1 text-[1rem] font-semibold text-slate-800">
-                  {item.customer?.name ?? item.supplier?.name ?? "-"}
+                  {item.customer?.name ?? (item.type === "PAYMENT" ? "Chi nội bộ" : "-")}
                 </p>
               </div>
               <div>
                 <p className="text-[0.85rem] font-medium text-slate-400">Liên kết</p>
-                <p className="mt-1 text-[1rem] font-semibold text-slate-800">{item.order?.code ?? item.purchaseOrder?.code ?? "-"}</p>
+                <p className="mt-1 text-[1rem] font-semibold text-slate-800">{item.order?.code ?? "-"}</p>
               </div>
               {isBossAccount ? (
                 <div>
@@ -281,8 +281,8 @@ async function CashflowContent({
                 <td className="px-3 py-3 sm:px-6 sm:py-4">{formatDate(item.createdAt)}</td>
                 {isBossAccount ? <td className="px-3 py-3 sm:px-6 sm:py-4">{item.createdBy?.name ?? "-"}</td> : null}
                 <td className="px-3 py-3 sm:px-6 sm:py-4">{item.type === "RECEIPT" ? "Thu" : "Chi"}</td>
-                <td className="px-3 py-3 sm:px-6 sm:py-4">{item.customer?.name ?? item.supplier?.name ?? "-"}</td>
-                <td className="px-3 py-3 sm:px-6 sm:py-4">{item.order?.code ?? item.purchaseOrder?.code ?? "-"}</td>
+                <td className="px-3 py-3 sm:px-6 sm:py-4">{item.customer?.name ?? (item.type === "PAYMENT" ? "Chi nội bộ" : "-")}</td>
+                <td className="px-3 py-3 sm:px-6 sm:py-4">{item.order?.code ?? "-"}</td>
                 <td className={`px-3 py-3 text-right font-semibold sm:px-6 sm:py-4 ${item.type === "RECEIPT" ? "text-emerald-600" : "text-red-500"}`}>
                   {formatCurrency(Number(item.amount))}
                 </td>
@@ -358,7 +358,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
 
   return (
     <div className="space-y-5 sm:space-y-8">
-      <AppHeader title="Thu / Chi" description="Quản lý phiếu thu chi, đối tượng và công nợ liên quan" session={session} />
+      <AppHeader title="Phiếu thu / chi" description="Theo dõi phiếu thu khách hàng và các khoản chi nội bộ" session={session} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <form action="/cashflow" className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <select
