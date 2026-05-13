@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Bạn không có quyền thao tác" }, { status: 403 });
     }
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Không thể tạo đơn hàng" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Không thể tạo đơn hàng";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Không đủ tồn kho") ? 400 : 500 });
   }
 }

@@ -43,6 +43,11 @@ export async function POST(request: Request) {
         payload.type === "ADJUSTMENT" && nextQuantity !== null && existingInventory
           ? nextQuantity - existingInventory.quantity
           : payload.quantity;
+      const resultingQuantity = nextQuantity !== null ? nextQuantity : (existingInventory?.quantity ?? 0) + payload.quantity;
+
+      if (resultingQuantity < 0) {
+        throw new Error(`Tồn kho không được âm. Tồn hiện tại ${existingInventory?.quantity ?? 0}, thay đổi ${payload.quantity}.`);
+      }
 
       if (existingInventory) {
         await tx.inventory.update({
@@ -76,7 +81,9 @@ export async function POST(request: Request) {
     revalidateTag("products-page");
 
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Không thể cập nhật tồn kho";
+    const status = /UNAUTHORIZED|FORBIDDEN/i.test(message) ? 401 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

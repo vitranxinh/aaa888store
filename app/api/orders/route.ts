@@ -132,7 +132,7 @@ export async function POST(request: Request) {
           ? "Tạo hóa đơn đang chậm hơn bình thường, vui lòng thử lại."
           : message || "Không thể tạo hóa đơn"
       },
-      { status: 500 }
+      { status: message.startsWith("Không đủ tồn kho") ? 400 : 500 }
     );
   }
 }

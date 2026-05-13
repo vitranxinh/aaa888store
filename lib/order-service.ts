@@ -84,6 +84,38 @@ function aggregateQuantityByProduct(items: Array<{ product: { id: string }; quan
   return map;
 }
 
+function assertEnoughInventory(
+  items: Awaited<ReturnType<typeof loadOrderPayloadItems>>,
+  inventories: Array<{ productId: string | null; quantity: number }>,
+  derived: ReturnType<typeof calculateOrderDerivedState>
+) {
+  if (derived.finalStatus === "DRAFT") return;
+
+  const requestedByProduct = aggregateQuantityByProduct(items);
+  const availableByProduct = new Map<string, number>();
+  for (const inventory of inventories) {
+    if (!inventory.productId) continue;
+    availableByProduct.set(inventory.productId, (availableByProduct.get(inventory.productId) ?? 0) + inventory.quantity);
+  }
+
+  const productNames = new Map(items.map((item) => [item.product.id, item.product.name]));
+  const insufficientItems = Array.from(requestedByProduct.entries()).filter(([productId, requested]) => {
+    const available = availableByProduct.get(productId) ?? 0;
+    return available < requested;
+  });
+
+  if (insufficientItems.length === 0) return;
+
+  const message = insufficientItems
+    .map(([productId, requested]) => {
+      const available = availableByProduct.get(productId) ?? 0;
+      return `${productNames.get(productId) ?? productId} còn ${available}, cần ${requested}`;
+    })
+    .join("; ");
+
+  throw new Error(`Không đủ tồn kho để bán: ${message}`);
+}
+
 function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPayloadItems>>, payload: OrderPayload) {
   const totals = calculateCartTotals(
     items.map(item => ({
@@ -224,31 +256,32 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   const productIds = Array.from(quantityByProduct.keys());
 
   return runTransactionWithRetry(async (tx) => {
+    await revertOrderEffects(tx, existing as any);
     const [inventories, batches] = await Promise.all([
       tx.inventory.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, variantId: null }, select: { productId: true, quantity: true } }),
-      tx.productBatch.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, quantity: { gt: 0 } }, orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }], select: { id: true, productId: true, batchNumber: true, quantity: true } }),
-      revertOrderEffects(tx, existing as any),
-      tx.order.update({
-        where: { id: orderId },
-        data: {
-          code: nextCodeVersion, branchId: payload.branchId, customerId: payload.customerId, createdById: payload.createdById,
-          status: derived.finalStatus, subtotal: new Prisma.Decimal(derived.totals.subtotal),
-          discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
-          otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
-          profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
-          paidAmount: new Prisma.Decimal(derived.paidAmount), debtAmount: new Prisma.Decimal(derived.debtAmount),
-          note: payload.note,
-          items: {
-            deleteMany: {},
-            create: items.map(item => ({
-              productId: item.product.id, quantity: item.quantity, unitPrice: new Prisma.Decimal(item.unitPrice),
-              costPrice: item.product.costPrice, discountValue: new Prisma.Decimal(item.discountValue),
-              total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
-            }))
-          }
-        }
-      })
+      tx.productBatch.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, quantity: { gt: 0 } }, orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }], select: { id: true, productId: true, batchNumber: true, quantity: true } })
     ]);
+    assertEnoughInventory(items, inventories, derived);
+    await tx.order.update({
+      where: { id: orderId },
+      data: {
+        code: nextCodeVersion, branchId: payload.branchId, customerId: payload.customerId, createdById: payload.createdById,
+        status: derived.finalStatus, subtotal: new Prisma.Decimal(derived.totals.subtotal),
+        discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
+        otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
+        profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
+        paidAmount: new Prisma.Decimal(derived.paidAmount), debtAmount: new Prisma.Decimal(derived.debtAmount),
+        note: payload.note,
+        items: {
+          deleteMany: {},
+          create: items.map(item => ({
+            productId: item.product.id, quantity: item.quantity, unitPrice: new Prisma.Decimal(item.unitPrice),
+            costPrice: item.product.costPrice, discountValue: new Prisma.Decimal(item.discountValue),
+            total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
+          }))
+        }
+      }
+    });
     await applyOrderEffects(tx, { id: orderId, code: nextCodeVersion, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, receiptCode);
     return { id: orderId, code: nextCodeVersion };
   }, { maxWait: 20000, timeout: 60000 });
@@ -293,6 +326,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
         tx.inventory.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, variantId: null }, select: { productId: true, quantity: true } }),
         tx.productBatch.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, quantity: { gt: 0 } }, orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }], select: { id: true, productId: true, batchNumber: true, quantity: true } })
       ]);
+      assertEnoughInventory(items, inventories, derived);
 
       // BƯỚC 2: SONG SONG LẤY MÃ THẬT + CẬP NHẬT TẤT CẢ
       const [realCode, realReceiptCode] = await Promise.all([

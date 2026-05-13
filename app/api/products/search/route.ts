@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim() ?? "";
     const limit = Math.min(Number(searchParams.get("limit") ?? "40") || 40, 100);
@@ -23,7 +23,16 @@ export async function GET(request: Request) {
     const products = await prisma.product.findMany({
       where: {
         ...(salesOnly
-          ? { status: "ACTIVE" as const }
+          ? {
+              status: "ACTIVE" as const,
+              inventories: {
+                some: {
+                  ...(session.branchId ? { branchId: session.branchId } : {}),
+                  variantId: null,
+                  quantity: { gt: 0 }
+                }
+              }
+            }
           : status === "active"
             ? { status: "ACTIVE" as const }
             : status === "inactive"

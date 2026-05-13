@@ -60,7 +60,7 @@ export function PurchaseEditModal({ purchase }: Props) {
     const timeoutId = window.setTimeout(async () => {
       setIsSearchingProducts(true);
       try {
-        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=20&salesOnly=1`, {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=20`, {
           signal: controller.signal,
           credentials: "same-origin"
         });

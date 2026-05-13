@@ -24,6 +24,7 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
   const summaryStartedAt = Date.now();
   let customerCount = 0;
   let productCount = 0;
+  let outStockCount = 0;
   let lowStockCount = 0;
   let invoiceCount = 0;
   let revenue = 0;
@@ -42,7 +43,7 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
       countedCustomers,
       countedProducts,
       aggregatedOrders,
-      countedLowStock,
+      stockProducts,
       fetchedRecentOrders,
       fetchedChartOrders
     ] = await prisma.$transaction([
@@ -62,13 +63,19 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
           id: true
         }
       }),
-      prisma.inventory.count({
+      prisma.product.findMany({
         where: {
-          ...branchWhere,
-          product: {
-            lowStockAlert: { gte: 0 }
-          },
-          quantity: { lte: 0 }
+          status: "ACTIVE"
+        },
+        select: {
+          lowStockAlert: true,
+          inventories: {
+            where: {
+              ...(branchId ? { branchId } : {}),
+              variantId: null
+            },
+            select: { quantity: true }
+          }
         }
       }),
       prisma.order.findMany({
@@ -98,7 +105,14 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
 
     customerCount = countedCustomers;
     productCount = countedProducts;
-    lowStockCount = countedLowStock;
+    outStockCount = stockProducts.filter((product) => {
+      const currentStock = product.inventories.reduce((sum, inventory) => sum + inventory.quantity, 0);
+      return currentStock <= 0;
+    }).length;
+    lowStockCount = stockProducts.filter((product) => {
+      const currentStock = product.inventories.reduce((sum, inventory) => sum + inventory.quantity, 0);
+      return currentStock > 0 && currentStock <= product.lowStockAlert;
+    }).length;
     invoiceCount = aggregatedOrders._count.id;
     revenue = Number(aggregatedOrders._sum.grandTotal ?? 0);
     debt = Number(aggregatedOrders._sum.debtAmount ?? 0);
@@ -117,6 +131,7 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     durationMs: Date.now() - summaryStartedAt,
     customerCount,
     productCount,
+    outStockCount,
     invoiceCount
   });
 
@@ -139,6 +154,7 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     range,
     customerCount,
     productCount,
+    outStockCount,
     invoiceCount,
     revenue,
     debt,

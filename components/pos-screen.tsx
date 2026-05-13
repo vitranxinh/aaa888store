@@ -26,7 +26,7 @@ export function PosScreen({ data, defaultBranchId }: { data: PosData; defaultBra
     return data.products.filter((product) => {
       const matched = [product.name, product.sku, product.barcode ?? ""].join(" ").toLowerCase().includes(lower);
       const stock = product.inventories[0]?.quantity ?? 0;
-      return matched && stock >= 0;
+      return matched && stock > 0;
     });
   }, [data.products, keyword]);
 

@@ -36,7 +36,8 @@ export default async function DashboardPage({
       labelClassName: "text-red-600",
       valueClassName: "text-red-600"
     },
-    { label: "Sắp hết hàng", value: data.lowStockCount, icon: "⚠️", tone: "border-rose-200 bg-rose-50/60" }
+    { label: "Hết hàng", value: data.outStockCount, icon: "⛔", tone: "border-red-200 bg-red-50/60", labelClassName: "text-red-600", valueClassName: "text-red-600" },
+    { label: "Sắp hết hàng", value: data.lowStockCount, icon: "⚠️", tone: "border-orange-200 bg-orange-50/60" }
   ];
 
   const mobileQuickLinks = [
