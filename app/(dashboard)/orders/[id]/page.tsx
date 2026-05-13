@@ -112,7 +112,7 @@ export default async function OrderDetailPage({
             branchName={order.branch.name}
             branchAddress={order.branch.address || ""}
             branchPhone={order.branch.phone || ""}
-            createdAtLabel={formatDate(order.createdAt)}
+            createdAt={order.createdAt}
             createdByName={order.createdBy.name}
             customerCode={order.customer.code}
             customerName={order.customer.name}

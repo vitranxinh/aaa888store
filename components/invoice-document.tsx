@@ -21,8 +21,8 @@ type InvoiceDocumentProps = {
   branchName: string;
   branchAddress: string;
   branchPhone: string;
-  createdAt: Date | string;
-  printedAt?: Date | string;
+  createdAt: Date | string | null;
+  printedAt?: Date | string | null;
   createdByName: string;
   code: string;
   customerCode: string;

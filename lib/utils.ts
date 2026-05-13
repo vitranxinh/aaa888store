@@ -22,8 +22,8 @@ export function formatCustomerDebt(value: number | string) {
   return "Không nợ";
 }
 
-export function formatDate(value: string | Date) {
-  return formatVietnamDateTime(value);
+export function formatDate(value?: string | Date | null, fallback = "—") {
+  return formatVietnamDateTime(value, fallback);
 }
 
 export function toNumber(value: unknown) {

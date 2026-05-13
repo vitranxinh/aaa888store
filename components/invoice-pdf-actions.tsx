@@ -19,7 +19,7 @@ type Props = {
   branchName: string;
   branchAddress: string;
   branchPhone: string;
-  createdAtLabel: string;
+  createdAt: Date | string | null;
   createdByName: string;
   customerCode: string;
   customerName: string;
@@ -150,8 +150,8 @@ export function InvoicePdfActions(props: Props) {
             branchName={props.branchName}
             branchAddress={props.branchAddress}
             branchPhone={props.branchPhone}
-            createdAt={props.createdAtLabel}
-            printedAt={props.createdAtLabel}
+            createdAt={props.createdAt}
+            printedAt={props.createdAt}
             createdByName={props.createdByName}
             code={props.code}
             customerCode={props.customerCode}

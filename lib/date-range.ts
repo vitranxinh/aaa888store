@@ -31,8 +31,12 @@ function getVietnamDateParts(date = new Date()) {
   };
 }
 
-export function formatVietnamDateTime(value: Date | string) {
+export function formatVietnamDateTime(value?: Date | string | null, fallback = "—") {
+  if (!value) return fallback;
   const date = typeof value === "string" ? new Date(value) : value;
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return fallback;
+  }
   return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "short",
     timeStyle: "short",
@@ -111,4 +115,3 @@ export function resolveVietnamDateRange(range: TimeFilterRange, dateFrom?: strin
     lte: endOfVietnamDay(today)
   };
 }
-
