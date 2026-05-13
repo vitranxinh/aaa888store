@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const query = searchParams.get("q")?.trim() ?? "";
     const limit = Math.min(Number(searchParams.get("limit") ?? "40") || 40, 100);
     const salesOnly = searchParams.get("salesOnly") === "1";
+    const branchId = searchParams.get("branchId")?.trim() || session.branchId || "";
     const status = searchParams.get("status");
     const includeInactive = searchParams.get("includeInactive") === "1";
 
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
               status: "ACTIVE" as const,
               inventories: {
                 some: {
-                  ...(session.branchId ? { branchId: session.branchId } : {}),
+                  ...(branchId ? { branchId } : {}),
                   variantId: null,
                   quantity: { gt: 0 }
                 }
