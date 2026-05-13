@@ -125,12 +125,6 @@ export function InvoiceDocument({
               <p>
                 <span className="font-semibold text-slate-900">Ngày tạo:</span> {createdAtLabel}
               </p>
-              <p>
-                <span className="font-semibold text-slate-900">Người lập:</span> {createdByName}
-              </p>
-              <p>
-                <span className="font-semibold text-slate-900">Thanh toán:</span> {paymentMethodLabel}
-              </p>
             </div>
           </div>
         </div>
