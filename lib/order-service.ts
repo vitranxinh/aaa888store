@@ -68,12 +68,13 @@ async function loadOrderPayloadItems(items: OrderPayload["items"]) {
   const productIds = Array.from(new Set(items.map(item => item.productId)));
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
-    select: { id: true, name: true, sku: true, costPrice: true }
+    select: { id: true, name: true, sku: true, costPrice: true, status: true }
   });
   const productMap = new Map(products.map(p => [p.id, p]));
   return items.map(item => {
     const product = productMap.get(item.productId);
     if (!product) throw new Error(`Không tìm thấy sản phẩm ${item.productId}`);
+    if (product.status !== "ACTIVE") throw new Error(`Sản phẩm ${product.name} đã ẩn khỏi danh sách bán`);
     return { ...item, product };
   });
 }
@@ -180,6 +181,7 @@ async function applyOrderEffects(
   if (derived.finalStatus === "DRAFT") return;
   const quantityByProduct = aggregateQuantityByProduct(items);
   const productIds = Array.from(quantityByProduct.keys());
+  const productNameById = new Map(items.map((item) => [item.product.id, item.product.name]));
   const batchUpdates: any[] = [];
   const invTxns: any[] = [];
   const batchesByProduct = new Map<string, any[]>();
@@ -209,11 +211,34 @@ async function applyOrderEffects(
       });
     }
   }
+  const inventoryCase = Prisma.join(
+    Array.from(quantityByProduct.entries()).map(([id, qty]) => Prisma.sql`WHEN ${id} THEN ${qty}`),
+    " "
+  );
+  const affectedInventoryRows = await tx.$executeRaw`
+    UPDATE "Inventory"
+    SET "quantity" = "quantity" - (CASE "productId" ${inventoryCase} ELSE 0 END)
+    WHERE "branchId" = ${order.branchId}
+      AND "variantId" IS NULL
+      AND "productId" IN (${Prisma.join(productIds)})
+      AND "quantity" >= (CASE "productId" ${inventoryCase} ELSE 0 END)
+  `;
+
+  if (Number(affectedInventoryRows) !== productIds.length) {
+    const latestInventories = await tx.inventory.findMany({
+      where: { branchId: order.branchId, productId: { in: productIds }, variantId: null },
+      select: { productId: true, quantity: true }
+    });
+    const availableByProduct = new Map(latestInventories.map((inventory) => [inventory.productId, inventory.quantity]));
+    const message = Array.from(quantityByProduct.entries())
+      .filter(([productId, requested]) => (availableByProduct.get(productId) ?? 0) < requested)
+      .map(([productId, requested]) => `${productNameById.get(productId) ?? productId} còn ${availableByProduct.get(productId) ?? 0}, cần ${requested}`)
+      .join("; ");
+
+    throw new Error(`Không đủ tồn kho để bán: ${message || "tồn kho đã thay đổi, vui lòng tải lại"}`);
+  }
+
   const writeTasks: Promise<any>[] = [
-    tx.$executeRaw`
-      UPDATE "Inventory" SET "quantity" = "quantity" - (CASE "productId" ${Prisma.join(Array.from(quantityByProduct.entries()).map(([id, qty]) => Prisma.sql`WHEN ${id} THEN ${qty}`), " ")} ELSE 0 END)
-      WHERE "branchId" = ${order.branchId} AND "variantId" IS NULL AND "productId" IN (${Prisma.join(productIds)})
-    `,
     tx.inventoryTransaction.createMany({ data: invTxns }),
     tx.customer.update({
       where: { id: payload.customerId },
