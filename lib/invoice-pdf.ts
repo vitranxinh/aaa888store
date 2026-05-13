@@ -71,11 +71,11 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   const pageHeight = 297;
   const marginX = 12;
   let y = 16;
-  const bodyFontSize = 13;
-  const sectionFontSize = 13;
-  const tableFontSize = 13;
-  const totalFontSize = 14;
-  const noteFontSize = 12;
+  const bodyFontSize = 20;
+  const sectionFontSize = 20;
+  const tableFontSize = 20;
+  const totalFontSize = 20;
+  const noteFontSize = 17;
 
   const line = (text: string, x = marginX, size = 11, options?: { align?: "left" | "right" | "center"; width?: number }) => {
     doc.setFontSize(size);
@@ -86,17 +86,17 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     } else {
       doc.text(text, x, y, { maxWidth: options?.width });
     }
-    y += size * 0.38 + 1.2;
+    y += size * 0.34 + 1;
   };
 
   const sectionTitle = (text: string) => {
-    y += 1.5;
+    y += 1;
     doc.setFontSize(sectionFontSize);
     doc.setFont("NotoSans", "normal");
     doc.text(text, marginX, y);
-    y += 3.5;
+    y += 3;
     doc.line(marginX, y, pageWidth - marginX, y);
-    y += 4;
+    y += 3.5;
   };
 
   const ensureSpace = (neededHeight: number) => {
@@ -106,8 +106,8 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     y = 16;
   };
 
-  line("ĐƠN ĐẶT HÀNG", marginX, 22, { align: "center" });
-  line(order.code, marginX, 14, { align: "center" });
+  line("ĐƠN ĐẶT HÀNG", marginX, 30, { align: "center" });
+  line(order.code, marginX, 18, { align: "center" });
 
   sectionTitle("Thông tin hóa đơn");
   line(`Chi nhánh: ${order.branch.name}`, marginX, bodyFontSize);
@@ -128,14 +128,14 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   doc.text("SL", 145, y, { align: "right" });
   doc.text("Đơn giá", 170, y, { align: "right" });
   doc.text("Thành tiền", pageWidth - marginX, y, { align: "right" });
-  y += 4.5;
+  y += 6;
   doc.line(marginX, y, pageWidth - marginX, y);
-  y += 4.5;
+  y += 5;
 
   for (const item of order.items) {
     const productLines = doc.splitTextToSize(item.name, 118) as string[];
-    const rowHeight = Math.max(productLines.length * 6, 6) + 2;
-    ensureSpace(rowHeight + 7);
+    const rowHeight = Math.max(productLines.length * 8, 8) + 2;
+    ensureSpace(rowHeight + 6);
 
     doc.setFontSize(tableFontSize);
     doc.text(productLines, marginX, y);
@@ -144,7 +144,7 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     doc.text(formatMoney(item.total), pageWidth - marginX, y, { align: "right" });
     y += rowHeight;
     doc.line(marginX, y, pageWidth - marginX, y);
-    y += 3;
+    y += 2.5;
   }
 
   ensureSpace(44);
@@ -161,7 +161,7 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     const noteLines = doc.splitTextToSize(order.note, pageWidth - marginX * 2) as string[];
     doc.setFontSize(noteFontSize);
     doc.text(noteLines, marginX, y);
-    y += noteLines.length * 5 + 2;
+    y += noteLines.length * 6 + 2;
   }
 
   const arrayBuffer = doc.output("arraybuffer");
