@@ -128,8 +128,7 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   y += 4;
 
   for (const item of order.items) {
-    const productLabel = `${item.sku} - ${item.name}`;
-    const productLines = doc.splitTextToSize(productLabel, 118) as string[];
+    const productLines = doc.splitTextToSize(item.name, 118) as string[];
     const rowHeight = Math.max(productLines.length * 5, 5) + 2;
     ensureSpace(rowHeight + 8);
 

@@ -148,10 +148,9 @@ export function InvoiceDocument({
               </thead>
               <tbody>
                 {rows.map((item, index) =>
-                  item.sku || item.name ? (
-                    <tr key={item.id || `${item.sku}-${index}`} className="align-top">
+                  item.name ? (
+                    <tr key={item.id || `${item.name}-${index}`} className="align-top">
                       <td className="border border-slate-400 px-1 py-1 leading-4">
-                        <p className="text-[9px] font-medium text-slate-500">{item.sku}</p>
                         <p
                           className="font-semibold text-slate-900"
                           style={{
@@ -258,10 +257,9 @@ export function InvoiceDocument({
               </thead>
               <tbody>
                 {rows.map((item, index) =>
-                  item.sku || item.name ? (
-                    <tr key={item.id || `${item.sku}-${index}`} className="align-top">
+                  item.name ? (
+                    <tr key={item.id || `${item.name}-${index}`} className="align-top">
                       <td className="border border-slate-400 px-0.5 py-1 leading-[1.2]">
-                        <p className="text-[9px] font-medium text-slate-500">{item.sku}</p>
                         <p
                           className="font-semibold text-slate-900"
                           style={{
