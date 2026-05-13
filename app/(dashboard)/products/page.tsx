@@ -10,16 +10,21 @@ import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
 import { formatCurrency } from "@/lib/utils";
 
+type ProductVisibilityFilter = "all" | "active" | "inactive";
+type ProductStockFilter = "all" | "out" | "low" | "in";
+
 const getCachedProductsPageData = unstable_cache(
   async ({
     q,
     status,
+    stock,
     branchId,
     page,
     pageSize
   }: {
     q: string;
-    status: "all" | "active" | "inactive";
+    status: ProductVisibilityFilter;
+    stock: ProductStockFilter;
     branchId: string;
     page: number;
     pageSize: number;
@@ -63,15 +68,10 @@ const getCachedProductsPageData = unstable_cache(
           }
         }
       },
-      orderBy: { sku: "asc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize + 1
+      orderBy: { sku: "asc" }
     });
-    
-    const hasNext = products.length > pageSize;
-    const visibleProducts = hasNext ? products.slice(0, pageSize) : products;
 
-    const result = visibleProducts.map((product) => {
+    const allProducts = products.map((product) => {
       const quantity = product.inventories.reduce((sum, inv) => sum + inv.quantity, 0);
       const hasRelatedHistory =
         product._count.inventories > 0 ||
@@ -99,9 +99,31 @@ const getCachedProductsPageData = unstable_cache(
       };
     });
 
+    const stockFilteredProducts = allProducts.filter((product) => {
+      if (stock === "out") return product.quantity <= 0;
+      if (stock === "low") return product.quantity > 0 && product.quantity <= product.lowStockAlert;
+      if (stock === "in") return product.quantity > product.lowStockAlert;
+      return true;
+    });
+
+    if (stock === "in" || stock === "low") {
+      stockFilteredProducts.sort((a, b) => {
+        const quantityDiff = a.quantity - b.quantity;
+        if (quantityDiff !== 0) return quantityDiff;
+        return a.sku.localeCompare(b.sku, "vi");
+      });
+    }
+
+    const offset = (page - 1) * pageSize;
+    const visibleProducts = stockFilteredProducts.slice(offset, offset + pageSize + 1);
+    const hasNext = visibleProducts.length > pageSize;
+    const result = hasNext ? visibleProducts.slice(0, pageSize) : visibleProducts;
+
     console.info("[perf][products-page]", {
       q,
       status,
+      stock,
+      matchedRows: stockFilteredProducts.length,
       rowCount: result.length,
       fullDurationMs: Date.now() - startedAt
     });
@@ -118,6 +140,7 @@ const getCachedProductsPageData = unstable_cache(
 async function ProductsList({
   q,
   status,
+  stock,
   branchId,
   page,
   pageSize,
@@ -125,7 +148,8 @@ async function ProductsList({
   canDeleteProducts,
 }: {
   q: string;
-  status: "all" | "active" | "inactive";
+  status: ProductVisibilityFilter;
+  stock: ProductStockFilter;
   branchId: string;
   page: number;
   pageSize: number;
@@ -135,6 +159,7 @@ async function ProductsList({
   const { products, hasNext } = await getCachedProductsPageData({
     q,
     status,
+    stock,
     branchId,
     page,
     pageSize
@@ -271,7 +296,7 @@ async function ProductsList({
           </tbody>
         </table>
       </div>
-      <ServerPagination pathname="/products" query={{ q, status }} page={page} pageSize={pageSize} hasNext={hasNext} />
+      <ServerPagination pathname="/products" query={{ q, status, stock }} page={page} pageSize={pageSize} hasNext={hasNext} />
     </>
   );
 }
@@ -298,7 +323,7 @@ function ProductsListFallback() {
 export default async function ProductsPage({
   searchParams
 }: {
-  searchParams?: { q?: string; page?: string; status?: string };
+  searchParams?: { q?: string; page?: string; status?: string; stock?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canCreateProducts = true;
@@ -306,8 +331,11 @@ export default async function ProductsPage({
   const canDeleteProducts = session.role === "ADMIN";
   const q = searchParams?.q ?? "";
   const rawStatus = searchParams?.status;
-  const status: "all" | "active" | "inactive" =
+  const status: ProductVisibilityFilter =
     rawStatus === "all" || rawStatus === "inactive" ? rawStatus : "active";
+  const rawStock = searchParams?.stock;
+  const stock: ProductStockFilter =
+    rawStock === "out" || rawStock === "low" || rawStock === "in" ? rawStock : "all";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 10;
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
@@ -317,6 +345,8 @@ export default async function ProductsPage({
 
       <div className="flex min-h-[56px] flex-col gap-3 lg:min-h-[64px] lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <form className="min-w-0 w-full max-w-xl">
+          <input type="hidden" name="status" value={status} />
+          <input type="hidden" name="stock" value={stock} />
           <AutocompleteSearchInput
             name="q"
             defaultValue={q}
@@ -328,7 +358,7 @@ export default async function ProductsPage({
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <a
-              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "all" }).toString()}`}
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "all", stock }).toString()}`}
               className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
                 status === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600"
               }`}
@@ -336,7 +366,7 @@ export default async function ProductsPage({
               Tất cả
             </a>
             <a
-              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "active" }).toString()}`}
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "active", stock }).toString()}`}
               className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
                 status === "active" ? "bg-emerald-600 text-white" : "bg-white text-slate-600"
               }`}
@@ -344,12 +374,46 @@ export default async function ProductsPage({
               Đang bán
             </a>
             <a
-              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "inactive" }).toString()}`}
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status: "inactive", stock }).toString()}`}
               className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
                 status === "inactive" ? "bg-amber-500 text-white" : "bg-white text-slate-600"
               }`}
             >
               Đã ẩn
+            </a>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status, stock: "all" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                stock === "all" ? "bg-slate-900 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Tất cả
+            </a>
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status, stock: "out" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                stock === "out" ? "bg-red-600 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Hết hàng
+            </a>
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status, stock: "low" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                stock === "low" ? "bg-orange-500 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Sắp hết hàng
+            </a>
+            <a
+              href={`/products?${new URLSearchParams({ ...(q ? { q } : {}), status, stock: "in" }).toString()}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-semibold shadow-soft transition ${
+                stock === "in" ? "bg-emerald-600 text-white" : "bg-white text-slate-600"
+              }`}
+            >
+              Còn hàng
             </a>
           </div>
           {canCreateProducts ? (
@@ -364,6 +428,7 @@ export default async function ProductsPage({
         <ProductsList
           q={q}
           status={status}
+          stock={stock}
           branchId={branchId}
           page={page}
           pageSize={pageSize}
