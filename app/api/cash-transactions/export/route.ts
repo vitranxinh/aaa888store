@@ -50,8 +50,8 @@ export async function GET(request: Request) {
         item.code,
         formatVietnamDateTime(item.createdAt),
         item.createdBy?.name ?? "",
-        item.type === "RECEIPT" ? "Thu khách hàng" : "Chi",
-        item.customer?.name ?? (item.type === "PAYMENT" ? "Chi nội bộ" : ""),
+        item.type === "RECEIPT" ? "Thu khách hàng" : "Chi khách hàng",
+        item.customer?.name ?? "",
         item.order?.code ?? "",
         Number(item.amount),
         item.note ?? ""

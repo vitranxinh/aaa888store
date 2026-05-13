@@ -34,11 +34,14 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           }
         : {
             ...payload,
-            customerId: undefined,
             orderId: undefined,
             supplierId: undefined,
             purchaseOrderId: undefined
           };
+
+    if (!normalizedPayload.customerId) {
+      return NextResponse.json({ error: "Vui lòng chọn khách hàng cho phiếu thu/chi" }, { status: 400 });
+    }
 
     const transaction = await prisma.$transaction(async (tx) => {
       return tx.cashTransaction.update({

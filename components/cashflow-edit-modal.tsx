@@ -54,7 +54,7 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
   function submit() {
     startTransition(async () => {
       const body =
-        type === "RECEIPT" ? { branchId, type, amount, orderId, customerId, note } : { branchId, type, amount, note };
+        type === "RECEIPT" ? { branchId, type, amount, orderId, customerId, note } : { branchId, type, amount, customerId, note };
       const response = await fetch(`/api/cash-transactions/${transaction.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -119,18 +119,18 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
                 }}
               >
                 <option value="RECEIPT">Phiếu thu khách hàng</option>
-                <option value="PAYMENT">Phiếu chi</option>
+                <option value="PAYMENT">Phiếu chi khách hàng</option>
               </select>
               <FormattedNumberInput className="h-14 w-full min-w-0 max-w-full rounded-2xl border border-slate-300 px-4 text-xl" min={0} value={amount} onValueChange={setAmount} placeholder="Số tiền" />
+              <AsyncLookupInput
+                value={customerId}
+                onChange={(nextValue) => setCustomerId(nextValue)}
+                fetchUrl="/api/cashflow/options?kind=customer"
+                placeholder={type === "RECEIPT" ? "Chọn khách hàng thu tiền" : "Chọn khách hàng chi tiền"}
+                initialLabel={transaction.customerName ?? ""}
+              />
               {type === "RECEIPT" ? (
                 <>
-                  <AsyncLookupInput
-                    value={customerId}
-                    onChange={(nextValue) => setCustomerId(nextValue)}
-                    fetchUrl="/api/cashflow/options?kind=customer"
-                    placeholder="Chọn khách hàng"
-                    initialLabel={transaction.customerName ?? ""}
-                  />
                   <AsyncLookupInput
                     value={orderId}
                     onChange={(nextValue) => setOrderId(nextValue)}
@@ -141,7 +141,7 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
                 </>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-500">
-                  Phiếu chi hiện chỉ lưu số tiền và ghi chú nội bộ, không còn gắn với nhà cung cấp.
+                  Phiếu chi sẽ lưu theo khách hàng đã chọn, không còn gắn với nhà cung cấp.
                 </div>
               )}
               <textarea
@@ -154,7 +154,7 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
                 <Button variant="destructive" className="h-14 text-xl" onClick={deleteTxn} loading={isPending}>
                   Xóa phiếu
                 </Button>
-                <Button className="h-14 text-xl" onClick={submit} loading={isPending} disabled={amount <= 0}>
+                <Button className="h-14 text-xl" onClick={submit} loading={isPending} disabled={amount <= 0 || !customerId}>
                   Lưu thay đổi
                 </Button>
               </div>

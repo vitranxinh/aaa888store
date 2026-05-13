@@ -26,11 +26,15 @@ export async function POST(request: Request) {
           }
         : {
             ...payload,
-            customerId: undefined,
             orderId: undefined,
             supplierId: undefined,
             purchaseOrderId: undefined
           };
+
+    if (!normalizedPayload.customerId) {
+      return NextResponse.json({ error: "Vui lòng chọn khách hàng cho phiếu thu/chi" }, { status: 400 });
+    }
+
     const code = await nextCode(payload.type === "RECEIPT" ? "PT" : "PC", "cashTransaction");
 
     const transaction = await prisma.$transaction(async (tx) => {
