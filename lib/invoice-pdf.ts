@@ -71,6 +71,11 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   const pageHeight = 297;
   const marginX = 12;
   let y = 16;
+  const bodyFontSize = 13;
+  const sectionFontSize = 13;
+  const tableFontSize = 13;
+  const totalFontSize = 14;
+  const noteFontSize = 12;
 
   const line = (text: string, x = marginX, size = 11, options?: { align?: "left" | "right" | "center"; width?: number }) => {
     doc.setFontSize(size);
@@ -81,17 +86,17 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     } else {
       doc.text(text, x, y, { maxWidth: options?.width });
     }
-    y += size * 0.5 + 2;
+    y += size * 0.38 + 1.2;
   };
 
   const sectionTitle = (text: string) => {
-    y += 2;
-    doc.setFontSize(12);
+    y += 1.5;
+    doc.setFontSize(sectionFontSize);
     doc.setFont("NotoSans", "normal");
     doc.text(text, marginX, y);
-    y += 4;
+    y += 3.5;
     doc.line(marginX, y, pageWidth - marginX, y);
-    y += 5;
+    y += 4;
   };
 
   const ensureSpace = (neededHeight: number) => {
@@ -101,60 +106,60 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     y = 16;
   };
 
-  line("ĐƠN ĐẶT HÀNG", marginX, 18, { align: "center" });
-  line(order.code, marginX, 12, { align: "center" });
+  line("ĐƠN ĐẶT HÀNG", marginX, 22, { align: "center" });
+  line(order.code, marginX, 14, { align: "center" });
 
   sectionTitle("Thông tin hóa đơn");
-  line(`Chi nhánh: ${order.branch.name}`);
-  line(`Địa chỉ: ${order.branch.address || "-"}`);
-  line(`Điện thoại: ${order.branch.phone || "-"}`);
-  line(`Ngày tạo: ${formatDate(order.createdAt)}`);
-  line(`Người lập: ${order.createdBy.name}`);
+  line(`Chi nhánh: ${order.branch.name}`, marginX, bodyFontSize);
+  line(`Địa chỉ: ${order.branch.address || "-"}`, marginX, bodyFontSize);
+  line(`Điện thoại: ${order.branch.phone || "-"}`, marginX, bodyFontSize);
+  line(`Ngày tạo: ${formatDate(order.createdAt)}`, marginX, bodyFontSize);
+  line(`Người lập: ${order.createdBy.name}`, marginX, bodyFontSize);
 
   sectionTitle("Thông tin khách hàng");
-  line(`Mã khách hàng: ${order.customer.code}`);
-  line(`Khách hàng: ${order.customer.name}`);
-  line(`SĐT: ${order.customer.phone || "-"}`);
-  line(`Địa chỉ: ${order.customer.address || "-"}`);
+  line(`Mã khách hàng: ${order.customer.code}`, marginX, bodyFontSize);
+  line(`Khách hàng: ${order.customer.name}`, marginX, bodyFontSize);
+  line(`SĐT: ${order.customer.phone || "-"}`, marginX, bodyFontSize);
+  line(`Địa chỉ: ${order.customer.address || "-"}`, marginX, bodyFontSize);
 
   sectionTitle("Sản phẩm");
-  doc.setFontSize(10);
+  doc.setFontSize(tableFontSize);
   doc.text("Sản phẩm", marginX, y);
   doc.text("SL", 145, y, { align: "right" });
   doc.text("Đơn giá", 170, y, { align: "right" });
   doc.text("Thành tiền", pageWidth - marginX, y, { align: "right" });
-  y += 4;
+  y += 4.5;
   doc.line(marginX, y, pageWidth - marginX, y);
-  y += 4;
+  y += 4.5;
 
   for (const item of order.items) {
     const productLines = doc.splitTextToSize(item.name, 118) as string[];
-    const rowHeight = Math.max(productLines.length * 5, 5) + 2;
-    ensureSpace(rowHeight + 8);
+    const rowHeight = Math.max(productLines.length * 6, 6) + 2;
+    ensureSpace(rowHeight + 7);
 
-    doc.setFontSize(10);
+    doc.setFontSize(tableFontSize);
     doc.text(productLines, marginX, y);
     doc.text(String(item.quantity), 145, y, { align: "right" });
     doc.text(formatMoney(item.unitPrice), 170, y, { align: "right" });
     doc.text(formatMoney(item.total), pageWidth - marginX, y, { align: "right" });
     y += rowHeight;
     doc.line(marginX, y, pageWidth - marginX, y);
-    y += 4;
+    y += 3;
   }
 
   ensureSpace(44);
   sectionTitle("Thanh toán");
-  line(`Tổng cộng: ${formatMoney(order.subtotal)}`, marginX, 11);
-  line(`Giảm giá: ${formatMoney(order.discountTotal)}`, marginX, 11);
-  line(`Thu khác: ${formatMoney(order.otherCharge)}`, marginX, 11);
-  line(`Đã trả: ${formatMoney(order.paidAmount)}`, marginX, 11);
-  line(`Còn nợ: ${formatMoney(order.debtAmount)}`, marginX, 11);
-  line(`Tổng thanh toán: ${formatMoney(order.grandTotal)}`, marginX, 12);
+  line(`Tổng cộng: ${formatMoney(order.subtotal)}`, marginX, totalFontSize);
+  line(`Giảm giá: ${formatMoney(order.discountTotal)}`, marginX, totalFontSize);
+  line(`Thu khác: ${formatMoney(order.otherCharge)}`, marginX, totalFontSize);
+  line(`Đã trả: ${formatMoney(order.paidAmount)}`, marginX, totalFontSize);
+  line(`Còn nợ: ${formatMoney(order.debtAmount)}`, marginX, totalFontSize);
+  line(`Tổng thanh toán: ${formatMoney(order.grandTotal)}`, marginX, totalFontSize);
 
   if (order.note) {
     sectionTitle("Ghi chú");
     const noteLines = doc.splitTextToSize(order.note, pageWidth - marginX * 2) as string[];
-    doc.setFontSize(10);
+    doc.setFontSize(noteFontSize);
     doc.text(noteLines, marginX, y);
     y += noteLines.length * 5 + 2;
   }
