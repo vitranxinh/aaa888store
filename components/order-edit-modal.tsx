@@ -136,7 +136,7 @@ export function OrderEditModal({
     const timeoutId = window.setTimeout(async () => {
       setIsSearchingProducts(true);
       try {
-        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=30&salesOnly=1`, {
+        const response = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&limit=30&salesOnly=1&branchId=${encodeURIComponent(branchId)}`, {
           signal: controller.signal,
           credentials: "same-origin"
         });

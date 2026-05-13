@@ -25,14 +25,7 @@ export async function GET(request: Request) {
       where: {
         ...(salesOnly
           ? {
-              status: "ACTIVE" as const,
-              inventories: {
-                some: {
-                  ...(branchId ? { branchId } : {}),
-                  variantId: null,
-                  quantity: { gt: 0 }
-                }
-              }
+              status: "ACTIVE" as const
             }
           : status === "active"
             ? { status: "ACTIVE" as const }
