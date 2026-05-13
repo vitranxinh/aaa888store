@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AsyncLookupInput } from "@/components/async-lookup-input";
 import { FormattedNumberInput } from "@/components/formatted-number-input";
@@ -36,6 +36,20 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
   const [note, setNote] = useState(transaction.note ?? "");
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [open]);
 
   function submit() {
     startTransition(async () => {
@@ -82,19 +96,20 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
         Sửa
       </Button>
       {open ? (
-        <div className="fixed inset-0 z-50 bg-black/45 p-0 sm:flex sm:items-center sm:justify-center sm:p-4">
-          <div className="flex h-full w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[28px]">
-            <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-100 bg-white px-4 py-4 sm:px-7 sm:py-6">
+        <div className="fixed inset-0 z-[70] overflow-x-hidden overscroll-contain">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onClick={() => setOpen(false)} />
+          <div className="relative z-[71] flex h-full w-full flex-col bg-white shadow-2xl isolate sm:mx-auto sm:my-4 sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-[28px] sm:border sm:border-slate-200">
+            <div className="sticky top-0 z-20 flex items-start justify-between border-b border-slate-100 bg-white px-4 py-4 sm:px-7 sm:py-6">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900 sm:text-4xl">Sửa phiếu thu / chi</h3>
                 <p className="mt-1 text-sm text-slate-500 sm:text-base">{transaction.code}</p>
               </div>
               <button onClick={() => setOpen(false)} className="text-4xl text-slate-500 sm:text-5xl">×</button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-6">
-            <div className="grid gap-4">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 pb-[calc(110px+env(safe-area-inset-bottom))] sm:px-7 sm:py-6 sm:pb-6">
+            <div className="grid w-full min-w-0 max-w-full gap-4">
               <select
-                className="h-14 rounded-2xl border border-slate-300 px-4 text-xl"
+                className="h-14 w-full min-w-0 max-w-full rounded-2xl border border-slate-300 px-4 text-xl"
                 value={type}
                 onChange={(e) => {
                   const nextType = e.target.value as "RECEIPT" | "PAYMENT";
@@ -106,7 +121,7 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
                 <option value="RECEIPT">Phiếu thu khách hàng</option>
                 <option value="PAYMENT">Phiếu chi</option>
               </select>
-              <FormattedNumberInput className="h-14 rounded-2xl border border-slate-300 px-4 text-xl" min={0} value={amount} onValueChange={setAmount} placeholder="Số tiền" />
+              <FormattedNumberInput className="h-14 w-full min-w-0 max-w-full rounded-2xl border border-slate-300 px-4 text-xl" min={0} value={amount} onValueChange={setAmount} placeholder="Số tiền" />
               {type === "RECEIPT" ? (
                 <>
                   <AsyncLookupInput
@@ -130,12 +145,12 @@ export function CashflowEditModal({ transaction, branchId }: Props) {
                 </div>
               )}
               <textarea
-                className="h-24 rounded-2xl border border-slate-300 px-4 py-3 text-xl"
+                className="h-24 w-full min-w-0 max-w-full rounded-2xl border border-slate-300 px-4 py-3 text-xl"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder={type === "RECEIPT" ? "Ghi chú phiếu thu" : "Lý do chi / ghi chú"}
               />
-              <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white pt-4">
+              <div className="sticky bottom-0 z-20 -mx-4 flex flex-col gap-3 border-t border-slate-100 bg-white px-4 pt-4 pb-[calc(8px+env(safe-area-inset-bottom))] sm:mx-0 sm:flex-row sm:items-center sm:justify-between sm:px-0 sm:pb-0">
                 <Button variant="destructive" className="h-14 text-xl" onClick={deleteTxn} loading={isPending}>
                   Xóa phiếu
                 </Button>
