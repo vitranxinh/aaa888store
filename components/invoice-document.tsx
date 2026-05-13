@@ -86,19 +86,19 @@ export function InvoiceDocument({
     <div
       className={
         isPdf
-          ? "grid gap-2 bg-white p-3 text-[12px] leading-snug text-black"
-          : "grid gap-3 text-[13px] leading-snug text-slate-700 sm:text-[14px] print:gap-2 print:text-[10px] print:leading-tight print:w-full"
+          ? "grid gap-2 bg-white p-3 text-[20px] leading-tight text-black"
+          : "grid gap-3 text-[13px] leading-snug text-slate-700 sm:text-[14px] print:gap-2 print:text-[20px] print:leading-tight print:w-full"
       }
       style={isPdf ? { fontFamily: "Arial, Helvetica, sans-serif" } : undefined}
     >
       <div className="border-y border-slate-400 py-1.5 text-center">
-        <h1 className={isPdf ? "text-[24px] font-extrabold uppercase tracking-wide text-black" : "text-[28px] font-extrabold uppercase tracking-wide text-slate-900 sm:text-[32px] print:text-[22px]"}>
+        <h1 className={isPdf ? "text-[30px] font-extrabold uppercase tracking-wide text-black" : "text-[28px] font-extrabold uppercase tracking-wide text-slate-900 sm:text-[32px] print:text-[30px]"}>
           Đơn đặt hàng
         </h1>
-        <p className={isPdf ? "mt-0.5 text-[13px] font-semibold text-black" : "mt-1 text-lg font-semibold text-slate-600 sm:text-xl print:text-[12px]"}>{code}</p>
+        <p className={isPdf ? "mt-0.5 text-[18px] font-semibold text-black" : "mt-1 text-lg font-semibold text-slate-600 sm:text-xl print:text-[18px]"}>{code}</p>
       </div>
 
-      <div className={isPdf ? "grid gap-2 border border-slate-400 p-2 text-[11px]" : "grid gap-4 border border-slate-400 p-4 text-[14px] text-slate-700 sm:text-[15px] print:gap-2 print:p-2 print:text-[10px]"}>
+      <div className={isPdf ? "grid gap-2 border border-slate-400 p-2 text-[20px]" : "grid gap-4 border border-slate-400 p-4 text-[14px] text-slate-700 sm:text-[15px] print:gap-2 print:p-2 print:text-[20px]"}>
         <div className={isPdf ? "grid gap-2 md:grid-cols-[1.5fr,1fr]" : "grid gap-4 md:grid-cols-[1.5fr,1fr]"}>
           <div className="space-y-1.5">
             <p>
@@ -117,7 +117,7 @@ export function InvoiceDocument({
           <div
             className={
               isPdf
-                ? "rounded-md border border-slate-300 bg-slate-50 px-2 py-2 text-[11px]"
+                ? "rounded-md border border-slate-300 bg-slate-50 px-2 py-2 text-[20px]"
                 : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 print:rounded-none print:border-slate-400 print:bg-transparent print:px-2 print:py-2"
             }
           >
@@ -133,7 +133,7 @@ export function InvoiceDocument({
       <div className={isPdf ? "" : "mx-auto w-full max-w-[980px] print:max-w-none"}>
         <div className={isPdf ? "overflow-hidden border border-slate-400 bg-white" : "w-full overflow-hidden border border-slate-400 bg-white print:overflow-visible"}>
           {isPdf ? (
-            <table className="w-full table-fixed border-collapse text-[11px] text-black">
+            <table className="w-full table-fixed border-collapse text-[20px] text-black">
               <colgroup>
                 <col style={{ width: "66%" }} />
                 <col style={{ width: "10%" }} />
@@ -150,7 +150,7 @@ export function InvoiceDocument({
                 {rows.map((item, index) =>
                   item.name ? (
                     <tr key={item.id || `${item.name}-${index}`} className="align-top">
-                      <td className="border border-slate-400 px-1 py-1 leading-4">
+                      <td className="border border-slate-400 px-1 py-1 leading-[1.15]">
                         <p
                           className="font-semibold text-slate-900"
                           style={{
@@ -162,12 +162,12 @@ export function InvoiceDocument({
                         >
                           {item.name}
                         </p>
-                        <p className="mt-0.5 text-[10px] text-slate-600">Đơn giá: {formatInvoiceAmount(item.unitPrice)}</p>
+                        <p className="mt-0.5 text-[20px] text-slate-600">Đơn giá: {formatInvoiceAmount(item.unitPrice)}</p>
                       </td>
-                      <td className="border border-slate-400 px-1 py-1 text-center text-[11px] font-semibold whitespace-nowrap">
+                      <td className="border border-slate-400 px-1 py-1 text-center text-[20px] font-semibold whitespace-nowrap">
                         {item.quantity}
                       </td>
-                      <td className="border border-slate-400 px-1 py-1 text-right align-top text-[14px] font-extrabold whitespace-nowrap">
+                      <td className="border border-slate-400 px-1 py-1 text-right align-top text-[20px] font-extrabold whitespace-nowrap">
                         <div className="flex w-full justify-end text-right">
                           <span className="min-w-[72px] text-right">{formatInvoiceAmount(item.total)}</span>
                         </div>
@@ -181,7 +181,7 @@ export function InvoiceDocument({
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Tổng cộng
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[13px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(subtotal)}</span>
                     </div>
@@ -191,7 +191,7 @@ export function InvoiceDocument({
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Giảm giá
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[13px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(discountTotal)}</span>
                     </div>
@@ -201,7 +201,7 @@ export function InvoiceDocument({
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Thu khác
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[13px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(otherCharge)}</span>
                     </div>
@@ -211,7 +211,7 @@ export function InvoiceDocument({
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Số tiền đã trả
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[13px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(paidAmount)}</span>
                     </div>
@@ -221,7 +221,7 @@ export function InvoiceDocument({
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Còn nợ
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[13px] font-bold text-red-600 whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold text-red-600 whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtAmount)}</span>
                     </div>
@@ -231,7 +231,7 @@ export function InvoiceDocument({
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right text-sm font-bold uppercase">
                     Tổng thanh toán
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[14px] font-extrabold whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-extrabold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(grandTotal)}</span>
                     </div>
@@ -240,7 +240,7 @@ export function InvoiceDocument({
               </tfoot>
             </table>
           ) : (
-            <table className="invoice-table w-full table-fixed border-collapse text-[10px] text-slate-700 sm:text-[11px] print:text-[10px]">
+            <table className="invoice-table w-full table-fixed border-collapse text-[10px] text-slate-700 sm:text-[11px] print:text-[20px]">
               <colgroup>
                 <col style={{ width: "42%" }} />
                 <col style={{ width: "10%" }} />
@@ -295,7 +295,7 @@ export function InvoiceDocument({
                   <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Tổng cộng
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(subtotal)}</span>
                     </div>
@@ -305,7 +305,7 @@ export function InvoiceDocument({
                   <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Giảm giá
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(discountTotal)}</span>
                     </div>
@@ -315,7 +315,7 @@ export function InvoiceDocument({
                   <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Thu khác
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(otherCharge)}</span>
                     </div>
@@ -325,7 +325,7 @@ export function InvoiceDocument({
                   <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Số tiền đã trả
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(paidAmount)}</span>
                     </div>
@@ -335,17 +335,17 @@ export function InvoiceDocument({
                   <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Còn nợ
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold text-red-600 whitespace-nowrap">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold text-red-600 whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtAmount)}</span>
                     </div>
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right text-sm font-bold uppercase print:text-[10px]">
+                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right text-sm font-bold uppercase print:text-[20px]">
                     Tổng thanh toán
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-extrabold whitespace-nowrap print:text-[11px]">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-extrabold whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(grandTotal)}</span>
                     </div>
@@ -357,15 +357,15 @@ export function InvoiceDocument({
         </div>
       </div>
 
-      <div className={isPdf ? "space-y-1.5 border-t border-slate-400 pt-1.5 text-[11px]" : "space-y-4 border-t border-slate-400 pt-4 text-[14px] text-slate-700 sm:text-[15px] print:space-y-2 print:pt-2 print:text-[10px]"}>
+      <div className={isPdf ? "space-y-1.5 border-t border-slate-400 pt-1.5 text-[17px]" : "space-y-4 border-t border-slate-400 pt-4 text-[14px] text-slate-700 sm:text-[15px] print:space-y-2 print:pt-2 print:text-[17px]"}>
         <div className={isPdf ? "rounded-lg border border-slate-300 bg-slate-50 px-3 py-2" : "rounded-2xl bg-slate-50 px-4 py-3 print:rounded-none print:bg-transparent print:px-0 print:py-0"}>
-          <p className={isPdf ? "text-[12px] font-bold text-slate-900" : "text-base font-bold text-slate-900 sm:text-lg print:text-[11px]"}>Ghi chú:</p>
+          <p className={isPdf ? "text-[17px] font-bold text-slate-900" : "text-base font-bold text-slate-900 sm:text-lg print:text-[17px]"}>Ghi chú:</p>
           <p className={isPdf ? "mt-1 min-h-[24px] whitespace-pre-line leading-4.5" : "mt-2 whitespace-pre-line leading-6 print:mt-1 print:leading-tight"}>
             {note || "Không có ghi chú."}
           </p>
         </div>
         <div className="space-y-1 text-center">
-          <p className={isPdf ? "text-[10px] font-bold uppercase text-slate-900" : "text-sm font-bold uppercase text-slate-900 print:text-[11px]"}>
+          <p className={isPdf ? "text-[17px] font-bold uppercase text-slate-900" : "text-sm font-bold uppercase text-slate-900 print:text-[17px]"}>
             Không nhận trả hàng trừ trường hợp lỗi từ nhà sản xuất và quầy
           </p>
           <p>Quý khách vui lòng quay video khi nhận hàng để giải quyết khiếu nại nếu phát sinh.</p>
