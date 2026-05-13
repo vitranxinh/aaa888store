@@ -22,9 +22,10 @@ function getHistoryStatusLabel(status: CustomerInvoiceHistoryStatus) {
   return "Tất cả";
 }
 
-function getTrackingTypeLabel(type: "INVOICE" | "RECEIPT" | "PREPAYMENT" | "OVERPAYMENT") {
+function getTrackingTypeLabel(type: "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYMENT" | "OVERPAYMENT") {
   if (type === "INVOICE") return "Hóa đơn";
   if (type === "RECEIPT") return "Phiếu thu";
+  if (type === "PAYMENT") return "Phiếu chi";
   if (type === "OVERPAYMENT") return "Trả dư";
   return "Trả trước";
 }
@@ -172,7 +173,7 @@ export default async function CustomerDetailPage({
             <p className="mt-2 text-xl font-bold text-slate-900">{detail.activeInvoices.length}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Phiếu thu còn ảnh hưởng số dư</p>
+            <p className="text-sm font-medium text-slate-500">Phiếu thu/chi còn ảnh hưởng số dư</p>
             <p className="mt-2 text-xl font-bold text-slate-900">{detail.receipts.length}</p>
           </div>
         </div>

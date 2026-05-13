@@ -23,6 +23,7 @@ export type CustomerDebtOverviewItem = {
 export type CustomerReceiptItem = {
   id: string;
   code: string;
+  type: "RECEIPT" | "PAYMENT";
   createdAt: Date;
   amount: number;
   note: string | null;
@@ -45,7 +46,7 @@ export type CustomerInvoiceItem = {
 export type CustomerDebtTrackingItem = {
   id: string;
   date: Date;
-  type: "INVOICE" | "RECEIPT" | "PREPAYMENT" | "OVERPAYMENT";
+  type: "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYMENT" | "OVERPAYMENT";
   code: string;
   description: string;
   debitAmount: number;
@@ -274,11 +275,12 @@ export async function getCustomerOutstandingDebt(customerId: string) {
     prisma.cashTransaction.findMany({
       where: {
         customerId,
-        type: "RECEIPT"
+        type: { in: ["RECEIPT", "PAYMENT"] }
       },
       select: {
         id: true,
         code: true,
+        type: true,
         createdAt: true,
         amount: true,
         note: true,
@@ -308,12 +310,13 @@ export async function getCustomerOutstandingDebt(customerId: string) {
   const normalizedReceipts: CustomerReceiptItem[] = receipts.map((receipt) => ({
     id: receipt.id,
     code: receipt.code,
+    type: receipt.type,
     createdAt: receipt.createdAt,
     amount: toNumber(receipt.amount),
     note: receipt.note,
     orderId: receipt.orderId,
     orderCode: receipt.order?.code ?? null,
-    paymentMethodLabel: getPaymentMethodLabel(receipt.order?.paymentMethod)
+    paymentMethodLabel: receipt.type === "PAYMENT" ? "Phiếu chi khách hàng" : getPaymentMethodLabel(receipt.order?.paymentMethod)
   }));
 
   console.info("[CustomerDebtPerformance][outstanding]", {
@@ -331,7 +334,7 @@ export async function getCustomerOutstandingDebt(customerId: string) {
 
 export async function getCustomerDebtTracking(customerId: string) {
   const startedAt = Date.now();
-  const [invoices, receipts] = await Promise.all([
+  const [invoices, cashTransactions] = await Promise.all([
     prisma.order.findMany({
       where: {
         customerId,
@@ -350,12 +353,15 @@ export async function getCustomerDebtTracking(customerId: string) {
     prisma.cashTransaction.findMany({
       where: {
         customerId,
-        type: "RECEIPT",
-        orderId: null
+        OR: [
+          { type: "RECEIPT", orderId: null },
+          { type: "PAYMENT" }
+        ]
       },
       select: {
         id: true,
         code: true,
+        type: true,
         createdAt: true,
         amount: true,
         note: true
@@ -379,14 +385,28 @@ export async function getCustomerDebtTracking(customerId: string) {
       status: Number(invoice.paidAmount) > 0 ? "Thanh toán một phần" : "Chưa thanh toán",
       orderId: invoice.id
     })),
-    ...receipts.map((receipt) => {
-      const amount = toNumber(receipt.amount);
+    ...cashTransactions.map((transaction) => {
+      const amount = toNumber(transaction.amount);
+      if (transaction.type === "PAYMENT") {
+        return {
+          id: transaction.id,
+          date: transaction.createdAt,
+          type: "PAYMENT" as const,
+          code: transaction.code,
+          description: transaction.note?.trim() || "Phiếu chi cho khách hàng",
+          debitAmount: amount,
+          creditAmount: 0,
+          status: "Khách nhận tiền, phát sinh công nợ",
+          orderId: null
+        };
+      }
+
       return {
-        id: receipt.id,
-        date: receipt.createdAt,
+        id: transaction.id,
+        date: transaction.createdAt,
         type: "PREPAYMENT" as const,
-        code: receipt.code,
-        description: receipt.note?.trim() || "Khách trả trước / chưa gắn hóa đơn",
+        code: transaction.code,
+        description: transaction.note?.trim() || "Khách trả trước / chưa gắn hóa đơn",
         debitAmount: 0,
         creditAmount: amount,
         status: "Khách trả trước",

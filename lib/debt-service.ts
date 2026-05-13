@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionClient, customerId: string) {
-  const [orderAggregate, standaloneReceiptAggregate] = await Promise.all([
+  const [orderAggregate, standaloneReceiptAggregate, customerPaymentAggregate] = await Promise.all([
     tx.order.aggregate({
       where: {
         customerId,
@@ -17,16 +17,24 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
         orderId: null
       },
       _sum: { amount: true }
+    }),
+    tx.cashTransaction.aggregate({
+      where: {
+        customerId,
+        type: "PAYMENT"
+      },
+      _sum: { amount: true }
     })
   ]);
 
   const orderDebt = Number(orderAggregate._sum.debtAmount ?? 0);
   const standaloneReceipt = Number(standaloneReceiptAggregate._sum.amount ?? 0);
+  const customerPayment = Number(customerPaymentAggregate._sum.amount ?? 0);
 
   await tx.customer.update({
     where: { id: customerId },
     data: {
-      receivableDebt: orderDebt - standaloneReceipt
+      receivableDebt: orderDebt + customerPayment - standaloneReceipt
     }
   });
 }
