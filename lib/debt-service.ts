@@ -2,7 +2,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionClient, customerId: string) {
-  const [orderAggregate, standaloneReceiptAggregate, customerPaymentAggregate] = await Promise.all([
+  const [customer, orderAggregate, standaloneReceiptAggregate, customerPaymentAggregate] = await Promise.all([
+    tx.customer.findUnique({
+      where: { id: customerId },
+      select: { openingDebt: true }
+    }),
     tx.order.aggregate({
       where: {
         customerId,
@@ -27,6 +31,9 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
     })
   ]);
 
+  if (!customer) return;
+
+  const openingDebt = Number(customer.openingDebt ?? 0);
   const orderDebt = Number(orderAggregate._sum.debtAmount ?? 0);
   const standaloneReceipt = Number(standaloneReceiptAggregate._sum.amount ?? 0);
   const customerPayment = Number(customerPaymentAggregate._sum.amount ?? 0);
@@ -34,7 +41,7 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
   await tx.customer.update({
     where: { id: customerId },
     data: {
-      receivableDebt: orderDebt + customerPayment - standaloneReceipt
+      receivableDebt: openingDebt + orderDebt + customerPayment - standaloneReceipt
     }
   });
 }
@@ -44,7 +51,11 @@ export async function recalculateCustomerReceivableDebtForCustomer(customerId: s
 }
 
 export async function recalculateSupplierPayableDebt(tx: Prisma.TransactionClient, supplierId: string) {
-  const [purchaseAggregate, standalonePaymentAggregate] = await Promise.all([
+  const [supplier, purchaseAggregate, standalonePaymentAggregate] = await Promise.all([
+    tx.supplier.findUnique({
+      where: { id: supplierId },
+      select: { openingDebt: true }
+    }),
     tx.purchaseOrder.aggregate({
       where: {
         supplierId,
@@ -62,13 +73,16 @@ export async function recalculateSupplierPayableDebt(tx: Prisma.TransactionClien
     })
   ]);
 
+  if (!supplier) return;
+
+  const openingDebt = Number(supplier.openingDebt ?? 0);
   const purchaseDebt = Number(purchaseAggregate._sum.debtAmount ?? 0);
   const standalonePayment = Number(standalonePaymentAggregate._sum.amount ?? 0);
 
   await tx.supplier.update({
     where: { id: supplierId },
     data: {
-      payableDebt: Math.max(purchaseDebt - standalonePayment, 0)
+      payableDebt: Math.max(openingDebt + purchaseDebt - standalonePayment, 0)
     }
   });
 }
