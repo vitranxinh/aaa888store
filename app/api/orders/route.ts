@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { requireApiSession } from "@/lib/auth";
+import { requireApiSession, resolveActorUserId } from "@/lib/auth";
 import { generateAndStoreInvoicePdf } from "@/lib/invoice-pdf";
 import { createOrderFromPayload } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
@@ -53,6 +53,21 @@ export async function POST(request: Request) {
       ...parsed.data,
       createdById: session.id
     });
+    const draftId = typeof body?.draftId === "string" ? body.draftId.trim() : "";
+    if (draftId) {
+      const actorUserId = await resolveActorUserId(session);
+      await prisma.orderDraft.updateMany({
+        where: {
+          id: draftId,
+          status: "DRAFT",
+          userId: actorUserId
+        },
+        data: {
+          status: "COMPLETED",
+          completedOrderId: order.id
+        }
+      });
+    }
     let pdfMeta: {
       pdfUrl: string | null;
       pdfFileName: string | null;

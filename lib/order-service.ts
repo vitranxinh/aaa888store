@@ -182,6 +182,38 @@ async function applyOrderEffects(
   const quantityByProduct = aggregateQuantityByProduct(items);
   const productIds = Array.from(quantityByProduct.keys());
   const productNameById = new Map(items.map((item) => [item.product.id, item.product.name]));
+  const inventoryRows = await tx.inventory.findMany({
+    where: {
+      branchId: order.branchId,
+      productId: { in: productIds },
+      variantId: null,
+      quantity: { gt: 0 }
+    },
+    select: { id: true, productId: true, quantity: true },
+    orderBy: { updatedAt: "desc" }
+  });
+  const inventoryRowsByProduct = new Map<string, Array<{ id: string; quantity: number }>>();
+  for (const row of inventoryRows) {
+    if (!row.productId) continue;
+    const rows = inventoryRowsByProduct.get(row.productId) ?? [];
+    rows.push({ id: row.id, quantity: row.quantity });
+    inventoryRowsByProduct.set(row.productId, rows);
+  }
+  const inventoryRowUpdates: Array<{ id: string; productId: string; quantity: number }> = [];
+  for (const [productId, requestedQuantity] of quantityByProduct.entries()) {
+    let remaining = requestedQuantity;
+    for (const row of inventoryRowsByProduct.get(productId) ?? []) {
+      if (remaining <= 0) break;
+      const used = Math.min(row.quantity, remaining);
+      remaining -= used;
+      inventoryRowUpdates.push({ id: row.id, productId, quantity: used });
+    }
+
+    if (remaining > 0) {
+      const available = requestedQuantity - remaining;
+      throw new Error(`Không đủ tồn kho để bán: ${productNameById.get(productId) ?? productId} còn ${available}, cần ${requestedQuantity}`);
+    }
+  }
   const batchUpdates: any[] = [];
   const invTxns: any[] = [];
   const batchesByProduct = new Map<string, any[]>();
@@ -211,31 +243,20 @@ async function applyOrderEffects(
       });
     }
   }
-  const inventoryCase = Prisma.join(
-    Array.from(quantityByProduct.entries()).map(([id, qty]) => Prisma.sql`WHEN ${id} THEN ${qty}`),
-    " "
-  );
-  const affectedInventoryRows = await tx.$executeRaw`
-    UPDATE "Inventory"
-    SET "quantity" = "quantity" - (CASE "productId" ${inventoryCase} ELSE 0 END)
-    WHERE "branchId" = ${order.branchId}
-      AND "variantId" IS NULL
-      AND "productId" IN (${Prisma.join(productIds)})
-      AND "quantity" >= (CASE "productId" ${inventoryCase} ELSE 0 END)
-  `;
-
-  if (Number(affectedInventoryRows) !== productIds.length) {
-    const latestInventories = await tx.inventory.findMany({
-      where: { branchId: order.branchId, productId: { in: productIds }, variantId: null },
-      select: { productId: true, quantity: true }
+  for (const update of inventoryRowUpdates) {
+    const result = await tx.inventory.updateMany({
+      where: {
+        id: update.id,
+        quantity: { gte: update.quantity }
+      },
+      data: {
+        quantity: { decrement: update.quantity }
+      }
     });
-    const availableByProduct = new Map(latestInventories.map((inventory) => [inventory.productId, inventory.quantity]));
-    const message = Array.from(quantityByProduct.entries())
-      .filter(([productId, requested]) => (availableByProduct.get(productId) ?? 0) < requested)
-      .map(([productId, requested]) => `${productNameById.get(productId) ?? productId} còn ${availableByProduct.get(productId) ?? 0}, cần ${requested}`)
-      .join("; ");
 
-    throw new Error(`Không đủ tồn kho để bán: ${message || "tồn kho đã thay đổi, vui lòng tải lại"}`);
+    if (result.count !== 1) {
+      throw new Error(`Không đủ tồn kho để bán: ${productNameById.get(update.productId) ?? update.productId} vừa thay đổi tồn kho, vui lòng thử lại`);
+    }
   }
 
   const writeTasks: Promise<any>[] = [

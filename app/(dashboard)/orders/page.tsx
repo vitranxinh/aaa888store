@@ -5,9 +5,10 @@ import { unstable_cache } from "next/cache";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { OrderDeleteRequestActions } from "@/components/order-delete-request-actions";
+import { OrderDraftsListClient } from "@/components/order-drafts-list-client";
 import { OrdersFilterBar } from "@/components/orders-filter-bar";
 import { OrdersListClient } from "@/components/orders-list-client";
-import { requireSession } from "@/lib/auth";
+import { requireSession, resolveActorUserId, type SessionUser } from "@/lib/auth";
 import { resolveVietnamDateRange, type TimeFilterRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
@@ -351,6 +352,49 @@ async function PendingDeleteRequestsSection({
   );
 }
 
+async function OrderDraftsSection({
+  session,
+  branchId
+}: {
+  session: SessionUser;
+  branchId: string;
+}) {
+  const actorUserId = await resolveActorUserId(session);
+  const drafts = await prisma.orderDraft.findMany({
+    where: {
+      status: "DRAFT",
+      ...(session.role === "ADMIN" || session.role === "MANAGER"
+        ? { branchId }
+        : { userId: actorUserId })
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      updatedAt: true,
+      customer: { select: { name: true } },
+      branch: { select: { name: true } },
+      user: { select: { name: true } },
+      draftData: true
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 10
+  });
+
+  const rows = drafts.map((draft) => {
+    const draftData = draft.draftData as { customerQuery?: string } | null;
+    return {
+      id: draft.id,
+      customerName: draft.customer?.name ?? draftData?.customerQuery ?? "Chưa chọn khách",
+      branchName: draft.branch.name,
+      createdByName: draft.user.name,
+      createdAt: draft.createdAt.toISOString(),
+      updatedAt: draft.updatedAt.toISOString()
+    };
+  });
+
+  return <OrderDraftsListClient initialDrafts={rows} />;
+}
+
 function PendingDeleteRequestsFallback() {
   return (
     <section className="min-h-[96px] rounded-3xl border border-amber-200 bg-amber-50/50 p-4 shadow-soft sm:p-6">
@@ -396,6 +440,10 @@ export default async function OrdersPage({
         <OrdersFilterBar q={q} range={range} dateFrom={dateFrom} dateTo={dateTo} canExport={canExportExcel} />
         <OrderCreateModal branchId={branchId} />
       </div>
+
+      <Suspense fallback={null}>
+        <OrderDraftsSection session={session} branchId={branchId} />
+      </Suspense>
 
       {isAdmin ? (
         <Suspense fallback={<PendingDeleteRequestsFallback />}>

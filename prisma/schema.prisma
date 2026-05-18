@@ -64,6 +64,12 @@ enum DeleteRequestStatus {
   REJECTED
 }
 
+enum OrderDraftStatus {
+  DRAFT
+  COMPLETED
+  DELETED
+}
+
 model Branch {
   id              String                 @id @default(cuid())
   code            String                 @unique
@@ -77,6 +83,7 @@ model Branch {
   inventories     Inventory[]
   inventoryTxns   InventoryTransaction[]
   orders          Order[]
+  orderDrafts     OrderDraft[]
   purchaseOrders  PurchaseOrder[]
   cashTxns        CashTransaction[]
   promotions      PromotionBranch[]
@@ -95,6 +102,7 @@ model User {
   updatedAt       DateTime               @updatedAt
   branch          Branch?                @relation(fields: [branchId], references: [id])
   orders          Order[]                @relation("OrderCreatedBy")
+  orderDrafts      OrderDraft[]           @relation("OrderDraftCreatedBy")
   orderDeleteRequests         OrderDeleteRequest[] @relation("OrderDeleteRequestedBy")
   reviewedOrderDeleteRequests OrderDeleteRequest[] @relation("OrderDeleteReviewedBy")
   purchaseOrders  PurchaseOrder[]        @relation("PurchaseCreatedBy")
@@ -253,6 +261,7 @@ model Customer {
   updatedAt       DateTime               @updatedAt
   group           CustomerGroup?         @relation(fields: [groupId], references: [id])
   orders          Order[]
+  orderDrafts      OrderDraft[]
   cashTxns        CashTransaction[]
 
   @@index([updatedAt])
@@ -340,6 +349,7 @@ model Order {
   items           OrderItem[]
   cashTxns        CashTransaction[]
   deleteRequest   OrderDeleteRequest?
+  completedDrafts OrderDraft[]
 
   @@index([branchId, createdAt])
   @@index([createdAt])
@@ -378,6 +388,27 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+model OrderDraft {
+  id              String                 @id @default(cuid())
+  userId          String
+  branchId        String
+  customerId      String?
+  draftData       Json
+  status          OrderDraftStatus       @default(DRAFT)
+  completedOrderId String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  user            User                   @relation("OrderDraftCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+  branch          Branch                 @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  customer        Customer?              @relation(fields: [customerId], references: [id])
+  completedOrder  Order?                 @relation(fields: [completedOrderId], references: [id])
+
+  @@index([userId, status, updatedAt])
+  @@index([branchId, status, updatedAt])
+  @@index([customerId])
+  @@index([completedOrderId])
 }
 
 model PurchaseOrder {
