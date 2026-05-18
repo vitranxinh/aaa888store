@@ -49,10 +49,10 @@ export function OrderDraftsListClient({ initialDrafts }: { initialDrafts: DraftR
     <section className="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-soft sm:p-6">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Draft invoices/orders</h2>
+          <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Hóa đơn nháp</h2>
           <p className="text-sm text-slate-600 sm:text-base">Bản nháp hóa đơn chưa hoàn tất, có thể mở lại để tiếp tục.</p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-emerald-700">{drafts.length} Draft</span>
+        <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-emerald-700">{drafts.length} bản nháp</span>
       </div>
 
       <div className="mt-4 grid gap-3">
@@ -62,7 +62,7 @@ export function OrderDraftsListClient({ initialDrafts }: { initialDrafts: DraftR
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-bold text-slate-900">{draft.id.slice(0, 8).toUpperCase()}</p>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Draft</span>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Bản nháp</span>
                 </div>
                 <div className="mt-2 grid gap-1 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
                   <p>Khách: <span className="font-semibold text-slate-900">{draft.customerName}</span></p>

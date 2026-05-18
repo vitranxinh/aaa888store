@@ -191,7 +191,7 @@ export function OrderCreateModal({ branchId }: Props) {
       setLastSavedAt(payload.updatedAt);
       setHasUnsavedChanges(false);
       if (manual) {
-        pushToast({ title: "Draft saved successfully.", description: "Bản nháp đã được lưu." });
+        pushToast({ title: "Đã lưu bản nháp", description: "Bạn có thể mở lại và tiếp tục tạo hóa đơn sau." });
       }
       return payload as OrderDraft;
     } catch (error) {
@@ -513,7 +513,7 @@ export function OrderCreateModal({ branchId }: Props) {
             </div>
             {restoreDraft ? (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:p-4 sm:text-base">
-                <p className="font-semibold">You have an unfinished draft. Continue editing?</p>
+                <p className="font-semibold">Bạn có bản nháp chưa hoàn tất. Tiếp tục chỉnh sửa?</p>
                 <p className="mt-1 text-xs sm:text-sm">
                   Cập nhật lần cuối {new Date(restoreDraft.updatedAt).toLocaleString("vi-VN")}
                   {restoreDraft.customer?.name ? ` · ${restoreDraft.customer.name}` : ""}
@@ -527,7 +527,7 @@ export function OrderCreateModal({ branchId }: Props) {
                       setRestoreDraft(null);
                     }}
                   >
-                    Continue draft
+                    Tiếp tục bản nháp
                   </Button>
                   <Button
                     type="button"
@@ -540,7 +540,7 @@ export function OrderCreateModal({ branchId }: Props) {
                       void deleteDraft(id);
                     }}
                   >
-                    Start new invoice
+                    Tạo hóa đơn mới
                   </Button>
                 </div>
               </div>
@@ -706,7 +706,7 @@ export function OrderCreateModal({ branchId }: Props) {
                   onClick={() => void saveDraft(true)}
                   loading={isSavingDraft}
                 >
-                  Save draft
+                  Lưu nháp
                 </Button>
                 <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} loading={isPending} disabled={lines.length === 0}>
                   Tạo hóa đơn
