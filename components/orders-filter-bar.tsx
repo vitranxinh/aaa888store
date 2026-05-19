@@ -25,16 +25,6 @@ export function OrdersFilterBar({ q, range, dateFrom, dateTo, canExport = true }
     setQueryValue(q);
   }, [q]);
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      if (queryValue !== q) {
-        submitForm();
-      }
-    }, 400);
-
-    return () => window.clearTimeout(timeout);
-  }, [q, queryValue]);
-
   return (
     <form ref={formRef} action={pathname} className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
       <input
