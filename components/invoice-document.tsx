@@ -176,7 +176,7 @@ export function InvoiceDocument({
                   ) : null
                 )}
               </tbody>
-              <tfoot>
+              <tbody>
                 <tr>
                   <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Tổng cộng
@@ -237,7 +237,7 @@ export function InvoiceDocument({
                     </div>
                   </td>
                 </tr>
-              </tfoot>
+              </tbody>
             </table>
           ) : (
             <table className="invoice-table w-full table-fixed border-collapse text-[10px] text-slate-700 sm:text-[11px] print:text-[20px]">
@@ -290,7 +290,7 @@ export function InvoiceDocument({
                   )
                 )}
               </tbody>
-              <tfoot>
+              <tbody>
                 <tr>
                   <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Tổng cộng
@@ -351,7 +351,7 @@ export function InvoiceDocument({
                     </div>
                   </td>
                 </tr>
-              </tfoot>
+              </tbody>
             </table>
           )}
         </div>
