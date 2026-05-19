@@ -25,7 +25,7 @@ export function AppSidebar({ session }: { session: SessionUser }) {
         <div className="flex items-start gap-3">
           <div className="text-2xl">💊</div>
           <div>
-            <p className="text-4xl font-bold leading-none text-emerald-500">AAA888</p>
+            <p className="text-4xl font-bold leading-none text-emerald-500">AAAHHH</p>
             <p className="mt-1 text-xl text-slate-400">Quản lý bán hàng</p>
           </div>
         </div>

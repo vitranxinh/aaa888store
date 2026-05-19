@@ -12,7 +12,7 @@ async function main() {
     (await prisma.branch.create({
       data: {
         code: "Q302",
-        name: "AAA888",
+        name: "AAAHHH",
         address: "Thanh Xuân, Hà Nội",
         phone: "0918377022"
       }
@@ -20,7 +20,7 @@ async function main() {
 
   await prisma.branch.update({
     where: { id: branch.id },
-    data: { name: "AAA888" }
+    data: { name: "AAAHHH" }
   });
 
   const accounts = [

@@ -14,6 +14,7 @@ type ProductSuggestion = {
   id: string;
   label: string;
   sellingPrice: number;
+  currentStock: number;
   meta?: string;
 };
 
@@ -347,6 +348,7 @@ export function OrderCreateModal({ branchId }: Props) {
           id: string;
           label: string;
           sellingPrice?: number;
+          currentStock?: number;
           meta?: string;
         }>;
         setProductResults(
@@ -354,6 +356,7 @@ export function OrderCreateModal({ branchId }: Props) {
             id: item.id,
             label: item.label,
             sellingPrice: Number(item.sellingPrice ?? 0),
+            currentStock: Number(item.currentStock ?? 0),
             meta: item.meta
           }))
         );
@@ -605,7 +608,7 @@ export function OrderCreateModal({ branchId }: Props) {
                         >
                           <div className="font-semibold text-slate-900">{product.label}</div>
                           <div className="mt-0.5 text-xs text-slate-500 sm:text-sm">
-                            {product.meta ?? ""} · {product.sellingPrice.toLocaleString("vi-VN")} đ
+                            {product.meta ?? ""} · {product.sellingPrice.toLocaleString("vi-VN")} đ · Tồn: {product.currentStock.toLocaleString("vi-VN")}
                           </div>
                         </button>
                       ))

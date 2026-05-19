@@ -38,7 +38,7 @@ async function main() {
   const branch = await prisma.branch.create({
     data: {
       code: "Q302",
-      name: "AAA888",
+      name: "AAAHHH",
       address: "Thanh Xuân, Hà Nội",
       phone: "0918377022"
     }

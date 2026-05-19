@@ -3,13 +3,13 @@ import type { Metadata, Viewport } from "next";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "AAA888",
+  title: "AAAHHH",
   description: "Nền tảng quản lý bán lẻ cho cửa hàng và chuỗi nhỏ tại Việt Nam",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "AAA888"
+    title: "AAAHHH"
   },
   formatDetection: {
     telephone: false

@@ -32,7 +32,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
       <div className="sticky top-0 z-40 border-b border-emerald-700 bg-emerald-600 text-white shadow-sm lg:hidden">
         <div className="flex items-center justify-between px-4 py-4">
           <div>
-            <p className="text-[1.75rem] font-bold leading-none">AAA888</p>
+            <p className="text-[1.75rem] font-bold leading-none">AAAHHH</p>
             <p className="mt-1 text-[0.95rem] text-emerald-50/90">Quản lý trên điện thoại</p>
           </div>
           <div className="flex items-center gap-2">
@@ -57,7 +57,7 @@ export function MobileNav({ session }: { session: SessionUser }) {
           <div className="absolute inset-y-0 left-0 w-[84%] max-w-sm bg-[#03191f] text-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <p className="text-xl font-bold text-emerald-500">AAA888</p>
+                <p className="text-xl font-bold text-emerald-500">AAAHHH</p>
                 <p className="text-sm text-slate-400">Quản lý bán hàng</p>
               </div>
               <Button variant="ghost" className="h-10 w-10 rounded-full p-0 text-white hover:bg-white/10" onClick={() => setOpen(false)}>

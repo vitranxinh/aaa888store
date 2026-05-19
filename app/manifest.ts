@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AAA888",
-    short_name: "AAA888",
+    name: "AAAHHH",
+    short_name: "AAAHHH",
     description: "Ứng dụng quản lý bán hàng, công nợ và hàng hóa cho cửa hàng.",
     start_url: "/dashboard",
     display: "standalone",

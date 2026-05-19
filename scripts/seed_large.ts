@@ -36,7 +36,7 @@ async function main() {
   let branch = await prisma.branch.findFirst();
   if (!branch) {
     branch = await prisma.branch.create({
-      data: { code: "Q302", name: "AAA888", address: "Thanh Xuân, Hà Nội", phone: "0918377022" }
+      data: { code: "Q302", name: "AAAHHH", address: "Thanh Xuân, Hà Nội", phone: "0918377022" }
     });
   }
 

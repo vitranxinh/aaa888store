@@ -47,6 +47,16 @@ export async function GET(request: Request) {
         sku: true,
         imageUrl: true,
         sellingPrice: true,
+        inventories: {
+          where: {
+            branchId: branchId || undefined,
+            variantId: null
+          },
+          select: {
+            quantity: true,
+            reservedQty: true
+          }
+        },
         category: {
           select: {
             name: true
@@ -71,16 +81,24 @@ export async function GET(request: Request) {
         )
       )
       .slice(0, limit)
-      .map((entry) => ({
-        label: entry.product.name,
-        value: entry.product.name,
-        id: entry.product.id,
-        meta: `${entry.product.sku}${entry.product.category?.name ? ` • ${entry.product.category.name}` : ""}`,
-        imageUrl: entry.product.imageUrl,
-        accent: entry.product.sku,
-        searchText: entry.product.name,
-        sellingPrice: Number(entry.product.sellingPrice)
-      }));
+      .map((entry) => {
+        const currentStock = entry.product.inventories.reduce(
+          (sum, inventory) => sum + inventory.quantity - inventory.reservedQty,
+          0
+        );
+
+        return {
+          label: entry.product.name,
+          value: entry.product.name,
+          id: entry.product.id,
+          meta: `${entry.product.sku}${entry.product.category?.name ? ` • ${entry.product.category.name}` : ""}`,
+          imageUrl: entry.product.imageUrl,
+          accent: entry.product.sku,
+          searchText: entry.product.name,
+          sellingPrice: Number(entry.product.sellingPrice),
+          currentStock
+        };
+      });
 
     return NextResponse.json(results);
   } catch {

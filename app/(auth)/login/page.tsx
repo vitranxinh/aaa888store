@@ -14,7 +14,7 @@ export default function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.12),_transparent_28%),linear-gradient(180deg,#f8fafc,#eef2ff)] px-4">
       <Card className="w-full max-w-md">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-600">AAA888</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-teal-600">AAAHHH</p>
         <CardTitle className="mt-3 text-3xl">Đăng nhập hệ thống</CardTitle>
         <CardDescription className="mt-2">
           POS và ERP cho cửa hàng bán lẻ, chuỗi nhỏ và nhà thuốc, tạp hóa, mỹ phẩm, phụ kiện.
