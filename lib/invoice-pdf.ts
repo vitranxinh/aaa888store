@@ -124,7 +124,8 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
 
   sectionTitle("Sản phẩm");
   doc.setFontSize(tableFontSize);
-  doc.text("Sản phẩm", marginX, y);
+  doc.text("STT", marginX, y);
+  doc.text("Sản phẩm", 24, y);
   doc.text("SL", 145, y, { align: "right" });
   doc.text("Đơn giá", 170, y, { align: "right" });
   doc.text("Thành tiền", pageWidth - marginX, y, { align: "right" });
@@ -132,13 +133,14 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   doc.line(marginX, y, pageWidth - marginX, y);
   y += 5;
 
-  for (const item of order.items) {
-    const productLines = doc.splitTextToSize(item.name, 118) as string[];
+  for (const [index, item] of order.items.entries()) {
+    const productLines = doc.splitTextToSize(item.name, 106) as string[];
     const rowHeight = Math.max(productLines.length * 8, 8) + 2;
     ensureSpace(rowHeight + 6);
 
     doc.setFontSize(tableFontSize);
-    doc.text(productLines, marginX, y);
+    doc.text(String(index + 1), marginX, y);
+    doc.text(productLines, 24, y);
     doc.text(String(item.quantity), 145, y, { align: "right" });
     doc.text(formatMoney(item.unitPrice), 170, y, { align: "right" });
     doc.text(formatMoney(item.total), pageWidth - marginX, y, { align: "right" });

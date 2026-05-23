@@ -135,12 +135,14 @@ export function InvoiceDocument({
           {isPdf ? (
             <table className="w-full table-fixed border-collapse text-[20px] text-black">
               <colgroup>
-                <col style={{ width: "66%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "58%" }} />
                 <col style={{ width: "10%" }} />
                 <col style={{ width: "24%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 text-center font-semibold text-slate-900">
+                  <th className="border border-slate-400 px-1 py-1 whitespace-nowrap">STT</th>
                   <th className="border border-slate-400 px-1 py-1">Sản phẩm</th>
                   <th className="border border-slate-400 px-1 py-1 whitespace-nowrap">SL</th>
                   <th className="border border-slate-400 px-1 py-1 whitespace-nowrap">Thành tiền</th>
@@ -150,6 +152,9 @@ export function InvoiceDocument({
                 {rows.map((item, index) =>
                   item.name ? (
                     <tr key={item.id || `${item.name}-${index}`} className="align-top">
+                      <td className="border border-slate-400 px-1 py-1 text-center text-[20px] font-semibold whitespace-nowrap">
+                        {index + 1}
+                      </td>
                       <td className="border border-slate-400 px-1 py-1 leading-[1.15]">
                         <p
                           className="font-semibold text-slate-900"
@@ -178,7 +183,7 @@ export function InvoiceDocument({
               </tbody>
               <tbody>
                 <tr>
-                  <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Tổng cộng
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
@@ -188,7 +193,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Giảm giá
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
@@ -198,7 +203,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Thu khác
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
@@ -208,7 +213,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Số tiền đã trả
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
@@ -218,7 +223,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Còn nợ
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold text-red-600 whitespace-nowrap">
@@ -228,7 +233,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={2} className="border border-slate-400 px-1 py-1 text-right text-sm font-bold uppercase">
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right text-sm font-bold uppercase">
                     Tổng thanh toán
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-extrabold whitespace-nowrap">
@@ -242,13 +247,15 @@ export function InvoiceDocument({
           ) : (
             <table className="invoice-table w-full table-fixed border-collapse text-[10px] text-slate-700 sm:text-[11px] print:text-[20px]">
               <colgroup>
-                <col style={{ width: "42%" }} />
+                <col style={{ width: "7%" }} />
+                <col style={{ width: "35%" }} />
                 <col style={{ width: "10%" }} />
                 <col style={{ width: "23%" }} />
                 <col style={{ width: "25%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 text-center font-semibold text-slate-900">
+                  <th className="border border-slate-400 px-0.5 py-1 whitespace-nowrap">STT</th>
                   <th className="border border-slate-400 px-0.5 py-1">Sản phẩm</th>
                   <th className="border border-slate-400 px-0.5 py-1 whitespace-nowrap">SL</th>
                   <th className="border border-slate-400 px-0.5 py-1 whitespace-nowrap">Đơn giá</th>
@@ -259,6 +266,7 @@ export function InvoiceDocument({
                 {rows.map((item, index) =>
                   item.name ? (
                     <tr key={item.id || `${item.name}-${index}`} className="align-top">
+                      <td className="border border-slate-400 px-0.5 py-1 text-center whitespace-nowrap">{index + 1}</td>
                       <td className="border border-slate-400 px-0.5 py-1 leading-[1.2]">
                         <p
                           className="font-semibold text-slate-900"
@@ -282,6 +290,7 @@ export function InvoiceDocument({
                     </tr>
                   ) : (
                     <tr key={item.id || `blank-${index}`} className="hidden align-top print:table-row">
+                      <td className="border border-slate-400 px-0.5 py-2 text-center"></td>
                       <td className="border border-slate-400 px-0.5 py-2"></td>
                       <td className="border border-slate-400 px-0.5 py-2 text-center"></td>
                       <td className="border border-slate-400 px-0.5 py-2 text-right"></td>
@@ -292,7 +301,7 @@ export function InvoiceDocument({
               </tbody>
               <tbody>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Tổng cộng
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
@@ -302,7 +311,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Giảm giá
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
@@ -312,7 +321,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Thu khác
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
@@ -322,7 +331,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Số tiền đã trả
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
@@ -332,7 +341,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Còn nợ
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold text-red-600 whitespace-nowrap print:text-[20px]">
@@ -342,7 +351,7 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-0.5 py-1 text-right text-sm font-bold uppercase print:text-[20px]">
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right text-sm font-bold uppercase print:text-[20px]">
                     Tổng thanh toán
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-extrabold whitespace-nowrap print:text-[20px]">
