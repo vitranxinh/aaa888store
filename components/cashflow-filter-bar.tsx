@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 type Props = {
   range: string;
@@ -11,24 +11,15 @@ type Props = {
 
 export function CashflowFilterBar({ range, dateFrom, dateTo }: Props) {
   const pathname = usePathname();
-  const formRef = useRef<HTMLFormElement>(null);
   const [rangeValue, setRangeValue] = useState(range);
 
-  function submitForm() {
-    formRef.current?.requestSubmit();
-  }
-
   return (
-    <form ref={formRef} action={pathname} className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+    <form action={pathname} className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
       <select
         name="range"
         value={rangeValue}
         onChange={(event) => {
-          const nextRange = event.target.value;
-          setRangeValue(nextRange);
-          if (nextRange !== "custom") {
-            submitForm();
-          }
+          setRangeValue(event.target.value);
         }}
         className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:w-auto sm:text-lg"
       >
@@ -44,7 +35,6 @@ export function CashflowFilterBar({ range, dateFrom, dateTo }: Props) {
         name="dateFrom"
         defaultValue={dateFrom}
         disabled={rangeValue !== "custom"}
-        onChange={() => submitForm()}
         className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:h-14 sm:w-auto sm:text-lg"
       />
       <input
@@ -52,7 +42,6 @@ export function CashflowFilterBar({ range, dateFrom, dateTo }: Props) {
         name="dateTo"
         defaultValue={dateTo}
         disabled={rangeValue !== "custom"}
-        onChange={() => submitForm()}
         className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:h-14 sm:w-auto sm:text-lg"
       />
       <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
