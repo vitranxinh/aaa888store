@@ -28,11 +28,13 @@ export async function GET(request: Request) {
     const range = (searchParams.get("range") as TimeFilterRange) || "all";
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
+    const employeeId = searchParams.get("employeeId")?.trim() || "";
     const createdAt = resolveVietnamDateRange(range, dateFrom ?? undefined, dateTo ?? undefined);
 
     const transactions = await prisma.cashTransaction.findMany({
       where: {
         branchId: session.branchId ?? undefined,
+        ...(employeeId ? { createdById: employeeId } : {}),
         ...(createdAt ? { createdAt } : {})
       },
       include: {

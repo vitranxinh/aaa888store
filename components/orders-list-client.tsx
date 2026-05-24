@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { OrderStatusActions } from "@/components/order-status-actions";
 import { ServerPagination } from "@/components/server-pagination";
 import { formatCurrency, formatCustomerDebt, formatDate } from "@/lib/utils";
@@ -38,6 +38,11 @@ export function OrdersListClient({ initialOrders, role, query, page, pageSize, h
   const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   const [optimisticallyRemovedIds, setOptimisticallyRemovedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setOrders(initialOrders);
+    setOptimisticallyRemovedIds([]);
+  }, [initialOrders, page]);
 
   const visibleOrders = orders.filter((order) => !optimisticallyRemovedIds.includes(order.id));
 

@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { Suspense } from "react";
 import { AppHeader } from "@/components/app-header";
 import { ServerPagination } from "@/components/server-pagination";
@@ -25,7 +26,8 @@ async function CashflowContent({
   dateTo,
   page,
   pageSize,
-  createdAt
+  createdAt,
+  selectedEmployeeId
 }: {
   branchId?: string;
   isBossAccount: boolean;
@@ -35,11 +37,16 @@ async function CashflowContent({
   page: number;
   pageSize: number;
   createdAt?: { gte?: Date; lte?: Date };
+  selectedEmployeeId?: string;
 }) {
   const startedAt = Date.now();
-  const cashflowWhere = {
+  const cashflowBaseWhere = {
     branchId,
     ...(createdAt ? { createdAt } : {})
+  };
+  const cashflowWhere = {
+    ...cashflowBaseWhere,
+    ...(selectedEmployeeId ? { createdById: selectedEmployeeId } : {})
   };
   const [transactions, summaryByEmployee, employeeUsers] = await Promise.all([
     prisma.cashTransaction.findMany({
@@ -66,7 +73,7 @@ async function CashflowContent({
       take: pageSize + 1
     }),
     prisma.cashTransaction.groupBy({
-      where: cashflowWhere,
+      where: cashflowBaseWhere,
       by: ["createdById", "type"],
       _sum: { amount: true },
       _count: { _all: true }
@@ -91,6 +98,7 @@ async function CashflowContent({
     page,
     pageSize,
     range,
+    selectedEmployeeId,
     rowCount: visibleTransactions.length,
     totalMs
   });
@@ -145,6 +153,17 @@ async function CashflowContent({
 
   const employeeCashSummary = Array.from(employeeSummaryMap.values());
   employeeCashSummary.sort((a, b) => (b.receiptTotal - b.paymentTotal) - (a.receiptTotal - a.paymentTotal));
+  const selectedEmployee = employeeCashSummary.find((employee) => employee.id === selectedEmployeeId);
+
+  function employeeHref(employeeId?: string) {
+    const params = new URLSearchParams();
+    if (range) params.set("range", range);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    if (employeeId) params.set("employeeId", employeeId);
+    const search = params.toString();
+    return search ? `/cashflow?${search}` : "/cashflow";
+  }
 
   return (
     <>
@@ -157,8 +176,16 @@ async function CashflowContent({
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {employeeCashSummary.map((employee) => {
               const net = employee.receiptTotal - employee.paymentTotal;
+              const isSelected = selectedEmployeeId === employee.id;
               return (
-                <div key={employee.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5">
+                <Link
+                  key={employee.id}
+                  href={employeeHref(employee.id)}
+                  prefetch={false}
+                  className={`block rounded-3xl border bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg sm:p-5 ${
+                    isSelected ? "border-emerald-500 ring-2 ring-emerald-100" : "border-slate-200"
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-base font-bold text-slate-900 sm:text-xl">{employee.name}</p>
@@ -182,7 +209,7 @@ async function CashflowContent({
                       <span className="text-sm font-bold sm:text-lg">{formatCurrency(net)}</span>
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
             {employeeCashSummary.length === 0 ? (
@@ -191,6 +218,16 @@ async function CashflowContent({
               </div>
             ) : null}
           </div>
+          {selectedEmployee ? (
+            <div className="flex flex-col gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between sm:text-base">
+              <span>
+                Đang xem phiếu thu/chi của <strong>{selectedEmployee.name}</strong>.
+              </span>
+              <Link href={employeeHref()} prefetch={false} className="font-semibold underline underline-offset-4">
+                Xem tất cả nhân viên
+              </Link>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -313,7 +350,7 @@ async function CashflowContent({
       </div>
       <ServerPagination
         pathname="/cashflow"
-        query={{ range, dateFrom, dateTo }}
+        query={{ range, dateFrom, dateTo, employeeId: selectedEmployeeId }}
         page={page}
         pageSize={pageSize}
         hasNext={hasNext}
@@ -342,6 +379,7 @@ type CashflowPageProps = {
     dateFrom?: string;
     dateTo?: string;
     page?: string;
+    employeeId?: string;
   };
 };
 
@@ -352,6 +390,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
   const range = ((searchParams?.range as TimeFilterRange | undefined) ?? "all") as TimeFilterRange;
   const dateFrom = searchParams?.dateFrom ?? "";
   const dateTo = searchParams?.dateTo ?? "";
+  const selectedEmployeeId = searchParams?.employeeId?.trim() || "";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 20;
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
@@ -361,6 +400,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
       <AppHeader title="Phiếu thu / chi" description="Theo dõi phiếu thu và phiếu chi theo từng khách hàng" session={session} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <form action="/cashflow" className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          {selectedEmployeeId ? <input type="hidden" name="employeeId" value={selectedEmployeeId} /> : null}
           <select
             name="range"
             defaultValue={range}
@@ -390,7 +430,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
           </button>
           {canExportExcel ? (
             <a
-              href={`/api/cash-transactions/export?range=${encodeURIComponent(range)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`}
+              href={`/api/cash-transactions/export?range=${encodeURIComponent(range)}&dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}${selectedEmployeeId ? `&employeeId=${encodeURIComponent(selectedEmployeeId)}` : ""}`}
               className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg"
             >
               Xuất Excel
@@ -410,6 +450,7 @@ export default async function CashflowPage({ searchParams }: CashflowPageProps) 
           page={page}
           pageSize={pageSize}
           createdAt={createdAt ?? undefined}
+          selectedEmployeeId={selectedEmployeeId || undefined}
         />
       </Suspense>
     </div>
