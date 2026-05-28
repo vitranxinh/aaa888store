@@ -95,6 +95,12 @@ input[type="number"] {
 
   .invoice-table th,
   .invoice-table td {
-    line-height: 1.1;
+    line-height: 1.25;
+    vertical-align: top;
+  }
+
+  .invoice-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

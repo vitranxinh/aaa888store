@@ -136,8 +136,8 @@ export function InvoiceDocument({
             <table className="w-full table-fixed border-collapse text-[20px] text-black">
               <colgroup>
                 <col style={{ width: "8%" }} />
-                <col style={{ width: "58%" }} />
-                <col style={{ width: "10%" }} />
+                <col style={{ width: "60%" }} />
+                <col style={{ width: "8%" }} />
                 <col style={{ width: "24%" }} />
               </colgroup>
               <thead>
@@ -155,16 +155,8 @@ export function InvoiceDocument({
                       <td className="border border-slate-400 px-1 py-1 text-center text-[20px] font-semibold whitespace-nowrap">
                         {index + 1}
                       </td>
-                      <td className="border border-slate-400 px-1 py-1 leading-[1.15]">
-                        <p
-                          className="font-semibold text-slate-900"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden"
-                          }}
-                        >
+                      <td className="border border-slate-400 px-1.5 py-1.5 leading-[1.25]">
+                        <p className="break-words font-semibold text-slate-900">
                           {item.name}
                         </p>
                         <p className="mt-0.5 text-[20px] text-slate-600">Đơn giá: {formatInvoiceAmount(item.unitPrice)}</p>
@@ -247,11 +239,11 @@ export function InvoiceDocument({
           ) : (
             <table className="invoice-table w-full table-fixed border-collapse text-[10px] text-slate-700 sm:text-[11px] print:text-[20px]">
               <colgroup>
-                <col style={{ width: "7%" }} />
-                <col style={{ width: "35%" }} />
-                <col style={{ width: "10%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "42%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "21%" }} />
                 <col style={{ width: "23%" }} />
-                <col style={{ width: "25%" }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-50 text-center font-semibold text-slate-900">
@@ -267,16 +259,8 @@ export function InvoiceDocument({
                   item.name ? (
                     <tr key={item.id || `${item.name}-${index}`} className="align-top">
                       <td className="border border-slate-400 px-0.5 py-1 text-center whitespace-nowrap">{index + 1}</td>
-                      <td className="border border-slate-400 px-0.5 py-1 leading-[1.2]">
-                        <p
-                          className="font-semibold text-slate-900"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden"
-                          }}
-                        >
+                      <td className="border border-slate-400 px-1 py-1.5 leading-[1.25]">
+                        <p className="break-words font-semibold text-slate-900">
                           {item.name}
                         </p>
                       </td>
