@@ -48,6 +48,7 @@ async function main() {
   const adminHaPasswordHash = await bcrypt.hash(process.env.SEED_ADMIN_HA_PASSWORD ?? "ha2005", 10);
   const employeeNamPasswordHash = await bcrypt.hash(process.env.SEED_EMPLOYEE_NAM_PASSWORD ?? "nam", 10);
   const employeeBichPasswordHash = await bcrypt.hash(process.env.SEED_EMPLOYEE_BICH_PASSWORD ?? "bich", 10);
+  const employeeDanPasswordHash = await bcrypt.hash(process.env.SEED_EMPLOYEE_DAN_PASSWORD ?? "dan", 10);
   const [ownerHuy, ownerHa, employeeA, employeeB] = await prisma.$transaction([
     prisma.user.create({
       data: {
@@ -81,6 +82,15 @@ async function main() {
         name: "Bich",
         email: process.env.SEED_EMPLOYEE_BICH_EMAIL ?? "bich@gbb.vn",
         passwordHash: employeeBichPasswordHash,
+        role: UserRole.CASHIER,
+        branchId: branch.id
+      }
+    }),
+    prisma.user.create({
+      data: {
+        name: "Dan",
+        email: process.env.SEED_EMPLOYEE_DAN_EMAIL ?? "dan@gbb.vn",
+        passwordHash: employeeDanPasswordHash,
         role: UserRole.CASHIER,
         branchId: branch.id
       }

@@ -51,6 +51,13 @@ async function main() {
       password: "bich",
       role: UserRole.CASHIER,
       legacyEmails: ["b@soban.vn", "cashier@soban.vn"]
+    },
+    {
+      name: "Dan",
+      email: "dan@gbb.vn",
+      password: "dan",
+      role: UserRole.CASHIER,
+      legacyEmails: []
     }
   ];
 
@@ -100,7 +107,7 @@ async function main() {
     }
   });
 
-  console.log("Đã đồng bộ 4 tài khoản: huy@gbb.vn, ha@gbb.vn, nam@gbb.vn, bich@gbb.vn");
+  console.log("Đã đồng bộ 5 tài khoản: huy@gbb.vn, ha@gbb.vn, nam@gbb.vn, bich@gbb.vn, dan@gbb.vn");
 }
 
 main()

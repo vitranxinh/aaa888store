@@ -74,14 +74,16 @@ export async function POST(request: Request) {
         "huy@gbb.vn": { id: "demo-admin", email: "huy@gbb.vn", name: "Huy", role: "ADMIN", branchId: defaultBranchId },
         "ha@gbb.vn": { id: "demo-admin-2", email: "ha@gbb.vn", name: "Hà", role: "ADMIN", branchId: defaultBranchId },
         "nam@gbb.vn": { id: "demo-manager", email: "nam@gbb.vn", name: "Nam", role: "CASHIER", branchId: defaultBranchId },
-        "bich@gbb.vn": { id: "demo-cashier", email: "bich@gbb.vn", name: "Bich", role: "CASHIER", branchId: defaultBranchId }
+        "bich@gbb.vn": { id: "demo-cashier", email: "bich@gbb.vn", name: "Bich", role: "CASHIER", branchId: defaultBranchId },
+        "dan@gbb.vn": { id: "demo-cashier-dan", email: "dan@gbb.vn", name: "Dan", role: "CASHIER", branchId: defaultBranchId }
       };
 
       if (
         (parsed.data.email === "huy@gbb.vn" && parsed.data.password === "huy2005") ||
         (parsed.data.email === "ha@gbb.vn" && parsed.data.password === "ha2005") ||
         (parsed.data.email === "nam@gbb.vn" && parsed.data.password === "nam") ||
-        (parsed.data.email === "bich@gbb.vn" && parsed.data.password === "bich")
+        (parsed.data.email === "bich@gbb.vn" && parsed.data.password === "bich") ||
+        (parsed.data.email === "dan@gbb.vn" && parsed.data.password === "dan")
       ) {
         user = demoUsers[parsed.data.email];
       }

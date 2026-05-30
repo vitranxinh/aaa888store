@@ -133,6 +133,13 @@ export async function authenticate(email: string, password: string) {
       name: "Bich",
       role: "CASHIER",
       branchId: defaultBranchId
+    },
+    "dan@gbb.vn": {
+      id: "demo-cashier-dan",
+      email: "dan@gbb.vn",
+      name: "Dan",
+      role: "CASHIER",
+      branchId: defaultBranchId
     }
   };
 
@@ -140,7 +147,8 @@ export async function authenticate(email: string, password: string) {
     (email === "huy@gbb.vn" && password === "huy2005") ||
     (email === "ha@gbb.vn" && password === "ha2005") ||
     (email === "nam@gbb.vn" && password === "nam") ||
-    (email === "bich@gbb.vn" && password === "bich")
+    (email === "bich@gbb.vn" && password === "bich") ||
+    (email === "dan@gbb.vn" && password === "dan")
   )) {
     const user = await prisma.user.findUnique({
       where: { email },
