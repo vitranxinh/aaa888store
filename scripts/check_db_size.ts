@@ -1,12 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: "postgresql://neondb_owner:npg_L2T3FDhUQqkP@ep-summer-pond-aop106lt.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
-    }
-  }
-});
+const prisma = new PrismaClient();
 
 async function main() {
   const counts = await Promise.all([
