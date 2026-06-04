@@ -198,7 +198,7 @@ const getCachedOrdersPageData = unstable_cache(
     };
   },
   ["orders-page-data"],
-  { revalidate: 15 }
+  { revalidate: 15, tags: ["orders-page-data"] }
 );
 
 const getCachedPendingDeleteRequests = unstable_cache(
@@ -250,7 +250,7 @@ const getCachedPendingDeleteRequests = unstable_cache(
     }
   },
   ["orders-pending-delete-requests"],
-  { revalidate: 15 }
+  { revalidate: 15, tags: ["orders-pending-delete-requests"] }
 );
 
 async function OrdersList({
@@ -331,7 +331,7 @@ async function PendingDeleteRequestsSection({
 
       <div className="mt-4 grid gap-3">
         {pendingDeleteRequests.map((request) => (
-          <div key={request.id} className="rounded-3xl border border-amber-200 bg-white p-4">
+          <div key={request.id} data-delete-request-id={request.id} className="rounded-3xl border border-amber-200 bg-white p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
                 <Link

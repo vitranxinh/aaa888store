@@ -27,8 +27,17 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
     });
 
-    if (!deleteRequest || deleteRequest.status !== "PENDING") {
+    if (!deleteRequest) {
       return NextResponse.json({ error: "Không tìm thấy yêu cầu xóa hợp lệ" }, { status: 404 });
+    }
+
+    if (deleteRequest.status !== "PENDING") {
+      return NextResponse.json({
+        ok: true,
+        mode: "already_processed",
+        code: deleteRequest.order.code,
+        status: deleteRequest.status
+      });
     }
 
     if (action === "approve") {

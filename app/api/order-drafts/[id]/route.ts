@@ -50,8 +50,18 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const actorUserId = await resolveActorUserId(session);
-    const draft = await assertDraftAccess(params.id, actorUserId, session.role);
-    if (!draft) return NextResponse.json({ error: "Không tìm thấy bản nháp" }, { status: 404 });
+    const draft = await prisma.orderDraft.findUnique({
+      where: { id: params.id },
+      select: { id: true, userId: true, status: true }
+    });
+
+    if (!draft) return NextResponse.json({ ok: true, alreadyDeleted: true });
+    if (draft.userId !== actorUserId && session.role !== "ADMIN" && session.role !== "MANAGER") {
+      return NextResponse.json({ error: "Bạn không có quyền xóa bản nháp này" }, { status: 403 });
+    }
+    if (draft.status !== "DRAFT") {
+      return NextResponse.json({ ok: true, alreadyDeleted: true });
+    }
 
     await prisma.orderDraft.update({
       where: { id: params.id },

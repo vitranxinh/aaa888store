@@ -7,10 +7,14 @@ import { useToastStore } from "@/store/toast-store";
 
 export function OrderDeleteRequestActions({
   requestId,
-  orderCode
+  orderCode,
+  onOptimisticRemove,
+  onOptimisticRollback
 }: {
   requestId: string;
   orderCode: string;
+  onOptimisticRemove?: () => void;
+  onOptimisticRollback?: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
@@ -18,28 +22,48 @@ export function OrderDeleteRequestActions({
 
   function act(action: "approve" | "reject") {
     startTransition(async () => {
-      const response = await fetch(`/api/orders/delete-requests/${requestId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action })
-      });
-      const payload = await response.json();
+      const card = document.querySelector(`[data-delete-request-id="${requestId}"]`) as HTMLElement | null;
+      card?.classList.add("hidden");
+      onOptimisticRemove?.();
+      try {
+        const response = await fetch(`/api/orders/delete-requests/${requestId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action })
+        });
+        const payload = await response.json();
 
-      if (!response.ok) {
+        if (!response.ok) {
+          card?.classList.remove("hidden");
+          onOptimisticRollback?.();
+          pushToast({
+            title: "Không thể xử lý yêu cầu xóa",
+            description: payload.error,
+            variant: "error"
+          });
+          return;
+        }
+
+        pushToast({
+          title:
+            payload.mode === "already_processed"
+              ? "Yêu cầu này đã được xử lý trước đó"
+              : action === "approve"
+                ? "Đã duyệt xóa hóa đơn"
+                : "Đã từ chối yêu cầu xóa",
+          description: orderCode
+        });
+
+        router.refresh();
+      } catch (error) {
+        card?.classList.remove("hidden");
+        onOptimisticRollback?.();
         pushToast({
           title: "Không thể xử lý yêu cầu xóa",
-          description: payload.error,
+          description: error instanceof Error ? error.message : "Lỗi mạng, vui lòng thử lại",
           variant: "error"
         });
-        return;
       }
-
-      pushToast({
-        title: action === "approve" ? "Đã duyệt xóa hóa đơn" : "Đã từ chối yêu cầu xóa",
-        description: orderCode
-      });
-
-      router.refresh();
     });
   }
 

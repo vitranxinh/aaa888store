@@ -24,22 +24,33 @@ export function OrderDraftsListClient({ initialDrafts }: { initialDrafts: DraftR
 
   function deleteDraft(draftId: string) {
     startTransition(async () => {
-      const response = await fetch(`/api/order-drafts/${draftId}`, {
-        method: "DELETE",
-        credentials: "same-origin"
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      const previousDrafts = drafts;
+      setDrafts((current) => current.filter((draft) => draft.id !== draftId));
+      try {
+        const response = await fetch(`/api/order-drafts/${draftId}`, {
+          method: "DELETE",
+          credentials: "same-origin"
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setDrafts(previousDrafts);
+          pushToast({
+            title: "Không thể xóa bản nháp",
+            description: payload.error ?? "Vui lòng thử lại",
+            variant: "error"
+          });
+          return;
+        }
+
+        pushToast({ title: "Đã xóa bản nháp" });
+      } catch (error) {
+        setDrafts(previousDrafts);
         pushToast({
           title: "Không thể xóa bản nháp",
-          description: payload.error ?? "Vui lòng thử lại",
+          description: error instanceof Error ? error.message : "Lỗi mạng, vui lòng thử lại",
           variant: "error"
         });
-        return;
       }
-
-      setDrafts((current) => current.filter((draft) => draft.id !== draftId));
-      pushToast({ title: "Đã xóa bản nháp" });
     });
   }
 
