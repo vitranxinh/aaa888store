@@ -351,6 +351,7 @@ export async function getCustomerDebtTracking(customerId: string) {
         code: true,
         createdAt: true,
         grandTotal: true,
+        oldDebtAmount: true,
         paidAmount: true,
         debtAmount: true
       },
@@ -386,8 +387,9 @@ export async function getCustomerDebtTracking(customerId: string) {
         Number(invoice.paidAmount) > 0
           ? `Hóa đơn thanh toán một phần, còn nợ ${toNumber(invoice.debtAmount).toLocaleString("vi-VN")} đ`
           : "Hóa đơn chưa thanh toán",
-      debitAmount: toNumber(invoice.debtAmount),
-      creditAmount: 0,
+      debitAmount: toNumber(invoice.grandTotal),
+      creditAmount: toNumber(invoice.paidAmount),
+      oldDebtAmount: toNumber(invoice.oldDebtAmount),
       status: Number(invoice.paidAmount) > 0 ? "Thanh toán một phần" : "Chưa thanh toán",
       orderId: invoice.id
     })),
@@ -423,6 +425,9 @@ export async function getCustomerDebtTracking(customerId: string) {
 
   let runningBalance = 0;
   const rows: CustomerDebtTrackingItem[] = entries.map((entry) => {
+    if (entry.type === "INVOICE" && "oldDebtAmount" in entry && entry.oldDebtAmount > runningBalance) {
+      runningBalance = entry.oldDebtAmount;
+    }
     runningBalance += entry.debitAmount - entry.creditAmount;
     const normalizedType =
       entry.type === "PREPAYMENT" && runningBalance < 0

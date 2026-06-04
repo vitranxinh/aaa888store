@@ -30,17 +30,13 @@ function getTrackingTypeLabel(type: "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYM
   return "Trả trước";
 }
 
-function getTrackingImpact(row: { debitAmount: number; creditAmount: number }) {
-  return row.debitAmount - row.creditAmount;
-}
-
-function getTrackingImpactClass(value: number) {
+function getTrackingBalanceClass(value: number) {
   if (value > 0) return "text-red-600";
   if (value < 0) return "text-emerald-700";
   return "text-slate-700";
 }
 
-function formatTrackingImpact(value: number) {
+function formatTrackingBalance(value: number) {
   if (value > 0) return formatCurrency(value);
   if (value < 0) return `-${formatCurrency(Math.abs(value))}`;
   return formatCurrency(0);
@@ -197,7 +193,6 @@ export default async function CustomerDetailPage({
         <div className="mt-6 grid gap-3 lg:hidden">
           {trackingRows.length ? (
             trackingRows.map((row) => {
-              const rowImpact = getTrackingImpact(row);
               return (
               <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -214,9 +209,9 @@ export default async function CustomerDetailPage({
                   </div>
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      rowImpact > 0
+                      row.remainingBalance > 0
                         ? "bg-red-50 text-red-600"
-                        : rowImpact < 0
+                        : row.remainingBalance < 0
                           ? "bg-emerald-50 text-emerald-700"
                           : "bg-slate-100 text-slate-700"
                     }`}
@@ -235,9 +230,9 @@ export default async function CustomerDetailPage({
                     <p className="mt-1 text-sm font-semibold text-emerald-700">{row.creditAmount > 0 ? formatCurrency(row.creditAmount) : "-"}</p>
                   </div>
                   <div className="col-span-2">
-                    <p className="text-xs font-medium text-slate-400">Ảnh hưởng dòng này</p>
-                    <p className={`mt-1 text-sm font-semibold ${getTrackingImpactClass(rowImpact)}`}>
-                      {formatTrackingImpact(rowImpact)}
+                    <p className="text-xs font-medium text-slate-400">Tổng nợ sau dòng này</p>
+                    <p className={`mt-1 text-sm font-semibold ${getTrackingBalanceClass(row.remainingBalance)}`}>
+                      {formatTrackingBalance(row.remainingBalance)}
                     </p>
                   </div>
                 </div>
@@ -261,14 +256,13 @@ export default async function CustomerDetailPage({
                 <th className="w-[24%] px-4 py-3">Diễn giải</th>
                 <th className="w-[12%] px-4 py-3 text-right">Ghi nợ</th>
                 <th className="w-[12%] px-4 py-3 text-right">Ghi có</th>
-                <th className="w-[14%] px-4 py-3 text-right">Ảnh hưởng dòng</th>
+                <th className="w-[14%] px-4 py-3 text-right">Tổng nợ</th>
                 <th className="w-[12%] px-4 py-3">Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {trackingRows.length ? (
                 trackingRows.map((row) => {
-                  const rowImpact = getTrackingImpact(row);
                   return (
                   <tr key={row.id} className="border-t border-slate-100 align-top text-sm text-slate-700">
                     <td className="px-4 py-3">{formatDate(row.date)}</td>
@@ -285,14 +279,14 @@ export default async function CustomerDetailPage({
                     <td className="px-4 py-3 text-slate-600">{row.description}</td>
                     <td className="px-4 py-3 text-right font-semibold text-red-600">{row.debitAmount > 0 ? formatCurrency(row.debitAmount) : "-"}</td>
                     <td className="px-4 py-3 text-right font-semibold text-emerald-700">{row.creditAmount > 0 ? formatCurrency(row.creditAmount) : "-"}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${getTrackingImpactClass(rowImpact)}`}>
-                      {formatTrackingImpact(rowImpact)}
+                    <td className={`px-4 py-3 text-right font-semibold ${getTrackingBalanceClass(row.remainingBalance)}`}>
+                      {formatTrackingBalance(row.remainingBalance)}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                        rowImpact > 0
+                        row.remainingBalance > 0
                           ? "bg-red-50 text-red-600"
-                          : rowImpact < 0
+                          : row.remainingBalance < 0
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-slate-100 text-slate-700"
                       }`}>
