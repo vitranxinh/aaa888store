@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireApiSession, resolveActorUserId } from "@/lib/auth";
+import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
 import { orderPaymentSchema } from "@/lib/validations";
@@ -27,10 +28,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Bạn chỉ được thu tiền hóa đơn do mình tạo" }, { status: 403 });
     }
 
-    const oldDebt = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
-    const totalPayable = oldDebt + Number(order.grandTotal);
-    const nextPaid = Math.min(Number(order.paidAmount) + parsed.data.amount, totalPayable);
-    const nextDebt = Math.max(totalPayable - nextPaid, 0);
+    const nextPaid = Number(order.paidAmount) + parsed.data.amount;
+    const nextDebt = Math.max(Number(order.grandTotal) - nextPaid, 0);
     const nextStatus = nextDebt > 0 ? "PARTIAL" : "COMPLETED";
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -57,10 +56,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         }
       });
 
-      await tx.customer.update({
-        where: { id: order.customerId },
-        data: { receivableDebt: new Prisma.Decimal(nextDebt) }
-      });
+      await recalculateCustomerReceivableDebt(tx, order.customerId);
 
       return result;
     });

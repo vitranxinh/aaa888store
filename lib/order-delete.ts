@@ -95,15 +95,15 @@ export async function deleteOrderById(orderId: string) {
         `);
       }
 
-      // 3. Cập nhật công nợ về đúng nợ cũ trước hóa đơn này.
+      // 3. Gỡ phần công nợ riêng của hóa đơn khỏi tổng công nợ cộng dồn.
       if (customer) {
-        const oldDebtBeforeOrder = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
+        const orderBalanceDelta = Number(order.grandTotal) - Number(order.paidAmount);
         tasks.push(tx.customer.update({
           where: { id: order.customerId },
           data: {
             totalSpend: new Prisma.Decimal(Math.max(Number(customer.totalSpend) - Number(order.grandTotal), 0)),
             loyaltyPoints: Math.max(customer.loyaltyPoints - Math.floor(Number(order.grandTotal) / 100000), 0),
-            receivableDebt: new Prisma.Decimal(oldDebtBeforeOrder)
+            receivableDebt: { decrement: new Prisma.Decimal(orderBalanceDelta) }
           }
         }));
       }

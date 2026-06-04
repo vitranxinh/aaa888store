@@ -130,7 +130,7 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
   const oldDebt = Number(payload.oldDebt ?? 0);
   const totalPayable = oldDebt + grandTotal;
   const paidAmount = Math.min(Math.max(Number(payload.paidAmount), 0), totalPayable);
-  const debtAmount = Math.max(totalPayable - paidAmount, 0);
+  const debtAmount = Math.max(grandTotal - paidAmount, 0);
   const finalStatus: OrderStatus = payload.status === "DRAFT" ? "DRAFT" : debtAmount > 0 ? "PARTIAL" : "COMPLETED";
   return { totals, grandTotal, oldDebt, totalPayable, paidAmount, debtAmount, finalStatus };
 }
@@ -148,7 +148,7 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
   const quantityByProduct = new Map<string, number>();
   order.items.forEach(i => quantityByProduct.set(i.productId, (quantityByProduct.get(i.productId) || 0) + i.quantity));
   const batchUpdates = saleTransactions.filter(t => t.batchId).map(t => ({ id: t.batchId!, quantity: Math.abs(Number(t.quantity)) }));
-  const oldDebtBeforeOrder = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
+  const orderBalanceDelta = Number(order.grandTotal) - Number(order.paidAmount);
 
   const tasks: Promise<any>[] = [
     tx.$executeRaw`
@@ -160,7 +160,7 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
       data: {
         totalSpend: { decrement: order.grandTotal },
         loyaltyPoints: { decrement: Math.floor(Number(order.grandTotal) / 100000) },
-        receivableDebt: new Prisma.Decimal(oldDebtBeforeOrder)
+        receivableDebt: { decrement: new Prisma.Decimal(orderBalanceDelta) }
       }
     }),
     tx.inventoryTransaction.deleteMany({ where: { referenceCode: order.code, type: "SALE" } }),
@@ -273,7 +273,7 @@ async function applyOrderEffects(
       data: {
         totalSpend: { increment: derived.grandTotal },
         loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
-        receivableDebt: new Prisma.Decimal(derived.debtAmount)
+        receivableDebt: { increment: new Prisma.Decimal(derived.grandTotal - derived.paidAmount) }
       }
     })
   ];
