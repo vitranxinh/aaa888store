@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { CashTxnType, OrderStatus, PaymentMethod, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateCartTotals } from "@/lib/pos";
+import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
 import { runTransactionWithRetry } from "@/lib/transaction-retry";
 
 type OrderPayload = {
@@ -148,8 +149,6 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
   const quantityByProduct = new Map<string, number>();
   order.items.forEach(i => quantityByProduct.set(i.productId, (quantityByProduct.get(i.productId) || 0) + i.quantity));
   const batchUpdates = saleTransactions.filter(t => t.batchId).map(t => ({ id: t.batchId!, quantity: Math.abs(Number(t.quantity)) }));
-  const orderBalanceDelta = Number(order.grandTotal) - Number(order.paidAmount);
-
   const tasks: Promise<any>[] = [
     tx.$executeRaw`
       UPDATE "Inventory" SET "quantity" = "quantity" + (CASE "productId" ${Prisma.join(productIds.map(id => Prisma.sql`WHEN ${id} THEN ${quantityByProduct.get(id) || 0}`), " ")} ELSE 0 END)
@@ -159,8 +158,7 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
       where: { id: order.customerId },
       data: {
         totalSpend: { decrement: order.grandTotal },
-        loyaltyPoints: { decrement: Math.floor(Number(order.grandTotal) / 100000) },
-        receivableDebt: { decrement: new Prisma.Decimal(orderBalanceDelta) }
+        loyaltyPoints: { decrement: Math.floor(Number(order.grandTotal) / 100000) }
       }
     }),
     tx.inventoryTransaction.deleteMany({ where: { referenceCode: order.code, type: "SALE" } }),
@@ -173,6 +171,7 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
     `);
   }
   await Promise.all(tasks);
+  await recalculateCustomerReceivableDebt(tx, order.customerId);
 }
 
 async function applyOrderEffects(
@@ -272,8 +271,7 @@ async function applyOrderEffects(
       where: { id: payload.customerId },
       data: {
         totalSpend: { increment: derived.grandTotal },
-        loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
-        receivableDebt: { increment: new Prisma.Decimal(derived.grandTotal - derived.paidAmount) }
+        loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) }
       }
     })
   ];
@@ -293,6 +291,7 @@ async function applyOrderEffects(
     }));
   }
   await Promise.all(writeTasks);
+  await recalculateCustomerReceivableDebt(tx, payload.customerId);
 }
 
 function nextOrderRevisionCode(currentCode: string) {
@@ -326,6 +325,7 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
         status: derived.finalStatus, subtotal: new Prisma.Decimal(derived.totals.subtotal),
         discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
         otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
+        oldDebtAmount: new Prisma.Decimal(derived.oldDebt),
         profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
         paidAmount: new Prisma.Decimal(derived.paidAmount), debtAmount: new Prisma.Decimal(derived.debtAmount),
         note: payload.note,
@@ -377,6 +377,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
           subtotal: new Prisma.Decimal(derived.totals.subtotal),
           discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
           otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
+          oldDebtAmount: new Prisma.Decimal(derived.oldDebt),
           profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
           paidAmount: new Prisma.Decimal(derived.paidAmount), debtAmount: new Prisma.Decimal(derived.debtAmount),
           note: payload.note,

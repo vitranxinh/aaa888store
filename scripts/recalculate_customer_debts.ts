@@ -4,38 +4,73 @@ const prisma = new PrismaClient();
 const isDryRun = process.argv.includes("--dry-run");
 
 async function calculateCustomerDebt(customerId: string, openingDebt: Prisma.Decimal | number | null) {
-  const [orderAggregate, standaloneReceiptAggregate, customerPaymentAggregate] = await Promise.all([
-    prisma.order.aggregate({
+  const [orders, standaloneCashTransactions] = await Promise.all([
+    prisma.order.findMany({
       where: {
         customerId,
         status: { in: ["COMPLETED", "PARTIAL"] }
       },
-      _sum: { grandTotal: true, paidAmount: true }
+      select: {
+        id: true,
+        createdAt: true,
+        grandTotal: true,
+        paidAmount: true,
+        oldDebtAmount: true
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
     }),
-    prisma.cashTransaction.aggregate({
+    prisma.cashTransaction.findMany({
       where: {
         customerId,
-        type: "RECEIPT",
-        orderId: null
+        orderId: null,
+        type: { in: ["RECEIPT", "PAYMENT"] }
       },
-      _sum: { amount: true }
-    }),
-    prisma.cashTransaction.aggregate({
-      where: {
-        customerId,
-        type: "PAYMENT"
+      select: {
+        id: true,
+        createdAt: true,
+        type: true,
+        amount: true
       },
-      _sum: { amount: true }
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
     })
   ]);
 
-  return (
-    Number(openingDebt ?? 0) +
-    Number(orderAggregate._sum.grandTotal ?? 0) -
-    Number(orderAggregate._sum.paidAmount ?? 0) +
-    Number(customerPaymentAggregate._sum.amount ?? 0) -
-    Number(standaloneReceiptAggregate._sum.amount ?? 0)
-  );
+  const events = [
+    ...orders.map((order) => ({
+      kind: "ORDER" as const,
+      id: order.id,
+      createdAt: order.createdAt,
+      grandTotal: Number(order.grandTotal ?? 0),
+      paidAmount: Number(order.paidAmount ?? 0),
+      oldDebtAmount: Number(order.oldDebtAmount ?? 0)
+    })),
+    ...standaloneCashTransactions.map((txn) => ({
+      kind: "CASH" as const,
+      id: txn.id,
+      createdAt: txn.createdAt,
+      type: txn.type,
+      amount: Number(txn.amount ?? 0)
+    }))
+  ].sort((a, b) => {
+    const timeDelta = a.createdAt.getTime() - b.createdAt.getTime();
+    return timeDelta !== 0 ? timeDelta : a.id.localeCompare(b.id);
+  });
+
+  let debt = Number(openingDebt ?? 0);
+  for (const event of events) {
+    if (event.kind === "ORDER") {
+      if (event.oldDebtAmount > 0) {
+        debt = Math.max(debt, event.oldDebtAmount);
+      }
+      debt += event.grandTotal - event.paidAmount;
+    } else if (event.type === "RECEIPT") {
+      debt -= event.amount;
+    } else if (event.type === "PAYMENT") {
+      debt += event.amount;
+    }
+  }
+
+  return debt;
 }
 
 async function main() {

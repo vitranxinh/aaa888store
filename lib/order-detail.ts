@@ -15,6 +15,7 @@ export async function getOrderDetail(orderId: string) {
       discountTotal: true,
       otherCharge: true,
       grandTotal: true,
+      oldDebtAmount: true,
       profitEstimate: true,
       paymentMethod: true,
       paidAmount: true,

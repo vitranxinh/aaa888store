@@ -49,6 +49,7 @@ export default async function InvoicePage({
           paidAmount={Number(order.paidAmount)}
           debtAmount={Number(order.debtAmount)}
           grandTotal={Number(order.grandTotal)}
+          oldDebtAmount={Number(order.oldDebtAmount ?? 0)}
           note={order.note || ""}
           items={order.items.map((item) => ({
             id: item.id,

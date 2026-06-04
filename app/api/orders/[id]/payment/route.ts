@@ -28,7 +28,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Bạn chỉ được thu tiền hóa đơn do mình tạo" }, { status: 403 });
     }
 
-    const oldDebt = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
+    const oldDebt = Math.max(Number(order.oldDebtAmount ?? 0), 0);
     const totalPayable = oldDebt + Number(order.grandTotal);
     const nextPaid = Math.min(Number(order.paidAmount) + parsed.data.amount, totalPayable);
     const nextDebt = Math.max(totalPayable - nextPaid, 0);

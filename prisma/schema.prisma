@@ -332,6 +332,7 @@ model Order {
   discountTotal   Decimal                @default(0) @db.Decimal(14, 2)
   otherCharge     Decimal                @default(0) @db.Decimal(14, 2)
   grandTotal      Decimal                @db.Decimal(14, 2)
+  oldDebtAmount   Decimal                @default(0) @db.Decimal(14, 2)
   profitEstimate  Decimal                @default(0) @db.Decimal(14, 2)
   paymentMethod   PaymentMethod
   paidAmount      Decimal                @db.Decimal(14, 2)

@@ -16,6 +16,7 @@ type InvoicePdfOrder = {
   paidAmount: number;
   debtAmount: number;
   grandTotal: number;
+  oldDebtAmount: number;
   note: string;
   branch: {
     name: string;
@@ -80,7 +81,8 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   const debtBreakdown = calculateInvoiceDebtBreakdown({
     grandTotal: order.grandTotal,
     paidAmount: order.paidAmount,
-    debtAmount: order.debtAmount
+    debtAmount: order.debtAmount,
+    oldDebtAmount: order.oldDebtAmount
   });
 
   const line = (text: string, x = marginX, size = 11, options?: { align?: "left" | "right" | "center"; width?: number }) => {
@@ -192,6 +194,7 @@ export async function getInvoicePdfOrder(orderId: string): Promise<InvoicePdfOrd
       paidAmount: true,
       debtAmount: true,
       grandTotal: true,
+      oldDebtAmount: true,
       note: true,
       branch: {
         select: {
@@ -241,6 +244,7 @@ export async function getInvoicePdfOrder(orderId: string): Promise<InvoicePdfOrd
     paidAmount: Number(order.paidAmount),
     debtAmount: Number(order.debtAmount),
     grandTotal: Number(order.grandTotal),
+    oldDebtAmount: Number(order.oldDebtAmount),
     note: order.note || "",
     branch: {
       name: order.branch.name,

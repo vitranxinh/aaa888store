@@ -33,6 +33,7 @@ type Props = {
   paidAmount: number;
   debtAmount: number;
   grandTotal: number;
+  oldDebtAmount?: number | null;
   items: InvoiceItem[];
   pdfUrl?: string | null;
   pdfFileName?: string | null;
@@ -165,6 +166,7 @@ export function InvoicePdfActions(props: Props) {
             paidAmount={props.paidAmount}
             debtAmount={props.debtAmount}
             grandTotal={props.grandTotal}
+            oldDebtAmount={props.oldDebtAmount}
             note={props.note}
             items={props.items}
             mode="pdf"

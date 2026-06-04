@@ -37,6 +37,7 @@ type InvoiceDocumentProps = {
   paidAmount: number;
   debtAmount: number;
   grandTotal: number;
+  oldDebtAmount?: number | null;
   note: string;
   items: InvoiceDocumentItem[];
   mode?: "screen" | "pdf";
@@ -61,6 +62,7 @@ export function InvoiceDocument({
   paidAmount,
   debtAmount,
   grandTotal,
+  oldDebtAmount,
   note,
   items,
   mode = "screen",
@@ -81,7 +83,7 @@ export function InvoiceDocument({
 
   const isPdf = mode === "pdf";
   const createdAtLabel = formatDate(createdAt);
-  const debtBreakdown = calculateInvoiceDebtBreakdown({ grandTotal, paidAmount, debtAmount });
+  const debtBreakdown = calculateInvoiceDebtBreakdown({ grandTotal, paidAmount, debtAmount, oldDebtAmount });
   const shouldShowOldDebt = debtBreakdown.oldDebt > 0;
 
   return (

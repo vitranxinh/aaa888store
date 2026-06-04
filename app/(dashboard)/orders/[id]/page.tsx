@@ -49,7 +49,8 @@ export default async function OrderDetailPage({
   const debtBreakdown = calculateInvoiceDebtBreakdown({
     grandTotal: Number(order.grandTotal),
     paidAmount: Number(order.paidAmount),
-    debtAmount: Number(order.debtAmount)
+    debtAmount: Number(order.debtAmount),
+    oldDebtAmount: Number(order.oldDebtAmount ?? 0)
   });
   return (
     <div className="space-y-5 sm:space-y-8">
@@ -139,6 +140,7 @@ export default async function OrderDetailPage({
             paidAmount={Number(order.paidAmount)}
             debtAmount={Number(order.debtAmount)}
             grandTotal={Number(order.grandTotal)}
+            oldDebtAmount={Number(order.oldDebtAmount ?? 0)}
             pdfUrl={pdfMeta.pdfUrl}
             pdfFileName={pdfMeta.pdfFileName}
             items={order.items.map((item) => ({

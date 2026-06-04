@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { recalculateCustomerReceivableDebt } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 
 export async function deleteOrderById(orderId: string) {
@@ -95,15 +96,13 @@ export async function deleteOrderById(orderId: string) {
         `);
       }
 
-      // 3. Gỡ phần công nợ riêng của hóa đơn khỏi tổng công nợ cộng dồn.
+      // 3. Gỡ phần doanh số; công nợ sẽ được tính lại sau khi trạng thái hóa đơn đã đổi.
       if (customer) {
-        const orderBalanceDelta = Number(order.grandTotal) - Number(order.paidAmount);
         tasks.push(tx.customer.update({
           where: { id: order.customerId },
           data: {
             totalSpend: new Prisma.Decimal(Math.max(Number(customer.totalSpend) - Number(order.grandTotal), 0)),
-            loyaltyPoints: Math.max(customer.loyaltyPoints - Math.floor(Number(order.grandTotal) / 100000), 0),
-            receivableDebt: { decrement: new Prisma.Decimal(orderBalanceDelta) }
+            loyaltyPoints: Math.max(customer.loyaltyPoints - Math.floor(Number(order.grandTotal) / 100000), 0)
           }
         }));
       }
@@ -120,6 +119,7 @@ export async function deleteOrderById(orderId: string) {
       );
 
       await Promise.all(tasks);
+      await recalculateCustomerReceivableDebt(tx, order.customerId);
 
       console.info("[CancelOrderTiming]", {
         phase: "transaction-total",
