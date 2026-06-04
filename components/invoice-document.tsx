@@ -41,7 +41,6 @@ type InvoiceDocumentProps = {
   items: InvoiceDocumentItem[];
   mode?: "screen" | "pdf";
   minRows?: number;
-  showOldDebt?: boolean;
 };
 
 export function InvoiceDocument({
@@ -58,7 +57,6 @@ export function InvoiceDocument({
   customerPhone,
   paymentMethodLabel,
   subtotal,
-  discountTotal = 0,
   otherCharge = 0,
   paidAmount,
   debtAmount,
@@ -66,8 +64,7 @@ export function InvoiceDocument({
   note,
   items,
   mode = "screen",
-  minRows,
-  showOldDebt = true
+  minRows
 }: InvoiceDocumentProps) {
   const rows = [...items];
   const targetRows = minRows ?? (mode === "pdf" ? 0 : 7);
@@ -85,7 +82,7 @@ export function InvoiceDocument({
   const isPdf = mode === "pdf";
   const createdAtLabel = formatDate(createdAt);
   const debtBreakdown = calculateInvoiceDebtBreakdown({ grandTotal, paidAmount, debtAmount });
-  const shouldShowOldDebt = showOldDebt && debtBreakdown.oldDebt > 0;
+  const shouldShowOldDebt = debtBreakdown.oldDebt > 0;
 
   return (
     <div
@@ -198,16 +195,6 @@ export function InvoiceDocument({
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[72px] text-right">{formatInvoiceAmount(subtotal)}</span>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
-                    Giảm giá
-                  </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
-                    <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(discountTotal)}</span>
                     </div>
                   </td>
                 </tr>
@@ -330,16 +317,6 @@ export function InvoiceDocument({
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
                       <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(subtotal)}</span>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
-                    Giảm giá
-                  </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
-                    <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(discountTotal)}</span>
                     </div>
                   </td>
                 </tr>
