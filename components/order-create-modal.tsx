@@ -62,7 +62,7 @@ export function OrderCreateModal({ branchId }: Props) {
   const [otherCharge, setOtherCharge] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
   const [oldDebt, setOldDebt] = useState(0);
-  const [includeOldDebt, setIncludeOldDebt] = useState(true);
+  const [includeOldDebt, setIncludeOldDebt] = useState(false);
   const [paymentTouched, setPaymentTouched] = useState(false);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -90,7 +90,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setOtherCharge(0);
     setPaidAmount(0);
     setOldDebt(0);
-    setIncludeOldDebt(true);
+    setIncludeOldDebt(false);
     setPaymentTouched(false);
     setLines([]);
     setDraftId(null);
@@ -129,7 +129,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setOtherCharge(Number(data.otherCharge ?? 0));
     setPaidAmount(Number(data.paidAmount ?? 0));
     setOldDebt(Number(data.oldDebt ?? 0));
-    setIncludeOldDebt(data.includeOldDebt ?? true);
+    setIncludeOldDebt(data.includeOldDebt ?? false);
     setPaymentTouched(Boolean(data.paymentTouched));
     setLines(Array.isArray(data.lines) ? data.lines : []);
     setSaveStatus("saved");
