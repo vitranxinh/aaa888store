@@ -34,6 +34,7 @@ type OrderDraftData = {
   otherCharge: number;
   paidAmount: number;
   oldDebt: number;
+  includeOldDebt: boolean;
   paymentTouched: boolean;
   lines: OrderLine[];
 };
@@ -61,6 +62,7 @@ export function OrderCreateModal({ branchId }: Props) {
   const [otherCharge, setOtherCharge] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
   const [oldDebt, setOldDebt] = useState(0);
+  const [includeOldDebt, setIncludeOldDebt] = useState(true);
   const [paymentTouched, setPaymentTouched] = useState(false);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -74,7 +76,8 @@ export function OrderCreateModal({ branchId }: Props) {
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
-  const totalPayable = useMemo(() => oldDebt + orderTotal, [oldDebt, orderTotal]);
+  const includedOldDebt = includeOldDebt ? oldDebt : 0;
+  const totalPayable = useMemo(() => includedOldDebt + orderTotal, [includedOldDebt, orderTotal]);
   const remainingDebt = useMemo(() => Math.max(totalPayable - paidAmount, 0), [paidAmount, totalPayable]);
 
   const resetForm = useCallback(() => {
@@ -87,6 +90,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setOtherCharge(0);
     setPaidAmount(0);
     setOldDebt(0);
+    setIncludeOldDebt(true);
     setPaymentTouched(false);
     setLines([]);
     setDraftId(null);
@@ -104,9 +108,10 @@ export function OrderCreateModal({ branchId }: Props) {
     otherCharge,
     paidAmount,
     oldDebt,
+    includeOldDebt,
     paymentTouched,
     lines
-  }), [customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, paymentTouched, lines]);
+  }), [customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, includeOldDebt, paymentTouched, lines]);
 
   const hasDraftContent = useCallback((data: OrderDraftData) => (
     Boolean(data.customerId || data.customerQuery.trim() || data.productQuery.trim() || data.note.trim() || data.otherCharge > 0 || data.paidAmount > 0 || data.oldDebt > 0 || data.lines.length > 0)
@@ -124,6 +129,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setOtherCharge(Number(data.otherCharge ?? 0));
     setPaidAmount(Number(data.paidAmount ?? 0));
     setOldDebt(Number(data.oldDebt ?? 0));
+    setIncludeOldDebt(data.includeOldDebt ?? true);
     setPaymentTouched(Boolean(data.paymentTouched));
     setLines(Array.isArray(data.lines) ? data.lines : []);
     setSaveStatus("saved");
@@ -434,7 +440,7 @@ export function OrderCreateModal({ branchId }: Props) {
             paidAmount: Math.max(paidAmount, 0),
             orderDiscount: 0,
             otherCharge: Math.max(otherCharge, 0),
-            oldDebt: Math.max(oldDebt, 0),
+            oldDebt: includeOldDebt ? Math.max(oldDebt, 0) : 0,
             note,
             draftId,
             status: "COMPLETED",
@@ -676,15 +682,34 @@ export function OrderCreateModal({ branchId }: Props) {
                 />
               </div>
               <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:gap-4 sm:p-4 md:grid-cols-3 xl:grid-cols-6">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Nợ cũ</label>
+                <div className="md:col-span-3 xl:col-span-2">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <label className="block text-sm font-semibold uppercase tracking-wide text-slate-500">Nợ cũ</label>
+                    <label className="flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={includeOldDebt}
+                        onChange={(event) => setIncludeOldDebt(event.target.checked)}
+                        className="h-4 w-4 accent-emerald-600"
+                      />
+                      Tính nợ cũ
+                    </label>
+                  </div>
                   <FormattedNumberInput
                     min={0}
                     value={oldDebt}
                     onValueChange={setOldDebt}
-                    className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base"
+                    disabled={!includeOldDebt}
+                    className={`h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base ${
+                      includeOldDebt ? "bg-white text-slate-900" : "bg-slate-100 text-slate-400"
+                    }`}
                     placeholder="0"
                   />
+                  {!includeOldDebt && oldDebt > 0 ? (
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      Đang ẩn nợ cũ, hóa đơn này chỉ tính tiền hàng mới.
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Thu khác</label>
