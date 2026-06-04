@@ -94,46 +94,8 @@ export default async function DashboardPage({
         ))}
       </section>
 
-      <section className="grid gap-4 sm:gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-4 sm:gap-6">
         <ChartCard title="Doanh thu theo thời gian" description="Doanh thu theo khung thời gian đã chọn" data={data.revenueByPeriod} />
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft sm:p-6">
-          <h3 className="text-2xl font-bold text-slate-900 sm:text-2xl">Hóa đơn gần đây</h3>
-          <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-slate-200 sm:mt-5 sm:block">
-            <table className="min-w-[640px] text-left sm:min-w-full">
-              <thead className="bg-slate-50 text-sm text-slate-500 sm:text-xl">
-                <tr>
-                  <th className="px-3 py-3 sm:px-6 sm:py-4">Mã HĐ</th>
-                  <th className="px-3 py-3 sm:px-6 sm:py-4">Khách hàng</th>
-                  <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Tổng tiền</th>
-                  <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Đã trả</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentOrders.map((order) => (
-                  <tr key={order.id} className="border-t border-slate-100 text-sm text-slate-700 sm:text-2xl">
-                    <td className="px-3 py-3 font-semibold text-emerald-600 sm:px-6 sm:py-4">{order.code}</td>
-                    <td className="px-3 py-3 sm:px-6 sm:py-4">{order.customer?.name ?? "Khách lẻ"}</td>
-                    <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(order.grandTotal))}</td>
-                    <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(Number(order.paidAmount))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-4 space-y-3 sm:hidden">
-            {data.recentOrders.map((order) => (
-              <div key={order.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-lg font-bold text-emerald-600">{order.code}</p>
-                  <p className="text-xs font-semibold whitespace-nowrap text-slate-500">{formatCurrency(Number(order.grandTotal))}</p>
-                </div>
-                <p className="mt-2 text-lg font-semibold text-slate-900">{order.customer?.name ?? "Khách lẻ"}</p>
-                <p className="mt-1 text-xs whitespace-nowrap text-slate-500">Đã trả {formatCurrency(Number(order.paidAmount))}</p>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
     </div>
   );

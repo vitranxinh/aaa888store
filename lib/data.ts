@@ -29,13 +29,6 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
   let invoiceCount = 0;
   let revenue = 0;
   let debt = 0;
-  let recentOrders: Array<{
-    id: string;
-    code: string;
-    grandTotal: Prisma.Decimal;
-    paidAmount: Prisma.Decimal;
-    customer: { name: string } | null;
-  }> = [];
   let chartOrders: Array<{ createdAt: Date; grandTotal: Prisma.Decimal }> = [];
 
   try {
@@ -44,7 +37,6 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
       countedProducts,
       aggregatedOrders,
       stockProducts,
-      fetchedRecentOrders,
       fetchedChartOrders
     ] = await prisma.$transaction([
       prisma.customer.count({ where: customerWhere }),
@@ -79,18 +71,6 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
         }
       }),
       prisma.order.findMany({
-        where: branchWhere,
-        select: {
-          id: true,
-          code: true,
-          grandTotal: true,
-          paidAmount: true,
-          customer: { select: { name: true } }
-        },
-        orderBy: { createdAt: "desc" },
-        take: 6
-      }),
-      prisma.order.findMany({
         where: {
           ...branchWhere,
           createdAt: { gte: start, lte: end },
@@ -116,7 +96,6 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     invoiceCount = aggregatedOrders._count.id;
     revenue = Number(aggregatedOrders._sum.grandTotal ?? 0);
     debt = Number(aggregatedOrders._sum.debtAmount ?? 0);
-    recentOrders = fetchedRecentOrders;
     chartOrders = fetchedChartOrders;
   } catch (error) {
     console.error("[DashboardPerformance]", {
@@ -159,8 +138,7 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     revenue,
     debt,
     lowStockCount,
-    revenueByPeriod,
-    recentOrders
+    revenueByPeriod
   };
 
   console.info("[DashboardPerformance]", {
