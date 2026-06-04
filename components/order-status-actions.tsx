@@ -81,6 +81,7 @@ export function OrderStatusActions({
         onServerSuccess?.(payload);
 
         if (payload.mode === "cancelled" && pathname?.startsWith("/orders/")) {
+          router.replace("/orders");
           router.refresh();
           return;
         }
