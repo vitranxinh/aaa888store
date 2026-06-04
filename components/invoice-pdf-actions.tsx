@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { InvoiceDocument } from "@/components/invoice-document";
 import { Button } from "@/components/ui/button";
-import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 import { useToastStore } from "@/store/toast-store";
 
 type InvoiceItem = {
@@ -41,14 +40,8 @@ type Props = {
 
 export function InvoicePdfActions(props: Props) {
   const [isBusy, setIsBusy] = useState(false);
-  const [showOldDebt, setShowOldDebt] = useState(true);
   const pushToast = useToastStore((state) => state.push);
   const templateRef = useRef<HTMLDivElement>(null);
-  const oldDebt = calculateInvoiceDebtBreakdown({
-    grandTotal: props.grandTotal,
-    paidAmount: props.paidAmount,
-    debtAmount: props.debtAmount
-  }).oldDebt;
 
   async function buildPdfFile() {
     if (!templateRef.current) {
@@ -97,7 +90,7 @@ export function InvoicePdfActions(props: Props) {
     try {
       setIsBusy(true);
 
-      if (props.pdfUrl && (oldDebt <= 0 || showOldDebt)) {
+      if (props.pdfUrl) {
         const anchor = document.createElement("a");
         anchor.href = props.pdfUrl;
         anchor.target = "_blank";
@@ -147,22 +140,9 @@ export function InvoicePdfActions(props: Props) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        {oldDebt > 0 ? (
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={showOldDebt}
-              onChange={(event) => setShowOldDebt(event.target.checked)}
-              className="h-4 w-4 accent-emerald-600"
-            />
-            Hiện nợ cũ
-          </label>
-        ) : null}
-        <Button variant="outline" onClick={sharePdf} disabled={isBusy}>
-          {isBusy ? "Đang tạo PDF..." : "Chia sẻ PDF"}
-        </Button>
-      </div>
+      <Button variant="outline" onClick={sharePdf} disabled={isBusy}>
+        {isBusy ? "Đang tạo PDF..." : "Chia sẻ PDF"}
+      </Button>
 
       <div className="fixed left-[-100000px] top-0 z-[-1]">
         <div ref={templateRef} className="w-[1123px] bg-white p-0">
@@ -189,7 +169,6 @@ export function InvoicePdfActions(props: Props) {
             items={props.items}
             mode="pdf"
             minRows={4}
-            showOldDebt={showOldDebt}
           />
         </div>
       </div>
