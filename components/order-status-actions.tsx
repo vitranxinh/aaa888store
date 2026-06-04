@@ -42,13 +42,11 @@ export function OrderStatusActions({
     if (!confirmed) return;
 
     startTransition(async () => {
-      if (role === "ADMIN") {
-        onOptimisticRemove?.();
-        pushToast({
-          title: "Đã hủy hóa đơn, đang hoàn tồn kho...",
-          description: orderCode ?? "Đang xử lý hóa đơn"
-        });
-      }
+      onOptimisticRemove?.();
+      pushToast({
+        title: role === "ADMIN" ? "Đã hủy hóa đơn, đang hoàn tồn kho..." : "Đang gửi yêu cầu hủy...",
+        description: orderCode ?? "Đang xử lý hóa đơn"
+      });
 
       try {
         const response = await fetch(`/api/orders/${id}`, {
@@ -79,6 +77,14 @@ export function OrderStatusActions({
         }
 
         onServerSuccess?.(payload);
+
+        if (payload.mode === "requested") {
+          if (pathname?.startsWith("/orders/")) {
+            router.replace("/orders");
+            router.refresh();
+          }
+          return;
+        }
 
         if (payload.mode === "cancelled" && pathname?.startsWith("/orders/")) {
           router.replace("/orders");

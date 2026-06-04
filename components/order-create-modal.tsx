@@ -193,6 +193,7 @@ export function OrderCreateModal({ branchId }: Props) {
       setHasUnsavedChanges(false);
       if (manual) {
         pushToast({ title: "Đã lưu bản nháp", description: "Bạn có thể mở lại và tiếp tục tạo hóa đơn sau." });
+        router.refresh();
       }
       return payload as OrderDraft;
     } catch (error) {
@@ -208,7 +209,7 @@ export function OrderCreateModal({ branchId }: Props) {
     } finally {
       setIsSavingDraft(false);
     }
-  }, [branchId, buildDraftData, draftId, hasDraftContent, pushToast]);
+  }, [branchId, buildDraftData, draftId, hasDraftContent, pushToast, router]);
 
   async function deleteDraft(id: string) {
     try {
@@ -227,6 +228,9 @@ export function OrderCreateModal({ branchId }: Props) {
       if (!shouldClose) return;
     }
 
+    if (draftId && saveStatus === "saved") {
+      router.refresh();
+    }
     setOpen(false);
     setPaymentTouched(false);
   }
@@ -537,10 +541,8 @@ export function OrderCreateModal({ branchId }: Props) {
                     variant="outline"
                     className="h-10"
                     onClick={() => {
-                      const id = restoreDraft.id;
                       resetForm();
                       setRestoreDraft(null);
-                      void deleteDraft(id);
                     }}
                   >
                     Tạo hóa đơn mới

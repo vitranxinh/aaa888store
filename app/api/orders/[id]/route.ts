@@ -118,6 +118,8 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       orderId: params.id,
       totalDurationMs: Date.now() - startedAt
     });
+    revalidateTag("orders-page-data");
+    revalidateTag("orders-pending-delete-requests");
     return NextResponse.json({ ok: true, code: order.code, mode: "requested" });
   } catch (error) {
     console.error("[CancelOrderError]", error);
