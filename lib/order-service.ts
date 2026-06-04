@@ -130,7 +130,7 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
   const oldDebt = Number(payload.oldDebt ?? 0);
   const totalPayable = oldDebt + grandTotal;
   const paidAmount = Math.min(Math.max(Number(payload.paidAmount), 0), totalPayable);
-  const debtAmount = Math.max(grandTotal - paidAmount, 0);
+  const debtAmount = Math.max(totalPayable - paidAmount, 0);
   const finalStatus: OrderStatus = payload.status === "DRAFT" ? "DRAFT" : debtAmount > 0 ? "PARTIAL" : "COMPLETED";
   return { totals, grandTotal, oldDebt, totalPayable, paidAmount, debtAmount, finalStatus };
 }

@@ -115,8 +115,10 @@ export async function recalculateOrderPaymentState(tx: Prisma.TransactionClient,
     _sum: { amount: true }
   });
 
-  const paidAmount = Number(aggregate._sum.amount ?? 0);
-  const debtAmount = Math.max(Number(order.grandTotal) - paidAmount, 0);
+  const oldDebt = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
+  const totalPayable = oldDebt + Number(order.grandTotal);
+  const paidAmount = Math.min(Number(aggregate._sum.amount ?? 0), totalPayable);
+  const debtAmount = Math.max(totalPayable - paidAmount, 0);
   const nextStatus =
     order.status === "DRAFT" || order.status === "CANCELLED"
       ? order.status
