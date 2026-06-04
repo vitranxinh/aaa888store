@@ -33,6 +33,7 @@ type OrderDraftData = {
   note: string;
   otherCharge: number;
   paidAmount: number;
+  oldDebt: number;
   paymentTouched: boolean;
   lines: OrderLine[];
 };
@@ -51,7 +52,7 @@ export function OrderCreateModal({ branchId }: Props) {
   const [isPending, startTransition] = useTransition();
   const [customerId, setCustomerId] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
-  const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string }>>([]);
+  const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string; receivableDebt?: number }>>([]);
   const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
   const [productQuery, setProductQuery] = useState("");
   const [productResults, setProductResults] = useState<ProductSuggestion[]>([]);
@@ -59,6 +60,7 @@ export function OrderCreateModal({ branchId }: Props) {
   const [note, setNote] = useState("");
   const [otherCharge, setOtherCharge] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
+  const [oldDebt, setOldDebt] = useState(0);
   const [paymentTouched, setPaymentTouched] = useState(false);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -72,6 +74,8 @@ export function OrderCreateModal({ branchId }: Props) {
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
+  const totalPayable = useMemo(() => oldDebt + orderTotal, [oldDebt, orderTotal]);
+  const remainingDebt = useMemo(() => Math.max(totalPayable - paidAmount, 0), [paidAmount, totalPayable]);
 
   const resetForm = useCallback(() => {
     setCustomerId("");
@@ -82,6 +86,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setNote("");
     setOtherCharge(0);
     setPaidAmount(0);
+    setOldDebt(0);
     setPaymentTouched(false);
     setLines([]);
     setDraftId(null);
@@ -98,12 +103,13 @@ export function OrderCreateModal({ branchId }: Props) {
     note,
     otherCharge,
     paidAmount,
+    oldDebt,
     paymentTouched,
     lines
-  }), [customerId, customerQuery, productQuery, note, otherCharge, paidAmount, paymentTouched, lines]);
+  }), [customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, paymentTouched, lines]);
 
   const hasDraftContent = useCallback((data: OrderDraftData) => (
-    Boolean(data.customerId || data.customerQuery.trim() || data.productQuery.trim() || data.note.trim() || data.otherCharge > 0 || data.paidAmount > 0 || data.lines.length > 0)
+    Boolean(data.customerId || data.customerQuery.trim() || data.productQuery.trim() || data.note.trim() || data.otherCharge > 0 || data.paidAmount > 0 || data.oldDebt > 0 || data.lines.length > 0)
   ), []);
 
   const applyDraftData = useCallback((draft: OrderDraft) => {
@@ -117,6 +123,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setNote(data.note ?? "");
     setOtherCharge(Number(data.otherCharge ?? 0));
     setPaidAmount(Number(data.paidAmount ?? 0));
+    setOldDebt(Number(data.oldDebt ?? 0));
     setPaymentTouched(Boolean(data.paymentTouched));
     setLines(Array.isArray(data.lines) ? data.lines : []);
     setSaveStatus("saved");
@@ -155,9 +162,9 @@ export function OrderCreateModal({ branchId }: Props) {
 
   useEffect(() => {
     if (!paymentTouched) {
-      setPaidAmount(orderTotal);
+      setPaidAmount(totalPayable);
     }
-  }, [orderTotal, paymentTouched]);
+  }, [paymentTouched, totalPayable]);
 
   const saveDraft = useCallback(async (manual = false) => {
     const data = buildDraftData();
@@ -309,7 +316,7 @@ export function OrderCreateModal({ branchId }: Props) {
           return;
         }
 
-        const payload = (await response.json()) as Array<{ id: string; label: string; meta?: string }>;
+        const payload = (await response.json()) as Array<{ id: string; label: string; meta?: string; receivableDebt?: number }>;
         setCustomerResults(payload);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
@@ -395,9 +402,10 @@ export function OrderCreateModal({ branchId }: Props) {
     setProductResults([]);
   }
 
-  function selectCustomer(customer: { id: string; label: string }) {
+  function selectCustomer(customer: { id: string; label: string; receivableDebt?: number }) {
     setCustomerId(customer.id);
     setCustomerQuery(customer.label);
+    setOldDebt(Math.max(Number(customer.receivableDebt ?? 0), 0));
     setCustomerResults([]);
   }
 
@@ -432,6 +440,7 @@ export function OrderCreateModal({ branchId }: Props) {
             paidAmount: Math.max(paidAmount, 0),
             orderDiscount: 0,
             otherCharge: Math.max(otherCharge, 0),
+            oldDebt: Math.max(oldDebt, 0),
             note,
             draftId,
             status: "COMPLETED",
@@ -559,6 +568,7 @@ export function OrderCreateModal({ branchId }: Props) {
                   onChange={(e) => {
                     setCustomerQuery(e.target.value);
                     setCustomerId("");
+                    setOldDebt(0);
                   }}
                   placeholder="Tìm khách hàng..."
                   className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-lg"
@@ -671,7 +681,17 @@ export function OrderCreateModal({ branchId }: Props) {
                   className="h-20 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm sm:h-24 sm:px-4 sm:py-3 sm:text-base"
                 />
               </div>
-              <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:gap-4 sm:p-4 md:grid-cols-[180px_180px_1fr_1fr]">
+              <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:gap-4 sm:p-4 md:grid-cols-3 xl:grid-cols-6">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Nợ cũ</label>
+                  <FormattedNumberInput
+                    min={0}
+                    value={oldDebt}
+                    onValueChange={setOldDebt}
+                    className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base"
+                    placeholder="0"
+                  />
+                </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Thu khác</label>
                   <FormattedNumberInput
@@ -692,7 +712,7 @@ export function OrderCreateModal({ branchId }: Props) {
                       setPaidAmount(value);
                     }}
                     className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base"
-                    placeholder={orderTotal ? orderTotal.toString() : "0"}
+                    placeholder={totalPayable ? totalPayable.toString() : "0"}
                   />
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
@@ -702,6 +722,14 @@ export function OrderCreateModal({ branchId }: Props) {
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tổng hóa đơn</p>
                   <p className="mt-1 text-lg font-bold text-slate-900 sm:text-xl">{orderTotal.toLocaleString("vi-VN")} đ</p>
+                </div>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 sm:px-4 sm:py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Tổng cần thanh toán</p>
+                  <p className="mt-1 text-lg font-bold text-emerald-800 sm:text-xl">{totalPayable.toLocaleString("vi-VN")} đ</p>
+                </div>
+                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 sm:px-4 sm:py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Còn nợ sau hóa đơn</p>
+                  <p className="mt-1 text-lg font-bold text-red-700 sm:text-xl">{remainingDebt.toLocaleString("vi-VN")} đ</p>
                 </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-[180px_1fr]">

@@ -15,6 +15,7 @@ type CustomerCandidate = {
   name: string;
   code: string;
   phone: string | null;
+  receivableDebt: unknown;
 };
 
 function buildCustomerSuggestions(customers: CustomerCandidate[], query: string) {
@@ -60,7 +61,8 @@ export async function GET(request: Request) {
         id: true,
         name: true,
         code: true,
-        phone: true
+        phone: true,
+        receivableDebt: true
       },
       orderBy: { name: "asc" },
       take: 200
@@ -77,7 +79,8 @@ export async function GET(request: Request) {
           id: true,
           name: true,
           code: true,
-          phone: true
+          phone: true,
+          receivableDebt: true
         },
         orderBy: { name: "asc" },
         take: 1000
@@ -101,6 +104,7 @@ export async function GET(request: Request) {
         id: entry.customer.id,
         label: entry.customer.name,
         value: entry.customer.name,
+        receivableDebt: Number(entry.customer.receivableDebt ?? 0),
         meta: [entry.customer.code, entry.customer.phone].filter(Boolean).join(" • "),
         accent: entry.customer.code,
         searchText: entry.customer.name

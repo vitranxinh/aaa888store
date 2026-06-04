@@ -2,46 +2,52 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionClient, customerId: string) {
-  const [customer, orderAggregate, standaloneReceiptAggregate, customerPaymentAggregate] = await Promise.all([
+  const [customer, latestOrder] = await Promise.all([
     tx.customer.findUnique({
       where: { id: customerId },
       select: { openingDebt: true }
     }),
-    tx.order.aggregate({
+    tx.order.findFirst({
       where: {
         customerId,
         status: { in: ["COMPLETED", "PARTIAL"] }
       },
-      _sum: { debtAmount: true }
-    }),
-    tx.cashTransaction.aggregate({
-      where: {
-        customerId,
-        type: "RECEIPT",
-        orderId: null
-      },
-      _sum: { amount: true }
-    }),
-    tx.cashTransaction.aggregate({
-      where: {
-        customerId,
-        type: "PAYMENT"
-      },
-      _sum: { amount: true }
+      orderBy: { createdAt: "desc" },
+      select: { debtAmount: true, createdAt: true }
     })
   ]);
 
   if (!customer) return;
 
-  const openingDebt = Number(customer.openingDebt ?? 0);
-  const orderDebt = Number(orderAggregate._sum.debtAmount ?? 0);
+  const standaloneWindow = latestOrder?.createdAt ? { gt: latestOrder.createdAt } : undefined;
+  const [standaloneReceiptAggregate, customerPaymentAggregate] = await Promise.all([
+    tx.cashTransaction.aggregate({
+      where: {
+        customerId,
+        type: "RECEIPT",
+        orderId: null,
+        createdAt: standaloneWindow
+      },
+      _sum: { amount: true }
+    }),
+    tx.cashTransaction.aggregate({
+      where: {
+        customerId,
+        type: "PAYMENT",
+        createdAt: standaloneWindow
+      },
+      _sum: { amount: true }
+    })
+  ]);
+
+  const baseDebt = latestOrder ? Number(latestOrder.debtAmount ?? 0) : Number(customer.openingDebt ?? 0);
   const standaloneReceipt = Number(standaloneReceiptAggregate._sum.amount ?? 0);
   const customerPayment = Number(customerPaymentAggregate._sum.amount ?? 0);
 
   await tx.customer.update({
     where: { id: customerId },
     data: {
-      receivableDebt: openingDebt + orderDebt + customerPayment - standaloneReceipt
+      receivableDebt: baseDebt + customerPayment - standaloneReceipt
     }
   });
 }
@@ -98,6 +104,8 @@ export async function recalculateOrderPaymentState(tx: Prisma.TransactionClient,
       id: true,
       status: true,
       grandTotal: true,
+      paidAmount: true,
+      debtAmount: true,
       customerId: true
     }
   });
@@ -112,8 +120,10 @@ export async function recalculateOrderPaymentState(tx: Prisma.TransactionClient,
     _sum: { amount: true }
   });
 
-  const paidAmount = Math.min(Number(aggregate._sum.amount ?? 0), Number(order.grandTotal));
-  const debtAmount = Math.max(Number(order.grandTotal) - paidAmount, 0);
+  const oldDebt = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
+  const totalPayable = oldDebt + Number(order.grandTotal);
+  const paidAmount = Math.min(Number(aggregate._sum.amount ?? 0), totalPayable);
+  const debtAmount = Math.max(totalPayable - paidAmount, 0);
   const nextStatus =
     order.status === "DRAFT" || order.status === "CANCELLED"
       ? order.status

@@ -17,6 +17,7 @@ export async function deleteOrderById(orderId: string) {
       customerId: true,
       status: true,
       grandTotal: true,
+      paidAmount: true,
       debtAmount: true,
       items: {
         select: {
@@ -94,14 +95,15 @@ export async function deleteOrderById(orderId: string) {
         `);
       }
 
-      // 3. Cập nhật công nợ
+      // 3. Cập nhật công nợ về đúng nợ cũ trước hóa đơn này.
       if (customer) {
+        const oldDebtBeforeOrder = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
         tasks.push(tx.customer.update({
           where: { id: order.customerId },
           data: {
             totalSpend: new Prisma.Decimal(Math.max(Number(customer.totalSpend) - Number(order.grandTotal), 0)),
             loyaltyPoints: Math.max(customer.loyaltyPoints - Math.floor(Number(order.grandTotal) / 100000), 0),
-            receivableDebt: new Prisma.Decimal(Number(customer.receivableDebt) - Number(order.debtAmount))
+            receivableDebt: new Prisma.Decimal(oldDebtBeforeOrder)
           }
         }));
       }

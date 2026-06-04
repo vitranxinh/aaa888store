@@ -1,6 +1,5 @@
 import { randomUUID } from "crypto";
 import { CashTxnType, OrderStatus, PaymentMethod, Prisma } from "@prisma/client";
-import { recalculateCustomerReceivableDebtForCustomer } from "@/lib/debt-service";
 import { prisma } from "@/lib/prisma";
 import { calculateCartTotals } from "@/lib/pos";
 import { runTransactionWithRetry } from "@/lib/transaction-retry";
@@ -13,6 +12,7 @@ type OrderPayload = {
   paidAmount: number;
   orderDiscount: number;
   otherCharge: number;
+  oldDebt?: number;
   note?: string;
   status: "DRAFT" | "COMPLETED" | "PARTIAL" | "CANCELLED";
   items: Array<{ productId: string; quantity: number; unitPrice: number; discountValue: number }>;
@@ -127,15 +127,17 @@ function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPa
     payload.orderDiscount
   );
   const grandTotal = Math.max(Number(totals.grandTotal) + payload.otherCharge, 0);
-  const paidAmount = Number(payload.paidAmount);
-  const debtAmount = Math.max(grandTotal - paidAmount, 0);
+  const oldDebt = Number(payload.oldDebt ?? 0);
+  const totalPayable = oldDebt + grandTotal;
+  const paidAmount = Math.min(Math.max(Number(payload.paidAmount), 0), totalPayable);
+  const debtAmount = Math.max(totalPayable - paidAmount, 0);
   const finalStatus: OrderStatus = payload.status === "DRAFT" ? "DRAFT" : debtAmount > 0 ? "PARTIAL" : "COMPLETED";
-  return { totals, grandTotal, paidAmount, debtAmount, finalStatus };
+  return { totals, grandTotal, oldDebt, totalPayable, paidAmount, debtAmount, finalStatus };
 }
 
 async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
   id: string; code: string; branchId: string; customerId: string; status: OrderStatus;
-  grandTotal: Prisma.Decimal; items: Array<{ productId: string; quantity: number }>;
+  grandTotal: Prisma.Decimal; paidAmount: Prisma.Decimal; debtAmount: Prisma.Decimal; items: Array<{ productId: string; quantity: number }>;
 }) {
   if (order.status === "DRAFT") return;
   const saleTransactions = await tx.inventoryTransaction.findMany({
@@ -146,6 +148,7 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
   const quantityByProduct = new Map<string, number>();
   order.items.forEach(i => quantityByProduct.set(i.productId, (quantityByProduct.get(i.productId) || 0) + i.quantity));
   const batchUpdates = saleTransactions.filter(t => t.batchId).map(t => ({ id: t.batchId!, quantity: Math.abs(Number(t.quantity)) }));
+  const oldDebtBeforeOrder = Math.max(Number(order.debtAmount) - Number(order.grandTotal) + Number(order.paidAmount), 0);
 
   const tasks: Promise<any>[] = [
     tx.$executeRaw`
@@ -154,7 +157,11 @@ async function revertOrderEffects(tx: Prisma.TransactionClient, order: {
     `,
     tx.customer.update({
       where: { id: order.customerId },
-      data: { totalSpend: { decrement: order.grandTotal }, loyaltyPoints: { decrement: Math.floor(Number(order.grandTotal) / 100000) }, receivableDebt: { decrement: order.grandTotal } }
+      data: {
+        totalSpend: { decrement: order.grandTotal },
+        loyaltyPoints: { decrement: Math.floor(Number(order.grandTotal) / 100000) },
+        receivableDebt: new Prisma.Decimal(oldDebtBeforeOrder)
+      }
     }),
     tx.inventoryTransaction.deleteMany({ where: { referenceCode: order.code, type: "SALE" } }),
     tx.cashTransaction.deleteMany({ where: { orderId: order.id } })
@@ -263,7 +270,11 @@ async function applyOrderEffects(
     tx.inventoryTransaction.createMany({ data: invTxns }),
     tx.customer.update({
       where: { id: payload.customerId },
-      data: { totalSpend: { increment: derived.grandTotal }, loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) }, receivableDebt: { increment: derived.debtAmount } }
+      data: {
+        totalSpend: { increment: derived.grandTotal },
+        loyaltyPoints: { increment: Math.floor(derived.grandTotal / 100000) },
+        receivableDebt: new Prisma.Decimal(derived.debtAmount)
+      }
     })
   ];
   if (batchUpdates.length > 0) {
