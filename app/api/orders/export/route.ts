@@ -20,8 +20,8 @@ function buildCell(value: string | number) {
 export async function GET(request: Request) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
-    if (session.role === "CASHIER") {
-      return NextResponse.json({ error: "Tài khoản nhân viên không được tải Excel" }, { status: 403 });
+    if (session.role !== "ADMIN") {
+      return NextResponse.json({ error: "Chỉ tài khoản sếp được tải Excel hóa đơn" }, { status: 403 });
     }
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q") ?? "";

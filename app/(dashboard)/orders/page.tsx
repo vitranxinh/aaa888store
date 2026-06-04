@@ -36,6 +36,7 @@ const getCachedOrdersPageData = unstable_cache(
     page,
     pageSize,
     role,
+    viewerUserId,
     createdAt
   }: {
     branchId?: string;
@@ -43,6 +44,7 @@ const getCachedOrdersPageData = unstable_cache(
     page: number;
     pageSize: number;
     role: "ADMIN" | "MANAGER" | "CASHIER";
+    viewerUserId: string;
     createdAt?: Prisma.DateTimeFilter;
   }) => {
     const requestStartedAt = Date.now();
@@ -70,6 +72,7 @@ const getCachedOrdersPageData = unstable_cache(
     const orderWhere: Prisma.OrderWhereInput = {
       AND: [
         { branchId: branchId ?? undefined },
+        ...(role === "ADMIN" ? [] : [{ createdById: viewerUserId }]),
         ...(createdAt ? [{ createdAt }] : []),
         { status: { not: "CANCELLED" as const } },
         ...(role !== "ADMIN"
@@ -257,6 +260,7 @@ async function OrdersList({
   page,
   pageSize,
   role,
+  viewerUserId,
   query
 }: {
   branchId?: string;
@@ -265,6 +269,7 @@ async function OrdersList({
   page: number;
   pageSize: number;
   role: "ADMIN" | "MANAGER" | "CASHIER";
+  viewerUserId: string;
   query: Record<string, string | undefined>;
 }) {
   const { orders, hasNext } = await getCachedOrdersPageData({
@@ -273,6 +278,7 @@ async function OrdersList({
     page,
     pageSize,
     role,
+    viewerUserId,
     createdAt
   });
 
@@ -413,7 +419,7 @@ export default async function OrdersPage({
   const authStartedAt = Date.now();
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const authSessionCheckMs = Date.now() - authStartedAt;
-  const canExportExcel = session.role !== "CASHIER";
+  const canExportExcel = session.role === "ADMIN";
   const isAdmin = session.role === "ADMIN";
   const q = searchParams?.q ?? "";
   const range = (searchParams?.range as TimeFilterRange) || "all";
@@ -424,6 +430,7 @@ export default async function OrdersPage({
   const createdAt = resolveVietnamDateRange(range, dateFrom, dateTo);
   const branchLookupStartedAt = Date.now();
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
+  const actorUserId = await resolveActorUserId(session);
   const branchLookupMs = Date.now() - branchLookupStartedAt;
   console.info("[OrdersPerformance]", {
     phase: "page-shell",
@@ -459,6 +466,7 @@ export default async function OrdersPage({
           page={page}
           pageSize={pageSize}
           role={session.role}
+          viewerUserId={actorUserId}
           query={{ q, range, dateFrom, dateTo }}
         />
       </Suspense>

@@ -17,6 +17,19 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Dữ liệu hóa đơn không hợp lệ" }, { status: 400 });
     }
 
+    const existing = await prisma.order.findUnique({
+      where: { id: params.id },
+      select: { id: true, branchId: true, createdById: true }
+    });
+
+    if (!existing || (session.branchId && existing.branchId !== session.branchId)) {
+      return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
+    }
+
+    if (session.role !== "ADMIN" && existing.createdById !== actorUserId) {
+      return NextResponse.json({ error: "Bạn chỉ được sửa hóa đơn do mình tạo" }, { status: 403 });
+    }
+
     const updated = await updateOrderFromPayload(params.id, {
       ...parsed.data,
       createdById: actorUserId
@@ -52,6 +65,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
         id: true,
         code: true,
         branchId: true,
+        createdById: true,
         deleteRequest: {
           select: { id: true, status: true }
         }
@@ -60,6 +74,14 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
 
     if (!order) {
       return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
+    }
+
+    if (session.branchId && order.branchId !== session.branchId) {
+      return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
+    }
+
+    if (session.role !== "ADMIN" && order.createdById !== actorUserId) {
+      return NextResponse.json({ error: "Bạn chỉ được yêu cầu hủy hóa đơn do mình tạo" }, { status: 403 });
     }
 
     if (session.role === "ADMIN") {

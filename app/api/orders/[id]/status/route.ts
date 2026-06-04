@@ -4,7 +4,7 @@ import { deleteOrderById } from "@/lib/order-delete";
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    await requireApiSession(["ADMIN"]);
     const body = (await request.json()) as { status?: "CANCELLED" };
     if (!body.status || body.status !== "CANCELLED") {
       return NextResponse.json({ error: "Trạng thái không hợp lệ" }, { status: 400 });

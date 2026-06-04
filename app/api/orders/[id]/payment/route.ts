@@ -21,6 +21,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (!order) {
       return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
     }
+    if (session.branchId && order.branchId !== session.branchId) {
+      return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
+    }
+    if (session.role !== "ADMIN" && order.createdById !== actorUserId) {
+      return NextResponse.json({ error: "Bạn chỉ được thu tiền hóa đơn do mình tạo" }, { status: 403 });
+    }
 
     const nextPaid = Math.min(Number(order.paidAmount) + parsed.data.amount, Number(order.grandTotal));
     const nextDebt = Math.max(Number(order.grandTotal) - nextPaid, 0);
