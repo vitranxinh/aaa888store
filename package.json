@@ -16,7 +16,8 @@
     "start:bg": "nohup npm run start > app.log 2>&1 & echo $!",
     "backup:data": "bash scripts/backup_database.sh",
     "restore:data": "bash scripts/restore_database.sh",
-    "sync:accounts": "tsx scripts/sync_accounts.ts"
+    "sync:accounts": "tsx scripts/sync_accounts.ts",
+    "recalculate:customer-debts": "tsx scripts/recalculate_customer_debts.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
