@@ -67,6 +67,8 @@ function getPaymentMethodLabel(paymentMethod: string | null | undefined) {
   return "Không rõ";
 }
 
+const ACTIVE_ORDER_STATUS = ["COMPLETED", "PARTIAL"] as const;
+
 export function resolveCustomerHistoryFilters(searchParams?: {
   from?: string;
   to?: string;
@@ -105,6 +107,7 @@ export function buildCustomerInvoiceHistoryWhere(
 ): Prisma.OrderWhereInput {
   const where: Prisma.OrderWhereInput = {
     customerId,
+    status: { in: [...ACTIVE_ORDER_STATUS] },
     ...(filters.code
       ? {
           code: {
@@ -197,6 +200,7 @@ export async function getAllCustomers({
           by: ["customerId"],
           where: {
             customerId: { in: customerIds },
+            status: { in: [...ACTIVE_ORDER_STATUS] },
             debtAmount: { gt: 0 }
           },
           _count: { _all: true },
@@ -258,6 +262,7 @@ export async function getCustomerOutstandingDebt(customerId: string) {
     prisma.order.findMany({
       where: {
         customerId,
+        status: { in: [...ACTIVE_ORDER_STATUS] },
         debtAmount: { gt: 0 }
       },
       select: {
@@ -338,6 +343,7 @@ export async function getCustomerDebtTracking(customerId: string) {
     prisma.order.findMany({
       where: {
         customerId,
+        status: { in: [...ACTIVE_ORDER_STATUS] },
         debtAmount: { gt: 0 }
       },
       select: {
