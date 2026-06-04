@@ -191,6 +191,7 @@ export function OrderCreateModal({ branchId }: Props) {
       setSaveStatus("saved");
       setLastSavedAt(payload.updatedAt);
       setHasUnsavedChanges(false);
+      window.dispatchEvent(new Event("order-draft:saved"));
       if (manual) {
         pushToast({ title: "Đã lưu bản nháp", description: "Bạn có thể mở lại và tiếp tục tạo hóa đơn sau." });
         router.refresh();

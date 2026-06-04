@@ -398,7 +398,13 @@ async function OrderDraftsSection({
     };
   });
 
-  return <OrderDraftsListClient initialDrafts={rows} />;
+  const draftRefreshParams = new URLSearchParams({ limit: "10" });
+  if (session.role === "ADMIN" || session.role === "MANAGER") {
+    draftRefreshParams.set("scope", "branch");
+    draftRefreshParams.set("branchId", branchId);
+  }
+
+  return <OrderDraftsListClient initialDrafts={rows} refreshUrl={`/api/order-drafts?${draftRefreshParams.toString()}`} />;
 }
 
 function PendingDeleteRequestsFallback() {

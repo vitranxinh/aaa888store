@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { useToastStore } from "@/store/toast-store";
 
@@ -13,10 +13,56 @@ type DraftRow = {
   updatedAt: string;
 };
 
-export function OrderDraftsListClient({ initialDrafts }: { initialDrafts: DraftRow[] }) {
+type ApiDraft = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  customer?: { name: string } | null;
+  branch?: { name: string } | null;
+  user?: { name: string } | null;
+  draftData?: { customerQuery?: string } | null;
+};
+
+export function OrderDraftsListClient({
+  initialDrafts,
+  refreshUrl
+}: {
+  initialDrafts: DraftRow[];
+  refreshUrl: string;
+}) {
   const [drafts, setDrafts] = useState(initialDrafts);
   const [isPending, startTransition] = useTransition();
   const pushToast = useToastStore((state) => state.push);
+
+  const refreshDrafts = useCallback(async () => {
+    try {
+      const response = await fetch(refreshUrl, {
+        credentials: "same-origin"
+      });
+      if (!response.ok) return;
+      const payload = (await response.json()) as ApiDraft[];
+      setDrafts(
+        payload.map((draft) => ({
+          id: draft.id,
+          customerName: draft.customer?.name ?? draft.draftData?.customerQuery ?? "Chưa chọn khách",
+          branchName: draft.branch?.name ?? "-",
+          createdByName: draft.user?.name ?? "-",
+          createdAt: draft.createdAt,
+          updatedAt: draft.updatedAt
+        }))
+      );
+    } catch {
+      // Draft refresh is non-critical; the route refresh will still catch up.
+    }
+  }, [refreshUrl]);
+
+  useEffect(() => {
+    const handler = () => {
+      void refreshDrafts();
+    };
+    window.addEventListener("order-draft:saved", handler);
+    return () => window.removeEventListener("order-draft:saved", handler);
+  }, [refreshDrafts]);
 
   function openDraft(draftId: string) {
     window.dispatchEvent(new CustomEvent("order-draft:open", { detail: { draftId } }));
@@ -43,6 +89,7 @@ export function OrderDraftsListClient({ initialDrafts }: { initialDrafts: DraftR
         }
 
         pushToast({ title: "Đã xóa bản nháp" });
+        window.dispatchEvent(new Event("order-draft:saved"));
       } catch (error) {
         setDrafts(previousDrafts);
         pushToast({
@@ -54,7 +101,7 @@ export function OrderDraftsListClient({ initialDrafts }: { initialDrafts: DraftR
     });
   }
 
-  if (drafts.length === 0) return null;
+  if (drafts.length === 0) return <div className="hidden" data-order-drafts-list="empty" />;
 
   return (
     <section className="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-soft sm:p-6">
