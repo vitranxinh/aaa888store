@@ -160,12 +160,6 @@ export function OrderCreateModal({ branchId }: Props) {
     });
   }, [open, resetForm]);
 
-  useEffect(() => {
-    if (!paymentTouched) {
-      setPaidAmount(totalPayable);
-    }
-  }, [paymentTouched, totalPayable]);
-
   const saveDraft = useCallback(async (manual = false) => {
     const data = buildDraftData();
     if (!hasDraftContent(data)) {
@@ -712,7 +706,7 @@ export function OrderCreateModal({ branchId }: Props) {
                       setPaidAmount(value);
                     }}
                     className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-base"
-                    placeholder={totalPayable ? totalPayable.toString() : "0"}
+                    placeholder="0"
                   />
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
