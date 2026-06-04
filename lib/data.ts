@@ -1,5 +1,4 @@
 import { unstable_cache } from "next/cache";
-import { eachDayOfInterval, format } from "date-fns";
 import type { Prisma } from "@prisma/client";
 import { resolveVietnamDateRange } from "@/lib/date-range";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +11,52 @@ function resolveRange(range: DashboardRange) {
     start: resolved?.gte ?? new Date(),
     end: resolved?.lte ?? new Date()
   };
+}
+
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function getVietnamDateParts(date: Date) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  const parts = formatter.formatToParts(date);
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value ?? 1970),
+    month: Number(parts.find((part) => part.type === "month")?.value ?? 1),
+    day: Number(parts.find((part) => part.type === "day")?.value ?? 1)
+  };
+}
+
+function formatVietnamDateKey(date: Date) {
+  const parts = getVietnamDateParts(date);
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+}
+
+function formatVietnamDateLabel(date: Date) {
+  const parts = getVietnamDateParts(date);
+  return `${pad(parts.day)}/${pad(parts.month)}`;
+}
+
+function enumerateVietnamDays(start: Date, end: Date) {
+  const startParts = getVietnamDateParts(start);
+  const endKey = formatVietnamDateKey(end);
+  const days: Date[] = [];
+  let cursor = new Date(`${startParts.year}-${pad(startParts.month)}-${pad(startParts.day)}T12:00:00+07:00`);
+
+  for (let guard = 0; guard < 370; guard += 1) {
+    days.push(cursor);
+    if (formatVietnamDateKey(cursor) === endKey) break;
+    const next = new Date(cursor);
+    next.setUTCDate(next.getUTCDate() + 1);
+    cursor = next;
+  }
+
+  return days;
 }
 
 async function fetchDashboardData(branchId: string | undefined, range: DashboardRange = "today") {
@@ -114,17 +159,16 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
     invoiceCount
   });
 
-  const intervalDays = eachDayOfInterval({ start, end });
   const revenueByDayMap = chartOrders.reduce<Map<string, number>>((map: Map<string, number>, order: { createdAt: Date; grandTotal: Prisma.Decimal }) => {
-    const dayKey = format(order.createdAt, "yyyy-MM-dd");
+    const dayKey = formatVietnamDateKey(order.createdAt);
     map.set(dayKey, (map.get(dayKey) ?? 0) + Number(order.grandTotal));
     return map;
   }, new Map());
 
-  const revenueByPeriod = intervalDays.map((date: Date) => {
-    const dayKey = format(date, "yyyy-MM-dd");
+  const revenueByPeriod = enumerateVietnamDays(start, end).map((date: Date) => {
+    const dayKey = formatVietnamDateKey(date);
     return {
-      label: format(date, "dd/MM"),
+      label: formatVietnamDateLabel(date),
       revenue: revenueByDayMap.get(dayKey) ?? 0
     };
   });
