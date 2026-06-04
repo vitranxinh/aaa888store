@@ -8,6 +8,7 @@ import { OrderPaymentButton } from "@/components/order-payment-button";
 import { OrderStatusActions } from "@/components/order-status-actions";
 import { getOrderDetail, getOrderPdfMetadata } from "@/lib/order-detail";
 import { requireSession, resolveActorUserId } from "@/lib/auth";
+import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -45,6 +46,11 @@ export default async function OrderDetailPage({
   }
 
   const created = searchParams?.created === "1";
+  const debtBreakdown = calculateInvoiceDebtBreakdown({
+    grandTotal: Number(order.grandTotal),
+    paidAmount: Number(order.paidAmount),
+    debtAmount: Number(order.debtAmount)
+  });
   return (
     <div className="space-y-5 sm:space-y-8">
       <AppHeader
@@ -278,6 +284,12 @@ export default async function OrderDetailPage({
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft sm:p-6">
             <h2 className="text-lg font-bold text-slate-900 sm:text-2xl">Thanh toán</h2>
             <div className="mt-4 space-y-3">
+              {debtBreakdown.oldDebt > 0 ? (
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-sm font-medium text-slate-500 sm:text-base">Nợ cũ</span>
+                  <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(debtBreakdown.oldDebt)}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
                 <span className="text-sm font-medium text-slate-500 sm:text-base">Tổng tiền hàng</span>
                 <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(Number(order.subtotal))}</span>
@@ -290,17 +302,21 @@ export default async function OrderDetailPage({
                 <span className="text-sm font-medium text-slate-500 sm:text-base">Thu khác</span>
                 <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(Number(order.otherCharge))}</span>
               </div>
+              <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200">
+                <span className="text-sm font-medium text-slate-500 sm:text-base">Tổng hóa đơn</span>
+                <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(debtBreakdown.invoiceTotal)}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
+                <span className="text-sm font-medium text-emerald-700 sm:text-base">Tổng cần thanh toán</span>
+                <span className="text-sm font-bold whitespace-nowrap text-emerald-700 sm:text-xl">{formatCurrency(debtBreakdown.totalPayable)}</span>
+              </div>
               <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
                 <span className="text-sm font-medium text-emerald-700 sm:text-base">Đã trả</span>
                 <span className="text-sm font-bold whitespace-nowrap text-emerald-700 sm:text-xl">{formatCurrency(Number(order.paidAmount))}</span>
               </div>
               <div className="flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3">
-                <span className="text-sm font-medium text-red-600 sm:text-base">Còn nợ</span>
-                <span className="text-sm font-bold whitespace-nowrap text-red-600 sm:text-xl">{formatCurrency(Number(order.debtAmount))}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-4 py-3 text-white">
-                <span className="text-sm font-medium sm:text-base">Tổng thanh toán</span>
-                <span className="text-base font-bold whitespace-nowrap sm:text-2xl">{formatCurrency(Number(order.grandTotal))}</span>
+                <span className="text-sm font-medium text-red-600 sm:text-base">Còn nợ sau hóa đơn</span>
+                <span className="text-sm font-bold whitespace-nowrap text-red-600 sm:text-xl">{formatCurrency(debtBreakdown.remainingDebt)}</span>
               </div>
             </div>
           </div>

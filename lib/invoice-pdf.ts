@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { put } from "@vercel/blob";
 import { jsPDF } from "jspdf";
+import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/utils";
 
@@ -76,6 +77,11 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   const tableFontSize = 20;
   const totalFontSize = 20;
   const noteFontSize = 17;
+  const debtBreakdown = calculateInvoiceDebtBreakdown({
+    grandTotal: order.grandTotal,
+    paidAmount: order.paidAmount,
+    debtAmount: order.debtAmount
+  });
 
   const line = (text: string, x = marginX, size = 11, options?: { align?: "left" | "right" | "center"; width?: number }) => {
     doc.setFontSize(size);
@@ -149,14 +155,18 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
     y += 2.5;
   }
 
-  ensureSpace(44);
+  ensureSpace(debtBreakdown.oldDebt > 0 ? 72 : 62);
   sectionTitle("Thanh toán");
+  if (debtBreakdown.oldDebt > 0) {
+    line(`Nợ cũ: ${formatMoney(debtBreakdown.oldDebt)}`, marginX, totalFontSize);
+  }
   line(`Tổng cộng: ${formatMoney(order.subtotal)}`, marginX, totalFontSize);
   line(`Giảm giá: ${formatMoney(order.discountTotal)}`, marginX, totalFontSize);
   line(`Thu khác: ${formatMoney(order.otherCharge)}`, marginX, totalFontSize);
+  line(`Tổng hóa đơn: ${formatMoney(debtBreakdown.invoiceTotal)}`, marginX, totalFontSize);
+  line(`Tổng cần thanh toán: ${formatMoney(debtBreakdown.totalPayable)}`, marginX, totalFontSize);
   line(`Đã trả: ${formatMoney(order.paidAmount)}`, marginX, totalFontSize);
-  line(`Còn nợ: ${formatMoney(order.debtAmount)}`, marginX, totalFontSize);
-  line(`Tổng thanh toán: ${formatMoney(order.grandTotal)}`, marginX, totalFontSize);
+  line(`Còn nợ sau hóa đơn: ${formatMoney(debtBreakdown.remainingDebt)}`, marginX, totalFontSize);
 
   if (order.note) {
     sectionTitle("Ghi chú");

@@ -11,7 +11,7 @@ export default async function InvoicePage({
   searchParams
 }: {
   params: { id: string };
-  searchParams?: { autoprint?: string };
+  searchParams?: { autoprint?: string; showOldDebt?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const actorUserId = await resolveActorUserId(session);
@@ -23,11 +23,12 @@ export default async function InvoicePage({
   if (session.role !== "ADMIN" && order.createdById !== actorUserId) {
     notFound();
   }
+  const showOldDebt = searchParams?.showOldDebt !== "0";
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 print:bg-white print:p-0">
       {searchParams?.autoprint === "1" ? <InvoiceAutoPrint /> : null}
       <div className="invoice-sheet mx-auto max-w-6xl rounded-3xl bg-white p-5 shadow-soft sm:p-6 print:max-w-none print:rounded-none print:p-4 print:shadow-none">
-        <InvoicePrintToolbar code={order.code} />
+        <InvoicePrintToolbar code={order.code} showOldDebt={showOldDebt} />
         <InvoiceDocument
           branchName={order.branch.name}
           branchAddress={order.branch.address || ""}
@@ -59,6 +60,7 @@ export default async function InvoicePage({
             total: Number(item.total)
           }))}
           minRows={4}
+          showOldDebt={showOldDebt}
         />
       </div>
     </main>

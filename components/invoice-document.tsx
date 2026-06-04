@@ -1,6 +1,7 @@
 
 
 import { formatDate } from "@/lib/utils";
+import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 
 function formatInvoiceAmount(value: number) {
   return new Intl.NumberFormat("vi-VN", {
@@ -40,6 +41,7 @@ type InvoiceDocumentProps = {
   items: InvoiceDocumentItem[];
   mode?: "screen" | "pdf";
   minRows?: number;
+  showOldDebt?: boolean;
 };
 
 export function InvoiceDocument({
@@ -64,7 +66,8 @@ export function InvoiceDocument({
   note,
   items,
   mode = "screen",
-  minRows
+  minRows,
+  showOldDebt = true
 }: InvoiceDocumentProps) {
   const rows = [...items];
   const targetRows = minRows ?? (mode === "pdf" ? 0 : 7);
@@ -81,6 +84,8 @@ export function InvoiceDocument({
 
   const isPdf = mode === "pdf";
   const createdAtLabel = formatDate(createdAt);
+  const debtBreakdown = calculateInvoiceDebtBreakdown({ grandTotal, paidAmount, debtAmount });
+  const shouldShowOldDebt = showOldDebt && debtBreakdown.oldDebt > 0;
 
   return (
     <div
@@ -174,6 +179,18 @@ export function InvoiceDocument({
                 )}
               </tbody>
               <tbody>
+                {shouldShowOldDebt ? (
+                  <tr>
+                    <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                      Nợ cũ
+                    </td>
+                    <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
+                      <div className="flex w-full justify-end text-right">
+                        <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtBreakdown.oldDebt)}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
                 <tr>
                   <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Tổng cộng
@@ -206,6 +223,26 @@ export function InvoiceDocument({
                 </tr>
                 <tr>
                   <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                    Tổng hóa đơn
+                  </td>
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
+                    <div className="flex w-full justify-end text-right">
+                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtBreakdown.invoiceTotal)}</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
+                    Tổng cần thanh toán
+                  </td>
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold text-emerald-700 whitespace-nowrap">
+                    <div className="flex w-full justify-end text-right">
+                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtBreakdown.totalPayable)}</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
                     Số tiền đã trả
                   </td>
                   <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold whitespace-nowrap">
@@ -215,22 +252,12 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right font-semibold">
-                    Còn nợ
-                  </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-bold text-red-600 whitespace-nowrap">
-                    <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtAmount)}</span>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
                   <td colSpan={3} className="border border-slate-400 px-1 py-1 text-right text-sm font-bold uppercase">
-                    Tổng thanh toán
+                    Còn nợ sau hóa đơn
                   </td>
-                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-extrabold whitespace-nowrap">
+                  <td className="border border-slate-400 px-1 py-1 text-right text-[20px] font-extrabold text-red-600 whitespace-nowrap">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(grandTotal)}</span>
+                      <span className="min-w-[72px] text-right">{formatInvoiceAmount(debtBreakdown.remainingDebt)}</span>
                     </div>
                   </td>
                 </tr>
@@ -284,6 +311,18 @@ export function InvoiceDocument({
                 )}
               </tbody>
               <tbody>
+                {shouldShowOldDebt ? (
+                  <tr>
+                    <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                      Nợ cũ
+                    </td>
+                    <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
+                      <div className="flex w-full justify-end text-right">
+                        <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtBreakdown.oldDebt)}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
                 <tr>
                   <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Tổng cộng
@@ -316,6 +355,26 @@ export function InvoiceDocument({
                 </tr>
                 <tr>
                   <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                    Tổng hóa đơn
+                  </td>
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
+                    <div className="flex w-full justify-end text-right">
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtBreakdown.invoiceTotal)}</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
+                    Tổng cần thanh toán
+                  </td>
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold text-emerald-700 whitespace-nowrap print:text-[20px]">
+                    <div className="flex w-full justify-end text-right">
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtBreakdown.totalPayable)}</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
                     Số tiền đã trả
                   </td>
                   <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold whitespace-nowrap print:text-[20px]">
@@ -325,22 +384,12 @@ export function InvoiceDocument({
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right font-semibold">
-                    Còn nợ
-                  </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-bold text-red-600 whitespace-nowrap print:text-[20px]">
-                    <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtAmount)}</span>
-                    </div>
-                  </td>
-                </tr>
-                <tr>
                   <td colSpan={4} className="border border-slate-400 px-0.5 py-1 text-right text-sm font-bold uppercase print:text-[20px]">
-                    Tổng thanh toán
+                    Còn nợ sau hóa đơn
                   </td>
-                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-extrabold whitespace-nowrap print:text-[20px]">
+                  <td className="border border-slate-400 px-0.5 py-1 text-right text-[12px] font-extrabold text-red-600 whitespace-nowrap print:text-[20px]">
                     <div className="flex w-full justify-end text-right">
-                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(grandTotal)}</span>
+                      <span className="min-w-[60px] text-right print:min-w-0">{formatInvoiceAmount(debtBreakdown.remainingDebt)}</span>
                     </div>
                   </td>
                 </tr>
