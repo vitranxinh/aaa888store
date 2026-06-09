@@ -164,7 +164,6 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   }
   line(`Tổng cộng: ${formatMoney(order.subtotal)}`, marginX, totalFontSize);
   line(`Thu khác: ${formatMoney(order.otherCharge)}`, marginX, totalFontSize);
-  line(`Tổng hóa đơn: ${formatMoney(debtBreakdown.invoiceTotal)}`, marginX, totalFontSize);
   line(`Tổng cần thanh toán: ${formatMoney(debtBreakdown.totalPayable)}`, marginX, totalFontSize);
   line(`Đã trả: ${formatMoney(order.paidAmount)}`, marginX, totalFontSize);
   line(`Còn nợ sau hóa đơn: ${formatMoney(debtBreakdown.remainingDebt)}`, marginX, totalFontSize);

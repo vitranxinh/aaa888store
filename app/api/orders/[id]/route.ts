@@ -9,7 +9,6 @@ import { posCheckoutSchema } from "@/lib/validations";
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
-    const actorUserId = await resolveActorUserId(session);
     const body = await request.json();
     const parsed = posCheckoutSchema.safeParse(body);
 
@@ -26,13 +25,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
     }
 
-    if (session.role !== "ADMIN" && existing.createdById !== actorUserId) {
-      return NextResponse.json({ error: "Bạn chỉ được sửa hóa đơn do mình tạo" }, { status: 403 });
-    }
-
     const updated = await updateOrderFromPayload(params.id, {
       ...parsed.data,
-      createdById: actorUserId
+      createdById: existing.createdById
     });
 
     return NextResponse.json({ ok: true, order: updated });
@@ -78,10 +73,6 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
 
     if (session.branchId && order.branchId !== session.branchId) {
       return NextResponse.json({ error: "Không tìm thấy hóa đơn" }, { status: 404 });
-    }
-
-    if (session.role !== "ADMIN" && order.createdById !== actorUserId) {
-      return NextResponse.json({ error: "Bạn chỉ được yêu cầu hủy hóa đơn do mình tạo" }, { status: 403 });
     }
 
     if (session.role === "ADMIN") {

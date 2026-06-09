@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { InvoiceAutoPrint } from "@/components/invoice-auto-print";
 import { InvoiceDocument } from "@/components/invoice-document";
 import { InvoicePrintToolbar } from "@/components/invoice-print-toolbar";
-import { requireSession, resolveActorUserId } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { getOrderDetail } from "@/lib/order-detail";
 import { formatDate } from "@/lib/utils";
 
@@ -14,13 +14,9 @@ export default async function InvoicePage({
   searchParams?: { autoprint?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
-  const actorUserId = await resolveActorUserId(session);
   const order = await getOrderDetail(params.id);
 
   if (!order || (session.branchId && order.branchId !== session.branchId)) {
-    notFound();
-  }
-  if (session.role !== "ADMIN" && order.createdById !== actorUserId) {
     notFound();
   }
   return (

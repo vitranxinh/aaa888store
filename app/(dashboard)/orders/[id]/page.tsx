@@ -7,7 +7,7 @@ import { OrderEditModal } from "@/components/order-edit-modal";
 import { OrderPaymentButton } from "@/components/order-payment-button";
 import { OrderStatusActions } from "@/components/order-status-actions";
 import { getOrderDetail, getOrderPdfMetadata } from "@/lib/order-detail";
-import { requireSession, resolveActorUserId } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -21,7 +21,6 @@ export default async function OrderDetailPage({
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
-  const actorUserId = await resolveActorUserId(session);
   const [order, pdfMeta, deleteRequest] = await Promise.all([
     getOrderDetail(params.id),
     getOrderPdfMetadata(params.id),
@@ -34,10 +33,6 @@ export default async function OrderDetailPage({
   ]);
 
   if (!order || (session.branchId && order.branchId !== session.branchId)) {
-    notFound();
-  }
-
-  if (session.role !== "ADMIN" && order.createdById !== actorUserId) {
     notFound();
   }
 
@@ -299,10 +294,6 @@ export default async function OrderDetailPage({
               <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
                 <span className="text-sm font-medium text-slate-500 sm:text-base">Thu khác</span>
                 <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(Number(order.otherCharge))}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200">
-                <span className="text-sm font-medium text-slate-500 sm:text-base">Tổng hóa đơn</span>
-                <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(debtBreakdown.invoiceTotal)}</span>
               </div>
               <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
                 <span className="text-sm font-medium text-emerald-700 sm:text-base">Tổng cần thanh toán</span>
