@@ -295,10 +295,12 @@ export default async function OrderDetailPage({
                 <span className="text-sm font-medium text-slate-500 sm:text-base">Thu khác</span>
                 <span className="text-sm font-bold whitespace-nowrap text-slate-900 sm:text-xl">{formatCurrency(Number(order.otherCharge))}</span>
               </div>
-              <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
-                <span className="text-sm font-medium text-emerald-700 sm:text-base">Tổng cần thanh toán</span>
-                <span className="text-sm font-bold whitespace-nowrap text-emerald-700 sm:text-xl">{formatCurrency(debtBreakdown.totalPayable)}</span>
-              </div>
+              {debtBreakdown.oldDebt > 0 ? (
+                <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
+                  <span className="text-sm font-medium text-emerald-700 sm:text-base">Tổng cần thanh toán</span>
+                  <span className="text-sm font-bold whitespace-nowrap text-emerald-700 sm:text-xl">{formatCurrency(debtBreakdown.totalPayable)}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3">
                 <span className="text-sm font-medium text-emerald-700 sm:text-base">Đã trả</span>
                 <span className="text-sm font-bold whitespace-nowrap text-emerald-700 sm:text-xl">{formatCurrency(Number(order.paidAmount))}</span>
