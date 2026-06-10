@@ -159,13 +159,11 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
 
   ensureSpace(debtBreakdown.oldDebt > 0 ? 72 : 62);
   sectionTitle("Thanh toán");
-  if (debtBreakdown.oldDebt > 0) {
-    line(`Nợ cũ: ${formatMoney(debtBreakdown.oldDebt)}`, marginX, totalFontSize);
-  }
   line(`Tổng cộng: ${formatMoney(order.subtotal)}`, marginX, totalFontSize);
   line(`Thu khác: ${formatMoney(order.otherCharge)}`, marginX, totalFontSize);
   if (debtBreakdown.oldDebt > 0) {
     line(`Tổng cần thanh toán: ${formatMoney(debtBreakdown.totalPayable)}`, marginX, totalFontSize);
+    line(`Nợ cũ: ${formatMoney(debtBreakdown.oldDebt)}`, marginX, totalFontSize);
   }
   line(`Đã trả: ${formatMoney(order.paidAmount)}`, marginX, totalFontSize);
   line(`Còn nợ sau hóa đơn: ${formatMoney(debtBreakdown.remainingDebt)}`, marginX, totalFontSize);
