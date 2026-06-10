@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/"
+};
+
 function getRequestOrigin(request: Request) {
   const host =
     request.headers.get("x-forwarded-host") ??
@@ -17,6 +24,9 @@ function getRequestOrigin(request: Request) {
 
 export async function POST(request: Request) {
   const response = NextResponse.redirect(new URL("/login", getRequestOrigin(request)));
-  response.cookies.delete("soban_session");
+  response.cookies.set("soban_session", "", {
+    ...COOKIE_OPTIONS,
+    maxAge: 0
+  });
   return response;
 }

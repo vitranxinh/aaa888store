@@ -7,6 +7,12 @@ import type { UserRole } from "@prisma/client";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? "dev-secret");
 const COOKIE_NAME = "soban_session";
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/"
+};
 
 export type SessionUser = {
   id: string;
@@ -29,16 +35,16 @@ export async function createSession(user: SessionUser) {
     .sign(JWT_SECRET);
 
   cookies().set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: false,
+    ...COOKIE_OPTIONS,
     maxAge,
-    path: "/"
   });
 }
 
 export async function destroySession() {
-  cookies().delete(COOKIE_NAME);
+  cookies().set(COOKIE_NAME, "", {
+    ...COOKIE_OPTIONS,
+    maxAge: 0
+  });
 }
 
 export async function getSession() {
@@ -47,7 +53,30 @@ export async function getSession() {
 
   try {
     const payload = await jwtVerify(token, JWT_SECRET);
-    return payload.payload as unknown as SessionUser;
+    const session = payload.payload as Partial<SessionUser>;
+    const sessionId = typeof session.id === "string" ? session.id : "";
+    const sessionEmail = typeof session.email === "string" ? session.email : "";
+
+    if (!sessionId && !sessionEmail) return null;
+
+    const user = sessionId && !sessionId.startsWith("demo-")
+      ? await prisma.user.findFirst({
+          where: {
+            id: sessionId,
+            email: sessionEmail,
+            isActive: true
+          },
+          select: { id: true, email: true, name: true, role: true, branchId: true }
+        })
+      : await prisma.user.findFirst({
+          where: {
+            email: sessionEmail,
+            isActive: true
+          },
+          select: { id: true, email: true, name: true, role: true, branchId: true }
+        });
+
+    return user;
   } catch {
     return null;
   }
@@ -76,100 +105,27 @@ export async function requireApiSession(roles?: UserRole[]) {
 }
 
 export async function resolveActorUserId(session: SessionUser) {
-  const user =
-    (await prisma.user.findUnique({
-      where: { email: session.email },
-      select: { id: true }
-    })) ??
-    (await prisma.user.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true }
-    }));
+  const user = await prisma.user.findFirst({
+    where: {
+      id: session.id,
+      email: session.email,
+      isActive: true
+    },
+    select: { id: true }
+  });
 
   if (!user) {
-    throw new Error("Chưa có người dùng hợp lệ trong hệ thống");
+    throw new Error("Phiên đăng nhập không khớp tài khoản hợp lệ. Vui lòng đăng nhập lại.");
   }
 
   return user.id;
 }
 
 export async function authenticate(email: string, password: string) {
-  const defaultBranchId =
-    (await prisma.branch.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true }
-    }))?.id ?? null;
-
-  const demoUsers: Record<
-    string,
-    { id: string; email: string; name: string; role: UserRole; branchId: string | null }
-  > = {
-    "huy@gbb.vn": {
-      id: "demo-admin",
-      email: "huy@gbb.vn",
-      name: "Huy",
-      role: "ADMIN",
-      branchId: defaultBranchId
-    },
-    "ha@gbb.vn": {
-      id: "demo-admin-2",
-      email: "ha@gbb.vn",
-      name: "Hà",
-      role: "ADMIN",
-      branchId: defaultBranchId
-    },
-    "nam@gbb.vn": {
-      id: "demo-manager",
-      email: "nam@gbb.vn",
-      name: "Nam",
-      role: "CASHIER",
-      branchId: defaultBranchId
-    },
-    "bich@gbb.vn": {
-      id: "demo-cashier",
-      email: "bich@gbb.vn",
-      name: "Bich",
-      role: "CASHIER",
-      branchId: defaultBranchId
-    },
-    "dan@gbb.vn": {
-      id: "demo-cashier-dan",
-      email: "dan@gbb.vn",
-      name: "Dan",
-      role: "CASHIER",
-      branchId: defaultBranchId
-    }
-  };
-
-  if (demoUsers[email] && (
-    (email === "huy@gbb.vn" && password === "huy2005") ||
-    (email === "ha@gbb.vn" && password === "ha2005") ||
-    (email === "nam@gbb.vn" && password === "nam") ||
-    (email === "bich@gbb.vn" && password === "bich") ||
-    (email === "dan@gbb.vn" && password === "dan")
-  )) {
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, email: true, name: true, role: true, branchId: true }
-    });
-
-    if (user) {
-      return {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        branchId: user.branchId
-      } satisfies SessionUser;
-    }
-
-    return demoUsers[email];
-  }
+  const normalizedEmail = email.trim().toLowerCase();
 
   const user = await prisma.user.findUnique({
-    where: { email }
+    where: { email: normalizedEmail }
   });
 
   if (!user || !user.isActive) return null;

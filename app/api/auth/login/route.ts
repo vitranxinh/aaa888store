@@ -1,5 +1,6 @@
 import { SignJWT } from "jose";
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations";
 
@@ -7,6 +8,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET ?? "dev-secret");
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/"
+};
 
 function getRequestOrigin(request: Request) {
   const host =
@@ -37,15 +44,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Dữ liệu đăng nhập không hợp lệ" }, { status: 400 });
     }
 
-    let user: any = null;
+    let user: {
+      id: string;
+      email: string;
+      name: string;
+      role: "ADMIN" | "MANAGER" | "CASHIER";
+      branchId: string | null;
+    } | null = null;
+    const email = parsed.data.email.trim().toLowerCase();
 
-    // 1. Check real user in database first
     const realUser = await prisma.user.findUnique({
-      where: { email: parsed.data.email }
+      where: { email }
     });
 
-    if (realUser) {
-      const bcrypt = require("bcryptjs");
+    if (realUser?.isActive) {
       const isValidPassword = await bcrypt.compare(parsed.data.password, realUser.passwordHash);
       if (isValidPassword) {
         user = {
@@ -57,38 +69,6 @@ export async function POST(request: Request) {
         };
       }
     }
-
-    // 2. Fallback to demo users if real user not found or password invalid
-    if (!user) {
-      const defaultBranchId =
-        (await prisma.branch.findFirst({
-          where: { isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: { id: true }
-        }))?.id ?? null;
-
-      const demoUsers: Record<
-        string,
-        { id: string; email: string; name: string; role: "ADMIN" | "MANAGER" | "CASHIER"; branchId: string | null }
-      > = {
-        "huy@gbb.vn": { id: "demo-admin", email: "huy@gbb.vn", name: "Huy", role: "ADMIN", branchId: defaultBranchId },
-        "ha@gbb.vn": { id: "demo-admin-2", email: "ha@gbb.vn", name: "Hà", role: "ADMIN", branchId: defaultBranchId },
-        "nam@gbb.vn": { id: "demo-manager", email: "nam@gbb.vn", name: "Nam", role: "CASHIER", branchId: defaultBranchId },
-        "bich@gbb.vn": { id: "demo-cashier", email: "bich@gbb.vn", name: "Bich", role: "CASHIER", branchId: defaultBranchId },
-        "dan@gbb.vn": { id: "demo-cashier-dan", email: "dan@gbb.vn", name: "Dan", role: "CASHIER", branchId: defaultBranchId }
-      };
-
-      if (
-        (parsed.data.email === "huy@gbb.vn" && parsed.data.password === "huy2005") ||
-        (parsed.data.email === "ha@gbb.vn" && parsed.data.password === "ha2005") ||
-        (parsed.data.email === "nam@gbb.vn" && parsed.data.password === "nam") ||
-        (parsed.data.email === "bich@gbb.vn" && parsed.data.password === "bich") ||
-        (parsed.data.email === "dan@gbb.vn" && parsed.data.password === "dan")
-      ) {
-        user = demoUsers[parsed.data.email];
-      }
-    }
-
 
     if (!user) {
       if (!isJson) {
@@ -112,10 +92,8 @@ export async function POST(request: Request) {
       ? NextResponse.json({ ok: true, user })
       : NextResponse.redirect(new URL(callbackUrl || "/dashboard", getRequestOrigin(request)), 303);
     response.cookies.set("soban_session", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: false,
-      path: "/"
+      ...COOKIE_OPTIONS,
+      maxAge: 60 * 60 * 24 * 7
     });
 
     return response;
