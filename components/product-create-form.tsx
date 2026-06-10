@@ -31,6 +31,7 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
   const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [brandId, setBrandId] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
   const [initialStockQuantity, setInitialStockQuantity] = useState(0);
   const pushToast = useToastStore((state) => state.push);
 
@@ -77,6 +78,7 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
     setImagePreview("");
     setCategoryId("");
     setBrandId("");
+    setExpiryDate("");
     setInitialStockQuantity(0);
   }
 
@@ -152,6 +154,7 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
           imageUrl: imageUrl.trim(),
           categoryId,
           brandId,
+          expiryDate,
           initialStockQuantity
         })
       });
@@ -214,6 +217,12 @@ export function ProductCreateForm({ categories = [], brands = [] }: Props) {
           <label className="grid gap-1">
             <span className="text-sm font-semibold text-slate-700">Ảnh sản phẩm URL</span>
             <Input placeholder="Ảnh sản phẩm URL" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} />
+          </label>
+
+          <label className="grid gap-1">
+            <span className="text-sm font-semibold text-slate-700">Hạn sử dụng</span>
+            <span className="text-xs text-slate-500">Không bắt buộc điền</span>
+            <Input type="date" value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)} />
           </label>
 
           <label className="grid gap-1">

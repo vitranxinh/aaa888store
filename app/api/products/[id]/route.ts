@@ -66,6 +66,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
           imageUrl: parsed.data.imageUrl || null,
           categoryId: parsed.data.categoryId || null,
           brandId: parsed.data.brandId || null,
+          expiryDate: parsed.data.expiryDate ? new Date(parsed.data.expiryDate) : null,
           sellingPrice: parsed.data.sellingPrice
         }
       });

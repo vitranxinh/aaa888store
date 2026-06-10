@@ -142,6 +142,7 @@ model Product {
   lowStockAlert   Int                    @default(10)
   status          ProductStatus          @default(ACTIVE)
   description     String?
+  expiryDate      DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   category        Category?              @relation(fields: [categoryId], references: [id])

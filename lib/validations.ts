@@ -31,6 +31,7 @@ const baseProductFieldsSchema = z.object({
   imageUrl: z.string().optional().or(z.literal("")),
   categoryId: z.string().optional().or(z.literal("")),
   brandId: z.string().optional().or(z.literal("")),
+  expiryDate: z.string().optional().or(z.literal("")),
   sellingPrice: z.number().nonnegative()
 });
 

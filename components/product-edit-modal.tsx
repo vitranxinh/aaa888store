@@ -21,6 +21,7 @@ type Props = {
     imageUrl: string | null;
     categoryId: string | null;
     brandId: string | null;
+    expiryDate: string | null;
     sellingPrice: number;
   };
   categories?: { id: string; name: string }[];
@@ -61,6 +62,7 @@ export function ProductEditModal({
       imageUrl: product.imageUrl || "",
       categoryId: product.categoryId || "",
       brandId: product.brandId || "",
+      expiryDate: product.expiryDate ? product.expiryDate.slice(0, 10) : "",
       sellingPrice: product.sellingPrice,
       stockAdjustmentQuantity: 0
     }),
@@ -266,6 +268,13 @@ export function ProductEditModal({
                   </div>
 
                   <Input placeholder="Ảnh sản phẩm URL" {...form.register("imageUrl")} className="h-14 text-xl" />
+
+                  <div className="grid gap-1">
+                    <span className="text-sm font-semibold text-slate-700">Hạn sử dụng</span>
+                    <span className="text-xs text-slate-500">Không bắt buộc điền</span>
+                    <Input type="date" {...form.register("expiryDate")} className="h-14 text-xl" />
+                  </div>
+
                   <input
                     type="file"
                     accept="image/*"

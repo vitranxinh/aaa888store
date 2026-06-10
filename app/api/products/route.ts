@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       imageUrl: body.imageUrl || "",
       categoryId: body.categoryId || "",
       brandId: body.brandId || "",
+      expiryDate: body.expiryDate || "",
       sellingPrice: typeof body.sellingPrice === "number" ? body.sellingPrice : Number(body.sellingPrice ?? 0),
       initialStockQuantity: typeof body.initialStockQuantity === "number" ? body.initialStockQuantity : Number(body.initialStockQuantity ?? 0)
     };
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
           imageUrl: parsed.data.imageUrl || null,
           categoryId: parsed.data.categoryId || null,
           brandId: parsed.data.brandId || null,
+          expiryDate: parsed.data.expiryDate ? new Date(parsed.data.expiryDate) : null,
           costPrice: 0,
           sellingPrice: parsed.data.sellingPrice,
           lowStockAlert: 10,

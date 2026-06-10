@@ -93,6 +93,7 @@ const getCachedProductsPageData = unstable_cache(
         lowStockAlert: product.lowStockAlert,
         status: product.status,
         description: product.description,
+        expiryDate: product.expiryDate ? product.expiryDate.toISOString() : null,
         categoryName: product.category?.name ?? null,
         quantity,
         hasRelatedHistory
