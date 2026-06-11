@@ -26,6 +26,7 @@ type Props = {
     groupId: string | null;
     openingDebt: number;
     currentDebt: number;
+    isActive: boolean;
   };
   groups: { id: string; name: string }[];
 };
@@ -82,22 +83,32 @@ export function CustomerEditModal({ customer, groups }: Props) {
     });
   }
 
-  async function handleDelete() {
-    const confirmed = window.confirm(`Xóa khách hàng "${customer.name}"?`);
+  async function handleToggleActive() {
+    const nextIsActive = !customer.isActive;
+    const confirmed = window.confirm(
+      nextIsActive
+        ? `Hiện lại khách hàng "${customer.name}" trong danh sách sử dụng?`
+        : `Ẩn khách hàng "${customer.name}" khỏi danh sách bán và tìm kiếm mới? Lịch sử hóa đơn/công nợ vẫn được giữ.`
+    );
     if (!confirmed) return;
 
     startTransition(async () => {
       const response = await fetch(`/api/customers/${customer.id}`, {
-        method: "DELETE",
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: nextIsActive })
       });
       const payload = await response.json();
 
       if (!response.ok) {
-        pushToast({ title: "Không thể xóa khách hàng", description: payload.error, variant: "error" });
+        pushToast({ title: "Không thể cập nhật khách hàng", description: payload.error, variant: "error" });
         return;
       }
 
-      pushToast({ title: "Đã xóa khách hàng", description: payload.name });
+      pushToast({
+        title: nextIsActive ? "Đã hiện lại khách hàng" : "Đã ẩn khách hàng",
+        description: payload.name
+      });
       setOpen(false);
       router.refresh();
     });
@@ -167,8 +178,14 @@ export function CustomerEditModal({ customer, groups }: Props) {
                 {...form.register("note")}
               />
               <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white pt-4">
-                <Button type="button" variant="destructive" className="h-14 text-xl" loading={isPending} onClick={handleDelete}>
-                  Xóa khách hàng
+                <Button
+                  type="button"
+                  variant={customer.isActive ? "destructive" : "outline"}
+                  className="h-14 text-xl"
+                  loading={isPending}
+                  onClick={handleToggleActive}
+                >
+                  {customer.isActive ? "Ẩn khỏi danh sách" : "Hiện lại khách"}
                 </Button>
                 <Button className="h-14 text-2xl" loading={isPending}>
                   Lưu thay đổi

@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     const customers = await prisma.customer.findMany({
       where: {
         NOT: { code: "KH000000" },
+        isActive: true,
         OR: [
           { name: { contains: query, mode: "insensitive" } },
           { phone: { contains: query, mode: "insensitive" } },
@@ -73,7 +74,8 @@ export async function GET(request: Request) {
     if (rankedCustomers.length < limit) {
       const fallbackCustomers = await prisma.customer.findMany({
         where: {
-          NOT: { code: "KH000000" }
+          NOT: { code: "KH000000" },
+          isActive: true
         },
         select: {
           id: true,

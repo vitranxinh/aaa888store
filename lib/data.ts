@@ -64,7 +64,8 @@ async function fetchDashboardData(branchId: string | undefined, range: Dashboard
   const { start, end } = resolveRange(range);
   const branchWhere = branchId ? { branchId } : {};
   const customerWhere = {
-    NOT: { code: "KH000000" }
+    NOT: { code: "KH000000" },
+    isActive: true
   };
   const summaryStartedAt = Date.now();
   let customerCount = 0;
@@ -206,7 +207,7 @@ export async function getDashboardData(branchId: string | undefined, range: Dash
 async function fetchPosData(branchId?: string) {
   const [branches, customers, products, promotions] = await Promise.all([
     prisma.branch.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
-    prisma.customer.findMany({ orderBy: { updatedAt: "desc" }, take: 200 }),
+    prisma.customer.findMany({ where: { isActive: true }, orderBy: { updatedAt: "desc" }, take: 200 }),
     prisma.product.findMany({
       where: { status: "ACTIVE" },
       include: {

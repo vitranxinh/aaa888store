@@ -72,21 +72,42 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
+export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  try {
+    await requireApiSession(["ADMIN", "MANAGER"]);
+    const body = await request.json();
+    const isActive = Boolean(body?.isActive);
+
+    const customer = await prisma.customer.update({
+      where: { id: params.id },
+      data: { isActive },
+      select: { id: true, name: true, isActive: true }
+    });
+
+    revalidateTag("customers-page");
+    revalidateTag("pos-data");
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${params.id}`);
+    revalidatePath("/pos");
+
+    return NextResponse.json(customer);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Không thể cập nhật trạng thái khách hàng" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    await requireApiSession(["ADMIN", "MANAGER"]);
 
     const existing = await prisma.customer.findUnique({
       where: { id: params.id },
       select: {
         id: true,
-        name: true,
-        _count: {
-          select: {
-            orders: true,
-            cashTxns: true,
-          },
-        },
+        name: true
       },
     });
 
@@ -94,15 +115,9 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "Không tìm thấy khách hàng" }, { status: 404 });
     }
 
-    if (existing._count.orders > 0 || existing._count.cashTxns > 0) {
-      return NextResponse.json(
-        { error: "Khách hàng đã phát sinh hóa đơn hoặc thu/chi, không thể xóa." },
-        { status: 400 }
-      );
-    }
-
-    await prisma.customer.delete({
+    await prisma.customer.update({
       where: { id: params.id },
+      data: { isActive: false }
     });
 
     revalidateTag("customers-page");
@@ -110,10 +125,10 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     revalidatePath("/customers");
     revalidatePath("/pos");
 
-    return NextResponse.json({ ok: true, name: existing.name });
+    return NextResponse.json({ ok: true, name: existing.name, isActive: false });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Không thể xóa khách hàng" },
+      { error: error instanceof Error ? error.message : "Không thể ẩn khách hàng" },
       { status: 500 }
     );
   }

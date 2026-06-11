@@ -377,7 +377,16 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
 export async function createOrderFromPayload(payload: OrderPayload): Promise<{ order: { id: string; code: string }; timing: CreateOrderTiming }> {
   const steps: PerfSteps = {};
   const totalStartedAt = Date.now();
-  const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
+  const [items, activeCustomer] = await Promise.all([
+    measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items)),
+    prisma.customer.findFirst({
+      where: { id: payload.customerId, isActive: true },
+      select: { id: true }
+    })
+  ]);
+  if (!activeCustomer) {
+    throw new Error("Khách hàng đã ẩn khỏi danh sách bán, không thể tạo hóa đơn mới.");
+  }
   const derived = calculateOrderDerivedState(items, payload);
   const invoiceCreatedAt = parseVietnamDateTimeLocal(payload.invoiceDate);
   const transactionQueuedAt = Date.now();

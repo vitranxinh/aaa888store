@@ -258,6 +258,7 @@ model Customer {
   receivableDebt  Decimal                @default(0) @db.Decimal(14, 2)
   totalSpend      Decimal                @default(0) @db.Decimal(14, 2)
   groupId         String?
+  isActive        Boolean                @default(true)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   group           CustomerGroup?         @relation(fields: [groupId], references: [id])
@@ -268,6 +269,7 @@ model Customer {
   @@index([updatedAt])
   @@index([groupId])
   @@index([name])
+  @@index([isActive])
 }
 
 model Supplier {

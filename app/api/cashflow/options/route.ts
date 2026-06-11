@@ -46,13 +46,14 @@ export async function GET(request: Request) {
       const customers = await prisma.customer.findMany({
         where: query
           ? {
+              isActive: true,
               OR: [
                 { name: { contains: query, mode: "insensitive" } },
                 { phone: { contains: query, mode: "insensitive" } },
                 { code: { contains: query, mode: "insensitive" } }
               ]
             }
-          : undefined,
+          : { isActive: true },
         select: { id: true, name: true, code: true, phone: true },
         orderBy: { updatedAt: "desc" },
         take: 80

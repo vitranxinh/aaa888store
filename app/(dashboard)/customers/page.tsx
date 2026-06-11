@@ -23,6 +23,7 @@ function renderBalanceLabel(balance: number) {
 async function CustomerDebtList({
   q,
   sort,
+  status,
   page,
   pageSize,
   canManageCustomers,
@@ -31,6 +32,7 @@ async function CustomerDebtList({
 }: {
   q: string;
   sort: "default" | "debt_desc" | "debt_asc";
+  status: "active" | "hidden" | "all";
   page: number;
   pageSize: number;
   canManageCustomers: boolean;
@@ -41,7 +43,8 @@ async function CustomerDebtList({
     q,
     page,
     pageSize,
-    sort
+    sort,
+    status
   });
 
   return (
@@ -60,6 +63,11 @@ async function CustomerDebtList({
                   <Link prefetch={false} href={`/customers/${customer.id}`} className="mt-1 block text-[1.2rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:underline">
                     {customer.name}
                   </Link>
+                  {!customer.isActive ? (
+                    <span className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                      Đã ẩn khỏi danh sách bán
+                    </span>
+                  ) : null}
                 </div>
                 {canManageCustomers ? (
                   <CustomerEditModal
@@ -73,7 +81,8 @@ async function CustomerDebtList({
                       note: customer.note,
                       groupId: customer.groupId,
                       openingDebt: customer.openingDebt,
-                      currentDebt: customer.receivableDebt
+                      currentDebt: customer.receivableDebt,
+                      isActive: customer.isActive
                     }}
                     groups={groupOptions}
                   />
@@ -159,6 +168,11 @@ async function CustomerDebtList({
                     <Link prefetch={false} href={`/customers/${customer.id}`} className="mt-1 block font-semibold text-slate-900 underline-offset-2 hover:underline">
                       {customer.name}
                     </Link>
+                    {!customer.isActive ? (
+                      <span className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                        Đã ẩn
+                      </span>
+                    ) : null}
                   </td>
                   {canSeeCustomerPrivateFields ? <td className="break-words px-3 py-3 sm:px-6 sm:py-4">{displayCustomerPhone(customer.phone) || "-"}</td> : null}
                   <td
@@ -197,7 +211,8 @@ async function CustomerDebtList({
                           note: customer.note,
                           groupId: customer.groupId,
                           openingDebt: customer.openingDebt,
-                          currentDebt: customer.receivableDebt
+                          currentDebt: customer.receivableDebt,
+                          isActive: customer.isActive
                         }}
                         groups={groupOptions}
                       />
@@ -210,7 +225,7 @@ async function CustomerDebtList({
         </table>
       </div>
 
-      <ServerPagination pathname="/customers" query={{ q, debt: sort }} page={page} pageSize={pageSize} hasNext={hasNext} />
+      <ServerPagination pathname="/customers" query={{ q, debt: sort, status }} page={page} pageSize={pageSize} hasNext={hasNext} />
     </>
   );
 }
@@ -232,7 +247,7 @@ function CustomerDebtListFallback() {
 export default async function CustomersPage({
   searchParams
 }: {
-  searchParams?: { q?: string; debt?: string; page?: string };
+  searchParams?: { q?: string; debt?: string; status?: string; page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const canCreateCustomers = true;
@@ -240,6 +255,8 @@ export default async function CustomersPage({
   const canSeeCustomerPrivateFields = session.role !== "CASHIER";
   const q = searchParams?.q ?? "";
   const sort = ((searchParams?.debt ?? "default") as "default" | "debt_desc" | "debt_asc");
+  const statusParam = searchParams?.status;
+  const status = statusParam === "hidden" || statusParam === "all" ? statusParam : "active";
   const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
   const pageSize = 20;
 
@@ -270,6 +287,15 @@ export default async function CustomersPage({
             <option value="debt_desc">Nợ cao đến thấp</option>
             <option value="debt_asc">Nợ thấp đến cao</option>
           </select>
+          <select
+            name="status"
+            defaultValue={status}
+            className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-soft outline-none sm:h-14 sm:text-lg"
+          >
+            <option value="active">Đang dùng</option>
+            <option value="hidden">Đã ẩn</option>
+            <option value="all">Tất cả</option>
+          </select>
           <button className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-soft sm:h-14 sm:px-5 sm:text-lg">
             Lọc
           </button>
@@ -285,6 +311,7 @@ export default async function CustomersPage({
         <CustomerDebtList
           q={q}
           sort={sort}
+          status={status}
           page={page}
           pageSize={pageSize}
           canManageCustomers={canManageCustomers}

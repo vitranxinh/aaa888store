@@ -9,6 +9,7 @@ export async function GET() {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const customers = await prisma.customer.findMany({
+      where: { isActive: true },
       include: { group: true },
       orderBy: { updatedAt: "desc" },
     });

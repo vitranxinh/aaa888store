@@ -13,6 +13,7 @@ export type CustomerDebtOverviewItem = {
   address: string | null;
   note: string | null;
   groupId: string | null;
+  isActive: boolean;
   openingDebt: number;
   receivableDebt: number;
   unpaidInvoiceCount: number;
@@ -143,16 +144,19 @@ export async function getAllCustomers({
   q,
   page,
   pageSize,
-  sort
+  sort,
+  status = "active"
 }: {
   q: string;
   page: number;
   pageSize: number;
   sort: "default" | "debt_desc" | "debt_asc";
+  status?: "all" | "active" | "hidden";
 }) {
   const startedAt = Date.now();
   const where: Prisma.CustomerWhereInput = {
     NOT: { code: "KH000000" },
+    ...(status === "active" ? { isActive: true } : status === "hidden" ? { isActive: false } : {}),
     ...(q
       ? {
           OR: [
@@ -182,6 +186,7 @@ export async function getAllCustomers({
       address: true,
       note: true,
       groupId: true,
+      isActive: true,
       openingDebt: true,
       receivableDebt: true
     },

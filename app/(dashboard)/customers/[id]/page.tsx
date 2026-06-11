@@ -97,7 +97,8 @@ export default async function CustomerDetailPage({
               note: customer.note,
               groupId: customer.groupId,
               openingDebt: Number(customer.openingDebt),
-              currentDebt: Number(customer.receivableDebt)
+              currentDebt: Number(customer.receivableDebt),
+              isActive: customer.isActive
             }}
             groups={groupOptions}
           />
