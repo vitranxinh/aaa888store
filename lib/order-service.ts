@@ -9,6 +9,7 @@ type OrderPayload = {
   branchId: string;
   customerId: string;
   createdById: string;
+  invoiceDate?: string;
   paymentMethod: PaymentMethod;
   paidAmount: number;
   orderDiscount: number;
@@ -78,6 +79,28 @@ async function loadOrderPayloadItems(items: OrderPayload["items"]) {
     if (product.status !== "ACTIVE") throw new Error(`Sản phẩm ${product.name} đã ẩn khỏi danh sách bán`);
     return { ...item, product };
   });
+}
+
+function parseVietnamDateTimeLocal(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed);
+  if (!match) {
+    const date = new Date(trimmed);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const [, year, month, day, hour, minute, second = "0"] = match;
+  const vietnamOffsetHours = 7;
+  const date = new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour) - vietnamOffsetHours,
+    Number(minute),
+    Number(second)
+  ));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function aggregateQuantityByProduct(items: Array<{ product: { id: string }; quantity: number }>) {
@@ -282,11 +305,14 @@ async function applyOrderEffects(
     `);
   }
   if (derived.paidAmount > 0) {
+    const invoiceCreatedAt = parseVietnamDateTimeLocal(payload.invoiceDate);
     writeTasks.push(tx.cashTransaction.create({
       data: {
         code: receiptCode ?? "", branchId: order.branchId, type: CashTxnType.RECEIPT,
         amount: new Prisma.Decimal(derived.paidAmount), customerId: payload.customerId,
-        orderId: order.id, createdById: order.createdById, note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`
+        orderId: order.id, createdById: order.createdById,
+        note: payload.note ?? `Thu tiền cho hóa đơn ${order.code}`,
+        ...(invoiceCreatedAt ? { createdAt: invoiceCreatedAt } : {})
       }
     }));
   }
@@ -304,6 +330,10 @@ function nextOrderRevisionCode(currentCode: string) {
 export async function updateOrderFromPayload(orderId: string, payload: OrderPayload) {
   const existing = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!existing) throw new Error("Không tìm thấy hóa đơn");
+  const payloadWithInvoiceDate: OrderPayload = {
+    ...payload,
+    invoiceDate: payload.invoiceDate || existing.createdAt.toISOString()
+  };
   const [items, useCodeSequence] = await Promise.all([loadOrderPayloadItems(payload.items), isCodeSequenceTableAvailable()]);
   const derived = calculateOrderDerivedState(items, payload);
   const nextCodeVersion = nextOrderRevisionCode(existing.code);
@@ -339,7 +369,7 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
         }
       }
     });
-    await applyOrderEffects(tx, { id: orderId, code: nextCodeVersion, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, receiptCode);
+    await applyOrderEffects(tx, { id: orderId, code: nextCodeVersion, branchId: payload.branchId, createdById: payload.createdById }, payloadWithInvoiceDate, items, derived, inventories, batches, receiptCode);
     return { id: orderId, code: nextCodeVersion };
   }, { maxWait: 20000, timeout: 60000 });
 }
@@ -349,6 +379,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
   const totalStartedAt = Date.now();
   const items = await measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items));
   const derived = calculateOrderDerivedState(items, payload);
+  const invoiceCreatedAt = parseVietnamDateTimeLocal(payload.invoiceDate);
   const transactionQueuedAt = Date.now();
   let transactionStartedAt = 0;
   const { order, transactionSteps } = (await measureStep(steps, "transactionMs", () =>
@@ -374,6 +405,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
         data: {
           id: orderId, code: realCode, branchId: payload.branchId, customerId: payload.customerId,
           createdById: payload.createdById, status: derived.finalStatus,
+          ...(invoiceCreatedAt ? { createdAt: invoiceCreatedAt } : {}),
           subtotal: new Prisma.Decimal(derived.totals.subtotal),
           discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
           otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),

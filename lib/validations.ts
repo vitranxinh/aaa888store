@@ -16,6 +16,7 @@ export const posItemSchema = z.object({
 export const posCheckoutSchema = z.object({
   branchId: z.string().min(1),
   customerId: z.string().min(1),
+  invoiceDate: z.string().optional().or(z.literal("")),
   paymentMethod: z.enum(["CASH", "BANK_TRANSFER", "MIXED"]),
   paidAmount: z.coerce.number().nonnegative(),
   orderDiscount: z.coerce.number().nonnegative().default(0),

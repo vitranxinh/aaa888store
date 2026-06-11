@@ -27,6 +27,7 @@ type OrderLine = {
 };
 
 type OrderDraftData = {
+  invoiceDate: string;
   customerId: string;
   customerQuery: string;
   productQuery: string;
@@ -47,11 +48,21 @@ type OrderDraft = {
   customer?: { id: string; name: string; phone: string } | null;
 };
 
+function toDatetimeLocalValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join("-") + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function OrderCreateModal({ branchId }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [customerId, setCustomerId] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(() => toDatetimeLocalValue(new Date()));
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerResults, setCustomerResults] = useState<Array<{ id: string; label: string; meta?: string; receivableDebt?: number }>>([]);
   const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
@@ -81,6 +92,7 @@ export function OrderCreateModal({ branchId }: Props) {
   const remainingDebt = useMemo(() => Math.max(totalPayable - paidAmount, 0), [paidAmount, totalPayable]);
 
   const resetForm = useCallback(() => {
+    setInvoiceDate(toDatetimeLocalValue(new Date()));
     setCustomerId("");
     setCustomerQuery("");
     setCustomerResults([]);
@@ -101,6 +113,7 @@ export function OrderCreateModal({ branchId }: Props) {
   }, []);
 
   const buildDraftData = useCallback((): OrderDraftData => ({
+    invoiceDate,
     customerId,
     customerQuery,
     productQuery,
@@ -111,7 +124,7 @@ export function OrderCreateModal({ branchId }: Props) {
     includeOldDebt,
     paymentTouched,
     lines
-  }), [customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, includeOldDebt, paymentTouched, lines]);
+  }), [invoiceDate, customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, includeOldDebt, paymentTouched, lines]);
 
   const hasDraftContent = useCallback((data: OrderDraftData) => (
     Boolean(data.customerId || data.customerQuery.trim() || data.productQuery.trim() || data.note.trim() || data.otherCharge > 0 || data.paidAmount > 0 || data.oldDebt > 0 || data.lines.length > 0)
@@ -121,6 +134,7 @@ export function OrderCreateModal({ branchId }: Props) {
     const data = draft.draftData;
     suppressAutosaveRef.current = true;
     setDraftId(draft.id);
+    setInvoiceDate(data.invoiceDate || toDatetimeLocalValue(new Date()));
     setCustomerId(data.customerId ?? draft.customerId ?? "");
     setCustomerQuery(data.customerQuery ?? draft.customer?.name ?? "");
     setProductQuery(data.productQuery ?? "");
@@ -435,6 +449,7 @@ export function OrderCreateModal({ branchId }: Props) {
           credentials: "same-origin",
           body: JSON.stringify({
             branchId,
+            invoiceDate,
             customerId,
             paymentMethod: "CASH",
             paidAmount: Math.max(paidAmount, 0),
@@ -561,6 +576,18 @@ export function OrderCreateModal({ branchId }: Props) {
               </div>
             ) : null}
             <div className="mt-4 space-y-4 sm:mt-6 sm:space-y-5">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-900 sm:text-lg">Ngày hóa đơn</label>
+                <input
+                  type="datetime-local"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm sm:h-12 sm:px-4 sm:text-lg"
+                />
+                <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                  Nếu hóa đơn có thu tiền, phiếu thu sẽ dùng cùng ngày này.
+                </p>
+              </div>
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-900 sm:text-lg">Khách hàng</label>
                 <input
