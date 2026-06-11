@@ -22,6 +22,7 @@ type Props = {
   note: string;
   otherCharge: number;
   paidAmount: number;
+  oldDebtAmount: number;
   lines: OrderLine[];
 };
 
@@ -41,6 +42,7 @@ export function OrderEditModal({
   note: initialNote,
   otherCharge: initialOtherCharge,
   paidAmount: initialPaidAmount,
+  oldDebtAmount: initialOldDebtAmount,
   lines: initialLines
 }: Props) {
   const router = useRouter();
@@ -56,6 +58,7 @@ export function OrderEditModal({
   const [note, setNote] = useState(initialNote);
   const [otherCharge, setOtherCharge] = useState(initialOtherCharge);
   const [paidAmount, setPaidAmount] = useState(initialPaidAmount);
+  const [includeOldDebt, setIncludeOldDebt] = useState(initialOldDebtAmount > 0);
   const [paymentTouched, setPaymentTouched] = useState(false);
   const [lines, setLines] = useState<OrderLine[]>(initialLines);
   const pushToast = useToastStore((state) => state.push);
@@ -68,20 +71,23 @@ export function OrderEditModal({
       setNote(initialNote);
       setOtherCharge(initialOtherCharge);
       setPaidAmount(initialPaidAmount);
+      setIncludeOldDebt(initialOldDebtAmount > 0);
       setLines(initialLines);
       setPaymentTouched(false);
       setProductQuery("");
     }
-  }, [open, initialCustomerId, initialCustomerName, initialNote, initialOtherCharge, initialPaidAmount, initialLines]);
+  }, [open, initialCustomerId, initialCustomerName, initialNote, initialOtherCharge, initialPaidAmount, initialOldDebtAmount, initialLines]);
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
   const orderTotal = useMemo(() => merchandiseTotal + otherCharge, [merchandiseTotal, otherCharge]);
+  const includedOldDebt = includeOldDebt ? initialOldDebtAmount : 0;
+  const totalPayable = useMemo(() => orderTotal + includedOldDebt, [includedOldDebt, orderTotal]);
   
   useEffect(() => {
     if (!paymentTouched && open) {
-      setPaidAmount(Math.min(initialPaidAmount, orderTotal));
+      setPaidAmount(Math.min(initialPaidAmount, totalPayable));
     }
-  }, [orderTotal, paymentTouched, open, initialPaidAmount]);
+  }, [totalPayable, paymentTouched, open, initialPaidAmount]);
 
   useEffect(() => {
     if (!open) return;
@@ -229,6 +235,7 @@ export function OrderEditModal({
             paidAmount: Math.max(paidAmount, 0),
             orderDiscount: 0,
             otherCharge: Math.max(otherCharge, 0),
+            oldDebt: includedOldDebt,
             note,
             status: "COMPLETED",
             items: lines.map(({ productId, quantity, unitPrice, discountValue }) => ({
@@ -396,7 +403,7 @@ export function OrderEditModal({
                 />
               </div>
 
-              <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:gap-4 sm:p-4 md:grid-cols-[180px_180px_1fr_1fr]">
+              <div className="grid gap-3 rounded-2xl bg-slate-50 p-3 sm:gap-4 sm:p-4 md:grid-cols-[160px_170px_170px_1fr_1fr]">
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Thu khác</label>
                   <FormattedNumberInput
@@ -407,6 +414,22 @@ export function OrderEditModal({
                     placeholder="Phí ship, hàng mua hộ..."
                   />
                 </div>
+                <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={includeOldDebt}
+                    disabled={initialOldDebtAmount <= 0}
+                    onChange={(event) => {
+                      setPaymentTouched(false);
+                      setIncludeOldDebt(event.target.checked);
+                    }}
+                    className="h-5 w-5 accent-emerald-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-700">Cộng nợ cũ</span>
+                    <span className="block text-xs text-slate-500">{initialOldDebtAmount.toLocaleString("vi-VN")} đ</span>
+                  </span>
+                </label>
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-slate-500">Thanh toán</label>
                   <FormattedNumberInput
@@ -427,6 +450,12 @@ export function OrderEditModal({
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tổng hóa đơn</p>
                   <p className="mt-1 text-lg font-bold text-slate-900 sm:text-xl">{orderTotal.toLocaleString("vi-VN")} đ</p>
                 </div>
+                {includeOldDebt ? (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Tổng cần thanh toán</p>
+                    <p className="mt-1 text-lg font-bold text-emerald-800 sm:text-xl">{totalPayable.toLocaleString("vi-VN")} đ</p>
+                  </div>
+                ) : null}
               </div>
 
               <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} loading={isPending} disabled={lines.length === 0}>

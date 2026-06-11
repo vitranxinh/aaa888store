@@ -83,6 +83,7 @@ export default async function OrderDetailPage({
             note={order.note || ""}
             otherCharge={Number(order.otherCharge)}
             paidAmount={Number(order.paidAmount)}
+            oldDebtAmount={Number(order.oldDebtAmount ?? 0)}
             lines={order.items.map((item) => ({
               productId: item.productId,
               productName: item.product.name,
