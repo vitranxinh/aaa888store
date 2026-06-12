@@ -120,7 +120,7 @@ export function CustomerEditModal({ customer, groups }: Props) {
         onClick={() => setOpen(true)}
         className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-base font-semibold text-slate-700 shadow-sm"
       >
-        Sửa
+        {customer.isActive ? "Sửa / Ẩn" : "Sửa / Hiện"}
       </button>
 
       {open ? (
@@ -130,6 +130,11 @@ export function CustomerEditModal({ customer, groups }: Props) {
               <div>
                 <h3 className="text-2xl font-bold text-slate-900 sm:text-4xl">Sửa khách hàng</h3>
                 <p className="mt-1 text-sm text-slate-500 sm:text-base">{customer.code}</p>
+                <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold sm:text-sm ${
+                  customer.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {customer.isActive ? "Đang hiển thị" : "Đã ẩn khỏi danh sách"}
+                </p>
               </div>
               <button onClick={() => setOpen(false)} className="text-4xl leading-none text-slate-500 sm:text-5xl">
                 ×
