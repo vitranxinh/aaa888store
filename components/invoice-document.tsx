@@ -100,6 +100,9 @@ export function InvoiceDocument({
           Đơn đặt hàng
         </h1>
         <p className={isPdf ? "mt-0.5 text-[18px] font-semibold text-black" : "mt-1 text-lg font-semibold text-slate-600 sm:text-xl print:text-[18px]"}>{code}</p>
+        <p className={isPdf ? "mt-0.5 text-[18px] font-semibold uppercase text-black" : "mt-1 text-lg font-semibold uppercase text-slate-700 sm:text-xl print:text-[18px]"}>
+          QUẦY 302
+        </p>
       </div>
 
       <div className={isPdf ? "grid gap-2 border border-slate-400 p-2 text-[20px]" : "grid gap-4 border border-slate-400 p-4 text-[14px] text-slate-700 sm:text-[15px] print:gap-2 print:p-2 print:text-[20px]"}>

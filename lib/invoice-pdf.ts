@@ -116,6 +116,7 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
 
   line("ĐƠN ĐẶT HÀNG", marginX, 30, { align: "center" });
   line(order.code, marginX, 18, { align: "center" });
+  line("QUẦY 302", marginX, 18, { align: "center" });
 
   sectionTitle("Thông tin hóa đơn");
   line(`Chi nhánh: ${order.branch.name}`, marginX, bodyFontSize);
