@@ -6,6 +6,8 @@ import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/utils";
 
+const STORE_CONTACT_PHONE = "0918377022";
+
 type InvoicePdfOrder = {
   id: string;
   code: string;
@@ -117,6 +119,7 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   line("ĐƠN ĐẶT HÀNG", marginX, 30, { align: "center" });
   line(order.code, marginX, 18, { align: "center" });
   line("QUẦY 302", marginX, 18, { align: "center" });
+  line(`SĐT: ${STORE_CONTACT_PHONE}`, marginX, 18, { align: "center" });
 
   sectionTitle("Thông tin hóa đơn");
   line(`Chi nhánh: ${order.branch.name}`, marginX, bodyFontSize);

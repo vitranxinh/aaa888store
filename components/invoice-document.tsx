@@ -3,6 +3,8 @@
 import { formatDate } from "@/lib/utils";
 import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
 
+const STORE_CONTACT_PHONE = "0918377022";
+
 function formatInvoiceAmount(value: number) {
   return new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: 0
@@ -102,6 +104,9 @@ export function InvoiceDocument({
         <p className={isPdf ? "mt-0.5 text-[18px] font-semibold text-black" : "mt-1 text-lg font-semibold text-slate-600 sm:text-xl print:text-[18px]"}>{code}</p>
         <p className={isPdf ? "mt-0.5 text-[18px] font-semibold uppercase text-black" : "mt-1 text-lg font-semibold uppercase text-slate-700 sm:text-xl print:text-[18px]"}>
           QUẦY 302
+        </p>
+        <p className={isPdf ? "mt-0.5 text-[18px] font-semibold text-black" : "mt-1 text-lg font-semibold text-slate-700 sm:text-xl print:text-[18px]"}>
+          SĐT: {STORE_CONTACT_PHONE}
         </p>
       </div>
 
