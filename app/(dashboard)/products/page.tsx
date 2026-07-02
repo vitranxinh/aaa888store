@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { unstable_cache } from "next/cache";
 import { AppHeader } from "@/components/app-header";
@@ -185,8 +186,20 @@ async function ProductsList({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-[0.88rem] font-semibold uppercase tracking-wide text-slate-400">{product.sku}</p>
-                      <p className="mt-1 text-[1.1rem] font-bold leading-snug text-slate-900">{product.name}</p>
+                      <Link
+                        href={`/products/${product.id}`}
+                        prefetch={false}
+                        className="text-[0.88rem] font-semibold uppercase tracking-wide text-slate-400 underline-offset-2 hover:text-emerald-700 hover:underline"
+                      >
+                        {product.sku}
+                      </Link>
+                      <Link
+                        href={`/products/${product.id}`}
+                        prefetch={false}
+                        className="mt-1 block text-[1.1rem] font-bold leading-snug text-slate-900 underline-offset-2 hover:text-emerald-700 hover:underline"
+                      >
+                        {product.name}
+                      </Link>
                     </div>
                     {canEditProducts ? (
                       <div className="flex flex-col gap-2">
@@ -261,8 +274,24 @@ async function ProductsList({
                       <div className="h-10 w-10 rounded-xl bg-slate-100 sm:h-14 sm:w-14" />
                     )}
                   </td>
-                  <td className="px-3 py-3 sm:px-6 sm:py-4">{product.sku}</td>
-                  <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">{product.name}</td>
+                  <td className="px-3 py-3 sm:px-6 sm:py-4">
+                    <Link
+                      href={`/products/${product.id}`}
+                      prefetch={false}
+                      className="font-semibold text-slate-700 underline-offset-2 hover:text-emerald-700 hover:underline"
+                    >
+                      {product.sku}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-3 font-semibold text-slate-900 sm:px-6 sm:py-4">
+                    <Link
+                      href={`/products/${product.id}`}
+                      prefetch={false}
+                      className="underline-offset-2 hover:text-emerald-700 hover:underline"
+                    >
+                      {product.name}
+                    </Link>
+                  </td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{product.categoryName ?? "-"}</td>
                   <td className="px-3 py-3 sm:px-6 sm:py-4">{product.barcode ?? "-"}</td>
                   <td className="px-3 py-3 text-right sm:px-6 sm:py-4">{formatCurrency(product.sellingPrice)}</td>
