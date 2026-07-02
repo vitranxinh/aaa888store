@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { ProductEditModal } from "@/components/product-edit-modal";
+import { ServerPagination } from "@/components/server-pagination";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultBranchId } from "@/lib/reference-data";
@@ -22,85 +23,117 @@ function getPurchaseStatusClass(status: "DRAFT" | "COMPLETED" | "PARTIAL" | "CAN
 }
 
 export default async function ProductDetailPage({
-  params
+  params,
+  searchParams
 }: {
   params: { id: string };
+  searchParams?: { page?: string };
 }) {
   const session = await requireSession(["ADMIN", "MANAGER", "CASHIER"]);
   const branchId = session.branchId ?? (await getDefaultBranchId()) ?? "";
   const canEditProducts = session.role === "ADMIN" || session.role === "MANAGER";
   const canDeleteProducts = session.role === "ADMIN";
+  const page = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const pageSize = 20;
+  const purchaseHistoryWhere = {
+    productId: params.id,
+    purchaseOrder: {
+      ...(session.branchId ? { branchId: session.branchId } : {})
+    }
+  };
 
-  const product = await prisma.product.findUnique({
-    where: { id: params.id },
-    include: {
-      category: { select: { name: true } },
-      brand: { select: { name: true } },
-      inventories: {
-        where: {
-          branchId,
-          variantId: null
+  const [product, purchaseHistory, purchaseHistoryAggregate, purchaseHistoryCount, latestPurchaseItem] = await Promise.all([
+    prisma.product.findUnique({
+      where: { id: params.id },
+      include: {
+        category: { select: { name: true } },
+        brand: { select: { name: true } },
+        inventories: {
+          where: {
+            branchId,
+            variantId: null
+          },
+          select: { quantity: true }
         },
-        select: { quantity: true }
-      },
-      purchaseItems: {
-        where: {
-          purchaseOrder: {
-            ...(session.branchId ? { branchId: session.branchId } : {})
+        _count: {
+          select: {
+            inventories: true,
+            batches: true,
+            orderItems: true,
+            purchaseItems: true,
+            inventoryTxns: true
           }
-        },
-        select: {
-          id: true,
-          quantity: true,
-          importPrice: true,
-          total: true,
-          batchNumber: true,
-          expiryDate: true,
-          purchaseOrder: {
-            select: {
-              id: true,
-              code: true,
-              status: true,
-              createdAt: true,
-              totalAmount: true,
-              paidAmount: true,
-              debtAmount: true,
-              supplier: {
-                select: { name: true }
-              },
-              createdBy: {
-                select: { name: true }
-              }
-            }
-          }
-        },
-        orderBy: {
-          purchaseOrder: {
-            createdAt: "desc"
-          }
-        }
-      },
-      _count: {
-        select: {
-          inventories: true,
-          batches: true,
-          orderItems: true,
-          purchaseItems: true,
-          inventoryTxns: true
         }
       }
-    }
-  });
+    }),
+    prisma.purchaseOrderItem.findMany({
+      where: purchaseHistoryWhere,
+      select: {
+        id: true,
+        quantity: true,
+        importPrice: true,
+        total: true,
+        batchNumber: true,
+        expiryDate: true,
+        purchaseOrder: {
+          select: {
+            id: true,
+            code: true,
+            status: true,
+            createdAt: true,
+            totalAmount: true,
+            paidAmount: true,
+            debtAmount: true,
+            supplier: {
+              select: { name: true }
+            },
+            createdBy: {
+              select: { name: true }
+            }
+          }
+        }
+      },
+      orderBy: {
+        purchaseOrder: {
+          createdAt: "desc"
+        }
+      },
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    }),
+    prisma.purchaseOrderItem.aggregate({
+      where: purchaseHistoryWhere,
+      _sum: {
+        quantity: true,
+        total: true
+      }
+    }),
+    prisma.purchaseOrderItem.count({
+      where: purchaseHistoryWhere
+    }),
+    prisma.purchaseOrderItem.findFirst({
+      where: purchaseHistoryWhere,
+      select: {
+        purchaseOrder: {
+          select: { createdAt: true }
+        }
+      },
+      orderBy: {
+        purchaseOrder: {
+          createdAt: "desc"
+        }
+      }
+    })
+  ]);
 
   if (!product) {
     notFound();
   }
 
   const currentQuantity = product.inventories.reduce((sum, inventory) => sum + inventory.quantity, 0);
-  const purchaseHistory = product.purchaseItems;
-  const totalImportedQuantity = purchaseHistory.reduce((sum, item) => sum + item.quantity, 0);
-  const totalImportedAmount = purchaseHistory.reduce((sum, item) => sum + Number(item.total), 0);
-  const lastImportedAt = purchaseHistory[0]?.purchaseOrder.createdAt ?? null;
+  const totalImportedQuantity = purchaseHistoryAggregate._sum.quantity ?? 0;
+  const totalImportedAmount = Number(purchaseHistoryAggregate._sum.total ?? 0);
+  const lastImportedAt = latestPurchaseItem?.purchaseOrder.createdAt ?? null;
   const hasRelatedHistory =
     product._count.inventories > 0 ||
     product._count.batches > 0 ||
@@ -207,7 +240,7 @@ export default async function ProductDetailPage({
             <p className="mt-1 text-sm text-slate-500 sm:text-base">Chỉ hiển thị các lần nhập từ phiếu nhập hàng.</p>
           </div>
           <div className="rounded-2xl bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 sm:text-base">
-            {purchaseHistory.length} lần nhập
+            {purchaseHistoryCount} lần nhập
           </div>
         </div>
 
@@ -329,6 +362,16 @@ export default async function ProductDetailPage({
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4">
+          <ServerPagination
+            pathname={`/products/${product.id}`}
+            query={{}}
+            page={page}
+            pageSize={pageSize}
+            totalCount={purchaseHistoryCount}
+          />
         </div>
       </section>
     </div>
