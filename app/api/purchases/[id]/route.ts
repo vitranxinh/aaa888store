@@ -4,6 +4,7 @@ import { requireApiSession } from "@/lib/auth";
 import { recalculatePurchasePaymentStateForPurchase, recalculateSupplierPayableDebtForSupplier } from "@/lib/debt-service";
 import { nextCode } from "@/lib/order-service";
 import { prisma } from "@/lib/prisma";
+import { purchasePermissionErrorResponse, requirePurchaseManager } from "@/lib/purchase-permissions";
 import { runTransactionWithRetry } from "@/lib/transaction-retry";
 import { purchaseSchema } from "@/lib/validations";
 
@@ -16,6 +17,91 @@ async function resolvePurchaseSupplierId(explicitSupplierId?: string) {
   });
 
   return fallbackSupplier?.id ?? null;
+}
+
+type PurchaseStockDelta = {
+  branchId: string;
+  productId: string;
+  quantityDelta: number;
+};
+
+function purchaseStockKey(branchId: string, productId: string) {
+  return `${branchId}::${productId}`;
+}
+
+function addPurchaseStockDelta(
+  deltas: Map<string, PurchaseStockDelta>,
+  branchId: string,
+  productId: string,
+  quantityDelta: number
+) {
+  const key = purchaseStockKey(branchId, productId);
+  const existing = deltas.get(key);
+  deltas.set(key, {
+    branchId,
+    productId,
+    quantityDelta: (existing?.quantityDelta ?? 0) + quantityDelta
+  });
+}
+
+async function assertPurchaseChangeKeepsInventoryNonNegative(
+  tx: Prisma.TransactionClient,
+  deltas: Map<string, PurchaseStockDelta>,
+  action: "sửa" | "xóa"
+) {
+  const negativeDeltas = Array.from(deltas.values()).filter((delta) => delta.quantityDelta < 0);
+  if (negativeDeltas.length === 0) return;
+
+  const productIds = Array.from(new Set(negativeDeltas.map((delta) => delta.productId)));
+  const branchIds = Array.from(new Set(negativeDeltas.map((delta) => delta.branchId)));
+  const [inventories, products] = await Promise.all([
+    tx.inventory.findMany({
+      where: {
+        branchId: { in: branchIds },
+        productId: { in: productIds },
+        variantId: null
+      },
+      select: { branchId: true, productId: true, quantity: true }
+    }),
+    tx.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true }
+    })
+  ]);
+
+  const inventoryByKey = new Map(
+    inventories.reduce<Array<[string, number]>>((entries, inventory) => {
+      if (!inventory.productId) return entries;
+      const key = purchaseStockKey(inventory.branchId, inventory.productId);
+      const existing = entries.find(([entryKey]) => entryKey === key);
+      if (existing) existing[1] += inventory.quantity;
+      else entries.push([key, inventory.quantity]);
+      return entries;
+    }, [])
+  );
+  const productNameById = new Map(products.map((product) => [product.id, product.name]));
+  const insufficientItems = negativeDeltas
+    .map((delta) => {
+      const currentQuantity = inventoryByKey.get(purchaseStockKey(delta.branchId, delta.productId)) ?? 0;
+      const nextQuantity = currentQuantity + delta.quantityDelta;
+      return {
+        productName: productNameById.get(delta.productId) ?? delta.productId,
+        currentQuantity,
+        nextQuantity,
+        decreaseQuantity: Math.abs(delta.quantityDelta)
+      };
+    })
+    .filter((item) => item.nextQuantity < 0);
+
+  if (insufficientItems.length === 0) return;
+
+  const detail = insufficientItems
+    .map(
+      (item) =>
+        `${item.productName} hiện còn ${item.currentQuantity}, cần trừ ${item.decreaseQuantity}, sẽ còn ${item.nextQuantity}`
+    )
+    .join("; ");
+  throw new Error(`Không thể ${action} phiếu nhập vì sẽ làm âm hàng: ${detail}.`);
 }
 
 async function applyPurchaseInventory(
@@ -46,32 +132,61 @@ async function applyPurchaseInventory(
       variantId: null,
       productId: { in: Array.from(quantityByProduct.keys()) }
     },
-    select: { id: true, productId: true }
+    select: { id: true, productId: true, quantity: true },
+    orderBy: { updatedAt: "desc" }
   });
-  const inventoryIdByProduct = new Map(
-    existingInventories
-      .filter((inventory): inventory is { id: string; productId: string } => Boolean(inventory.productId))
-      .map((inventory) => [inventory.productId, inventory.id])
-  );
+  const inventoryRowsByProduct = new Map<string, Array<{ id: string; quantity: number }>>();
+  for (const inventory of existingInventories) {
+    if (!inventory.productId) continue;
+    const rows = inventoryRowsByProduct.get(inventory.productId) ?? [];
+    rows.push({ id: inventory.id, quantity: inventory.quantity });
+    inventoryRowsByProduct.set(inventory.productId, rows);
+  }
 
   for (const [productId, quantity] of quantityByProduct.entries()) {
-    const inventoryId = inventoryIdByProduct.get(productId);
+    const rows = inventoryRowsByProduct.get(productId) ?? [];
+    const firstRow = rows[0];
 
-    if (inventoryId) {
-      await tx.inventory.update({
-        where: { id: inventoryId },
-        data: {
-          quantity: direction === "increment" ? { increment: quantity } : { decrement: quantity }
-        }
-      });
-    } else {
+    if (direction === "increment") {
+      if (firstRow) {
+        await tx.inventory.update({
+          where: { id: firstRow.id },
+          data: { quantity: { increment: quantity } }
+        });
+        continue;
+      }
+
       await tx.inventory.create({
         data: {
           branchId: purchase.branchId,
           productId,
-          quantity: direction === "increment" ? quantity : -quantity
+          variantId: null,
+          quantity
         }
       });
+      continue;
+    }
+
+    let remaining = quantity;
+    for (const row of rows) {
+      if (remaining <= 0) break;
+      if (row.quantity <= 0) continue;
+      const used = Math.min(row.quantity, remaining);
+      const result = await tx.inventory.updateMany({
+        where: {
+          id: row.id,
+          quantity: { gte: used }
+        },
+        data: { quantity: { decrement: used } }
+      });
+      if (result.count !== 1) {
+        throw new Error(`Tồn kho vừa thay đổi, không thể trừ ${quantity} sản phẩm ${productId}.`);
+      }
+      remaining -= used;
+    }
+
+    if (remaining > 0) {
+      throw new Error(`Không thể trừ tồn kho vì sản phẩm ${productId} không đủ tồn.`);
     }
   }
 
@@ -107,6 +222,7 @@ async function applyPurchaseInventory(
 export async function PUT(request: Request, { params }: { params: { id: string } }) {
   try {
     const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    requirePurchaseManager(session);
     const body = await request.json();
     const parsed = purchaseSchema.safeParse(body);
 
@@ -136,6 +252,15 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const paymentCode = paidAmount > 0 ? await nextCode("PC", "cashTransaction") : null;
 
     const purchase = await runTransactionWithRetry(async (tx) => {
+      const inventoryDeltas = new Map<string, PurchaseStockDelta>();
+      for (const item of existing.items) {
+        addPurchaseStockDelta(inventoryDeltas, existing.branchId, item.productId, -item.quantity);
+      }
+      for (const item of normalizedItems) {
+        addPurchaseStockDelta(inventoryDeltas, parsed.data.branchId, item.productId, item.quantity);
+      }
+      await assertPurchaseChangeKeepsInventoryNonNegative(tx, inventoryDeltas, "sửa");
+
       await applyPurchaseInventory(
         tx,
         {
@@ -249,20 +374,26 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     return NextResponse.json({ ok: true, purchase });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    const permissionError = purchasePermissionErrorResponse(message);
+    if (permissionError) {
+      return NextResponse.json(permissionError, { status: 403 });
+    }
+
     return NextResponse.json(
       {
         error: /prisma|transaction|timed out|already closed/i.test(message)
           ? "Cập nhật phiếu nhập đang chậm hơn bình thường, vui lòng thử lại."
           : message || "Không thể cập nhật phiếu nhập"
       },
-      { status: 500 }
+      { status: message.startsWith("Không thể sửa phiếu nhập vì sẽ làm âm hàng") ? 400 : 500 }
     );
   }
 }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
-    await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    const session = await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
+    requirePurchaseManager(session);
 
     const existing = await prisma.purchaseOrder.findUnique({
       where: { id: params.id },
@@ -274,17 +405,29 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     }
 
     await runTransactionWithRetry(async (tx) => {
+      const inventoryDeltas = new Map<string, PurchaseStockDelta>();
       for (const item of existing.items) {
-        await tx.inventory.updateMany({
-          where: {
-            branchId: existing.branchId,
-            productId: item.productId
-          },
-          data: {
-            quantity: { decrement: item.quantity }
-          }
-        });
+        addPurchaseStockDelta(inventoryDeltas, existing.branchId, item.productId, -item.quantity);
       }
+      await assertPurchaseChangeKeepsInventoryNonNegative(tx, inventoryDeltas, "xóa");
+
+      await applyPurchaseInventory(
+        tx,
+        {
+          code: existing.code,
+          branchId: existing.branchId,
+          items: existing.items.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            batchNumber: item.batchNumber,
+            expiryDate: item.expiryDate,
+            importPrice: item.importPrice
+          }))
+        },
+        session.id,
+        "decrement"
+      );
 
       await tx.inventoryTransaction.deleteMany({
         where: {
@@ -313,13 +456,18 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     return NextResponse.json({ ok: true, code: existing.code });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    const permissionError = purchasePermissionErrorResponse(message);
+    if (permissionError) {
+      return NextResponse.json(permissionError, { status: 403 });
+    }
+
     return NextResponse.json(
       {
         error: /prisma|transaction|timed out|already closed/i.test(message)
           ? "Xóa phiếu nhập đang chậm hơn bình thường, vui lòng thử lại."
           : message || "Không thể xóa phiếu nhập"
       },
-      { status: 500 }
+      { status: message.startsWith("Không thể xóa phiếu nhập vì sẽ làm âm hàng") ? 400 : 500 }
     );
   }
 }

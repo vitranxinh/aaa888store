@@ -44,6 +44,11 @@ async function syncProducts(xlsxPath) {
   const categoryCache = new Map();
 
   for (const item of parsed.products) {
+    const stockQuantity = Math.round(Number(item.stock || 0));
+    if (stockQuantity < 0) {
+      throw new Error(`Tồn kho import không được âm: ${item.name || item.sku} = ${stockQuantity}`);
+    }
+
     let categoryId = null;
 
     if (item.category) {
@@ -101,7 +106,7 @@ async function syncProducts(xlsxPath) {
       await prisma.inventory.update({
         where: { id: existingInventory.id },
         data: {
-          quantity: Math.round(item.stock || 0),
+          quantity: stockQuantity,
           reservedQty: 0,
         },
       });
@@ -110,7 +115,7 @@ async function syncProducts(xlsxPath) {
         data: {
           branchId,
           productId: product.id,
-          quantity: Math.round(item.stock || 0),
+          quantity: stockQuantity,
           reservedQty: 0,
         },
       });

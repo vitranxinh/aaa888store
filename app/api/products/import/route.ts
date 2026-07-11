@@ -74,6 +74,11 @@ export async function POST(request: Request) {
         let total = 0;
 
         for (const item of parsed.products) {
+          const stockQuantity = Math.round(Number(item.stock || 0));
+          if (stockQuantity < 0) {
+            throw new Error(`Tồn kho import không được âm: ${item.name || item.sku} = ${stockQuantity}`);
+          }
+
           let categoryId: string | null = null;
           if (item.category) {
             const slug = item.category.toLowerCase().replace(/ /g, "-");
@@ -126,7 +131,7 @@ export async function POST(request: Request) {
             await tx.inventory.update({
               where: { id: existingInventory.id },
               data: {
-                quantity: Math.round(item.stock),
+                quantity: stockQuantity,
                 reservedQty: 0,
               },
             });
@@ -135,7 +140,7 @@ export async function POST(request: Request) {
               data: {
                 branchId,
                 productId: product.id,
-                quantity: Math.round(item.stock),
+                quantity: stockQuantity,
                 reservedQty: 0,
               },
             });

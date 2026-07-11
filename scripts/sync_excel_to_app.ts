@@ -68,6 +68,11 @@ async function syncProducts(xlsxPath: string) {
 
   await prisma.$transaction(async (tx) => {
     for (const item of parsed.products) {
+      const stockQuantity = Math.round(Number(item.stock || 0));
+      if (stockQuantity < 0) {
+        throw new Error(`Tồn kho import không được âm: ${item.name || item.sku} = ${stockQuantity}`);
+      }
+
       let categoryId: string | null = null;
 
       if (item.category) {
@@ -119,7 +124,7 @@ async function syncProducts(xlsxPath: string) {
         await tx.inventory.update({
           where: { id: existingInventory.id },
           data: {
-            quantity: Math.round(item.stock || 0),
+            quantity: stockQuantity,
             reservedQty: 0,
           },
         });
@@ -128,7 +133,7 @@ async function syncProducts(xlsxPath: string) {
           data: {
             branchId,
             productId: product.id,
-            quantity: Math.round(item.stock || 0),
+            quantity: stockQuantity,
             reservedQty: 0,
           },
         });

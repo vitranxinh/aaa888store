@@ -141,6 +141,40 @@ function assertEnoughInventory(
   throw new Error(`Không đủ tồn kho để bán: ${message}`);
 }
 
+async function assertInventoryTotalsNonNegative(
+  tx: Prisma.TransactionClient,
+  branchId: string,
+  productIds: string[],
+  productNameById: Map<string, string>
+) {
+  if (productIds.length === 0) return;
+
+  const rows = await tx.inventory.findMany({
+    where: {
+      branchId,
+      productId: { in: productIds },
+      variantId: null
+    },
+    select: { productId: true, quantity: true }
+  });
+  const quantityByProduct = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.productId) continue;
+    quantityByProduct.set(row.productId, (quantityByProduct.get(row.productId) ?? 0) + row.quantity);
+  }
+
+  const negatives = productIds
+    .map((productId) => ({ productId, quantity: quantityByProduct.get(productId) ?? 0 }))
+    .filter((item) => item.quantity < 0);
+
+  if (negatives.length > 0) {
+    const detail = negatives
+      .map((item) => `${productNameById.get(item.productId) ?? item.productId} còn ${item.quantity}`)
+      .join("; ");
+    throw new Error(`Tồn kho không được âm: ${detail}`);
+  }
+}
+
 function calculateOrderDerivedState(items: Awaited<ReturnType<typeof loadOrderPayloadItems>>, payload: OrderPayload) {
   const totals = calculateCartTotals(
     items.map(item => ({
@@ -299,10 +333,20 @@ async function applyOrderEffects(
     })
   ];
   if (batchUpdates.length > 0) {
-    writeTasks.push(tx.$executeRaw`
-      UPDATE "ProductBatch" SET "quantity" = "quantity" - (CASE "id" ${Prisma.join(batchUpdates.map(b => Prisma.sql`WHEN ${b.id} THEN ${b.quantity}`), " ")} ELSE 0 END)
-      WHERE "id" IN (${Prisma.join(batchUpdates.map(b => b.id))})
-    `);
+    for (const batchUpdate of batchUpdates) {
+      const result = await tx.productBatch.updateMany({
+        where: {
+          id: batchUpdate.id,
+          quantity: { gte: batchUpdate.quantity }
+        },
+        data: {
+          quantity: { decrement: batchUpdate.quantity }
+        }
+      });
+      if (result.count !== 1) {
+        throw new Error("Tồn lô vừa thay đổi, vui lòng thử lại.");
+      }
+    }
   }
   if (derived.paidAmount > 0) {
     const invoiceCreatedAt = parseVietnamDateTimeLocal(payload.invoiceDate);
@@ -317,6 +361,7 @@ async function applyOrderEffects(
     }));
   }
   await Promise.all(writeTasks);
+  await assertInventoryTotalsNonNegative(tx, order.branchId, productIds, productNameById);
   await recalculateCustomerReceivableDebt(tx, payload.customerId);
 }
 

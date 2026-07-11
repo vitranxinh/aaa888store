@@ -39,31 +39,53 @@ export async function POST(request: Request) {
         payload.type === "ADJUSTMENT" && typeof targetQuantity === "number"
           ? targetQuantity
           : null;
+      const stockDelta =
+        nextQuantity !== null
+          ? null
+          : payload.type === "EXPORT" || payload.type === "TRANSFER_OUT"
+            ? -Math.abs(payload.quantity)
+            : Math.abs(payload.quantity);
       const adjustmentQuantity =
         payload.type === "ADJUSTMENT" && nextQuantity !== null && existingInventory
           ? nextQuantity - existingInventory.quantity
-          : payload.quantity;
-      const resultingQuantity = nextQuantity !== null ? nextQuantity : (existingInventory?.quantity ?? 0) + payload.quantity;
+          : stockDelta ?? 0;
+      const resultingQuantity = nextQuantity !== null ? nextQuantity : (existingInventory?.quantity ?? 0) + adjustmentQuantity;
 
       if (resultingQuantity < 0) {
-        throw new Error(`Tồn kho không được âm. Tồn hiện tại ${existingInventory?.quantity ?? 0}, thay đổi ${payload.quantity}.`);
+        throw new Error(`Tồn kho không được âm. Tồn hiện tại ${existingInventory?.quantity ?? 0}, thay đổi ${adjustmentQuantity}.`);
       }
 
       if (existingInventory) {
-        await tx.inventory.update({
-          where: { id: existingInventory.id },
-          data:
-            nextQuantity !== null
-              ? { quantity: nextQuantity }
-              : { quantity: { increment: payload.quantity } }
-        });
+        if (nextQuantity !== null) {
+          const result = await tx.inventory.updateMany({
+            where: { id: existingInventory.id },
+            data: { quantity: nextQuantity }
+          });
+          if (result.count !== 1) {
+            throw new Error("Tồn kho vừa thay đổi, vui lòng thử lại.");
+          }
+        } else {
+          const result = await tx.inventory.updateMany({
+            where: {
+              id: existingInventory.id,
+              ...(adjustmentQuantity < 0 ? { quantity: { gte: Math.abs(adjustmentQuantity) } } : {})
+            },
+            data: { quantity: { increment: adjustmentQuantity } }
+          });
+          if (result.count !== 1) {
+            throw new Error("Tồn kho vừa thay đổi, vui lòng thử lại.");
+          }
+        }
       } else {
+        if (resultingQuantity < 0) {
+          throw new Error("Tồn kho không được âm.");
+        }
         await tx.inventory.create({
           data: {
             branchId: payload.branchId,
             productId: payload.productId,
             variantId: payload.variantId ?? null,
-            quantity: nextQuantity ?? payload.quantity,
+            quantity: nextQuantity ?? adjustmentQuantity,
             reservedQty: 0
           }
         });
