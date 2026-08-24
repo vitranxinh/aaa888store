@@ -23,6 +23,7 @@ export const posCheckoutSchema = z.object({
   otherCharge: z.coerce.number().nonnegative().default(0),
   oldDebt: z.coerce.number().default(0),
   note: z.string().optional(),
+  clientRequestId: z.string().trim().min(8).max(120).optional(),
   status: z.enum(["DRAFT", "COMPLETED", "PARTIAL", "CANCELLED"]).default("COMPLETED"),
   items: z.array(posItemSchema).min(1, "Giỏ hàng đang trống")
 });

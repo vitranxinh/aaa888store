@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     const createOrderStartedAt = Date.now();
-    const { order, timing } = await createOrderFromPayload({
+    const { order, timing, duplicate } = await createOrderFromPayload({
       ...parsed.data,
       createdById: session.id
     });
@@ -77,7 +77,19 @@ export async function POST(request: Request) {
     let pdfWarning: string | null = null;
     const pdfStartedAt = Date.now();
     try {
-      pdfMeta = await generateAndStoreInvoicePdf(order.id);
+      if (duplicate) {
+        pdfMeta = await prisma.order.findUnique({
+          where: { id: order.id },
+          select: {
+            pdfUrl: true,
+            pdfFileName: true,
+            pdfSize: true,
+            pdfGeneratedAt: true
+          }
+        });
+      } else {
+        pdfMeta = await generateAndStoreInvoicePdf(order.id);
+      }
     } catch (pdfError) {
       pdfWarning = pdfError instanceof Error ? pdfError.message : "Không thể tạo PDF hóa đơn tự động";
       console.warn("[CreateOrderPdfWarning]", {
@@ -133,7 +145,7 @@ export async function POST(request: Request) {
       )} ms\n- total: ${Math.round(Date.now() - startedAt)} ms`
     );
     revalidateTag("orders-page-data");
-    return NextResponse.json({ ok: true, order: { ...order, ...pdfMeta }, pdfWarning });
+    return NextResponse.json({ ok: true, order: { ...order, ...pdfMeta }, duplicate, pdfWarning });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     console.error("[CreateOrderError]", {

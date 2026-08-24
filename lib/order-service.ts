@@ -16,6 +16,7 @@ type OrderPayload = {
   otherCharge: number;
   oldDebt?: number;
   note?: string;
+  clientRequestId?: string;
   status: "DRAFT" | "COMPLETED" | "PARTIAL" | "CANCELLED";
   items: Array<{ productId: string; quantity: number; unitPrice: number; discountValue: number }>;
 };
@@ -419,9 +420,28 @@ export async function updateOrderFromPayload(orderId: string, payload: OrderPayl
   }, { maxWait: 20000, timeout: 60000 });
 }
 
-export async function createOrderFromPayload(payload: OrderPayload): Promise<{ order: { id: string; code: string }; timing: CreateOrderTiming }> {
+function isClientRequestUniqueConflict(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    Array.isArray(error.meta?.target) &&
+    error.meta.target.includes("clientRequestId")
+  );
+}
+
+export async function createOrderFromPayload(payload: OrderPayload): Promise<{ order: { id: string; code: string }; timing: CreateOrderTiming; duplicate?: boolean }> {
   const steps: PerfSteps = {};
   const totalStartedAt = Date.now();
+  const clientRequestId = payload.clientRequestId?.trim() || null;
+  if (clientRequestId) {
+    const existingOrder = await prisma.order.findFirst({
+      where: { clientRequestId },
+      select: { id: true, code: true }
+    });
+    if (existingOrder) {
+      return { order: existingOrder, timing: { totalMs: Date.now() - totalStartedAt }, duplicate: true };
+    }
+  }
   const [items, activeCustomer] = await Promise.all([
     measureStep(steps, "loadItemsMs", () => loadOrderPayloadItems(payload.items)),
     prisma.customer.findFirst({
@@ -436,56 +456,70 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
   const invoiceCreatedAt = parseVietnamDateTimeLocal(payload.invoiceDate);
   const transactionQueuedAt = Date.now();
   let transactionStartedAt = 0;
-  const { order, transactionSteps } = (await measureStep(steps, "transactionMs", () =>
-    runTransactionWithRetry(async (tx: Prisma.TransactionClient) => {
-      transactionStartedAt = Date.now();
-      const tSteps: PerfSteps = {};
-      const quantityByProduct = aggregateQuantityByProduct(items);
-      const productIds = Array.from(quantityByProduct.keys());
-      const orderId = randomUUID();
+  try {
+    const { order, transactionSteps } = (await measureStep(steps, "transactionMs", () =>
+      runTransactionWithRetry(async (tx: Prisma.TransactionClient) => {
+        transactionStartedAt = Date.now();
+        const tSteps: PerfSteps = {};
+        const quantityByProduct = aggregateQuantityByProduct(items);
+        const productIds = Array.from(quantityByProduct.keys());
+        const orderId = randomUUID();
 
-      const [inventories, batches] = await Promise.all([
-        tx.inventory.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, variantId: null }, select: { productId: true, quantity: true } }),
-        tx.productBatch.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, quantity: { gt: 0 } }, orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }], select: { id: true, productId: true, batchNumber: true, quantity: true } })
-      ]);
-      assertEnoughInventory(items, inventories, derived);
+        const [inventories, batches] = await Promise.all([
+          tx.inventory.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, variantId: null }, select: { productId: true, quantity: true } }),
+          tx.productBatch.findMany({ where: { branchId: payload.branchId, productId: { in: productIds }, quantity: { gt: 0 } }, orderBy: [{ productId: "asc" }, { expiryDate: "asc" }, { createdAt: "asc" }], select: { id: true, productId: true, batchNumber: true, quantity: true } })
+        ]);
+        assertEnoughInventory(items, inventories, derived);
 
-      const [realCode, realReceiptCode] = await Promise.all([
-        nextCode("DH", "order", tx),
-        derived.paidAmount > 0 ? nextCode("PT", "cashTransaction", tx) : Promise.resolve(null)
-      ]);
+        const [realCode, realReceiptCode] = await Promise.all([
+          nextCode("DH", "order", tx),
+          derived.paidAmount > 0 ? nextCode("PT", "cashTransaction", tx) : Promise.resolve(null)
+        ]);
 
-      await tx.order.create({
-        data: {
-          id: orderId, code: realCode, branchId: payload.branchId, customerId: payload.customerId,
-          createdById: payload.createdById, status: derived.finalStatus,
-          ...(invoiceCreatedAt ? { createdAt: invoiceCreatedAt } : {}),
-          subtotal: new Prisma.Decimal(derived.totals.subtotal),
-          discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
-          otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
-          oldDebtAmount: new Prisma.Decimal(derived.oldDebt),
-          profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
-          paidAmount: new Prisma.Decimal(derived.paidAmount), debtAmount: new Prisma.Decimal(derived.debtAmount),
-          note: payload.note,
-          items: {
-            create: items.map(item => ({
-              productId: item.product.id, quantity: item.quantity, unitPrice: new Prisma.Decimal(item.unitPrice),
-              costPrice: item.product.costPrice, discountValue: new Prisma.Decimal(item.discountValue),
-              total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
-            }))
+        await tx.order.create({
+          data: {
+            id: orderId, code: realCode, branchId: payload.branchId, customerId: payload.customerId,
+            ...(clientRequestId ? { clientRequestId } : {}),
+            createdById: payload.createdById, status: derived.finalStatus,
+            ...(invoiceCreatedAt ? { createdAt: invoiceCreatedAt } : {}),
+            subtotal: new Prisma.Decimal(derived.totals.subtotal),
+            discountTotal: new Prisma.Decimal(derived.totals.itemDiscountTotal + payload.orderDiscount),
+            otherCharge: new Prisma.Decimal(payload.otherCharge), grandTotal: new Prisma.Decimal(derived.grandTotal),
+            oldDebtAmount: new Prisma.Decimal(derived.oldDebt),
+            profitEstimate: new Prisma.Decimal(derived.totals.profitEstimate), paymentMethod: payload.paymentMethod,
+            paidAmount: new Prisma.Decimal(derived.paidAmount), debtAmount: new Prisma.Decimal(derived.debtAmount),
+            note: payload.note,
+            items: {
+              create: items.map(item => ({
+                productId: item.product.id, quantity: item.quantity, unitPrice: new Prisma.Decimal(item.unitPrice),
+                costPrice: item.product.costPrice, discountValue: new Prisma.Decimal(item.discountValue),
+                total: new Prisma.Decimal(item.unitPrice * item.quantity - item.discountValue)
+              }))
+            }
           }
-        }
-      });
-      await applyOrderEffects(tx, { id: orderId, code: realCode, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, realReceiptCode);
+        });
+        await applyOrderEffects(tx, { id: orderId, code: realCode, branchId: payload.branchId, createdById: payload.createdById }, payload, items, derived, inventories, batches, realReceiptCode);
 
-      tSteps.transactionTotalMs = Date.now() - transactionStartedAt;
-      return { order: { id: orderId, code: realCode }, transactionSteps: tSteps };
-    }, { maxWait: 20000, timeout: 60000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
-  steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
-  Object.assign(steps, transactionSteps);
-  steps.totalMs = Date.now() - totalStartedAt;
-  console.info("[perf][create-order]", { code: order.code, itemCount: items.length, total: `${steps.totalMs}ms`, db: `${steps.transactionMs}ms`, steps });
-  return { order, timing: steps };
+        tSteps.transactionTotalMs = Date.now() - transactionStartedAt;
+        return { order: { id: orderId, code: realCode }, transactionSteps: tSteps };
+      }, { maxWait: 20000, timeout: 60000 }))) as { order: { id: string; code: string }; transactionSteps: PerfSteps };
+    steps.transactionWaitMs = transactionStartedAt > 0 ? transactionStartedAt - transactionQueuedAt : 0;
+    Object.assign(steps, transactionSteps);
+    steps.totalMs = Date.now() - totalStartedAt;
+    console.info("[perf][create-order]", { code: order.code, itemCount: items.length, total: `${steps.totalMs}ms`, db: `${steps.transactionMs}ms`, steps });
+    return { order, timing: steps };
+  } catch (error) {
+    if (clientRequestId && isClientRequestUniqueConflict(error)) {
+      const existingOrder = await prisma.order.findFirst({
+        where: { clientRequestId },
+        select: { id: true, code: true }
+      });
+      if (existingOrder) {
+        return { order: existingOrder, timing: { ...steps, totalMs: Date.now() - totalStartedAt }, duplicate: true };
+      }
+    }
+    throw error;
+  }
 }
 
 type CodeModel = "order" | "purchaseOrder" | "cashTransaction" | "supplier" | "customer";

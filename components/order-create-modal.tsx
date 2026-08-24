@@ -37,6 +37,7 @@ type OrderDraftData = {
   oldDebt: number;
   includeOldDebt: boolean;
   paymentTouched: boolean;
+  clientRequestId?: string;
   lines: OrderLine[];
 };
 
@@ -55,6 +56,10 @@ function toDatetimeLocalValue(date: Date) {
     pad(date.getMonth() + 1),
     pad(date.getDate())
   ].join("-") + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function createClientRequestId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function OrderCreateModal({ branchId }: Props) {
@@ -82,7 +87,10 @@ export function OrderCreateModal({ branchId }: Props) {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [clientRequestId, setClientRequestId] = useState(createClientRequestId);
   const suppressAutosaveRef = useRef(false);
+  const submitInFlightRef = useRef(false);
   const pushToast = useToastStore((state) => state.push);
 
   const merchandiseTotal = useMemo(() => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines]);
@@ -110,6 +118,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setSaveStatus("idle");
     setLastSavedAt(null);
     setHasUnsavedChanges(false);
+    setClientRequestId(createClientRequestId());
   }, []);
 
   const buildDraftData = useCallback((): OrderDraftData => ({
@@ -123,8 +132,9 @@ export function OrderCreateModal({ branchId }: Props) {
     oldDebt,
     includeOldDebt,
     paymentTouched,
+    clientRequestId,
     lines
-  }), [invoiceDate, customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, includeOldDebt, paymentTouched, lines]);
+  }), [invoiceDate, customerId, customerQuery, productQuery, note, otherCharge, paidAmount, oldDebt, includeOldDebt, paymentTouched, clientRequestId, lines]);
 
   const hasDraftContent = useCallback((data: OrderDraftData) => (
     Boolean(data.customerId || data.customerQuery.trim() || data.productQuery.trim() || data.note.trim() || data.otherCharge > 0 || data.paidAmount > 0 || data.oldDebt > 0 || data.lines.length > 0)
@@ -145,6 +155,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setOldDebt(Number(data.oldDebt ?? 0));
     setIncludeOldDebt(data.includeOldDebt ?? false);
     setPaymentTouched(Boolean(data.paymentTouched));
+    setClientRequestId(data.clientRequestId || createClientRequestId());
     setLines(Array.isArray(data.lines) ? data.lines : []);
     setSaveStatus("saved");
     setLastSavedAt(draft.updatedAt);
@@ -432,6 +443,10 @@ export function OrderCreateModal({ branchId }: Props) {
   }
 
   function submit() {
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    setIsSubmitting(true);
+
     startTransition(async () => {
       try {
         if (!customerId) {
@@ -457,6 +472,7 @@ export function OrderCreateModal({ branchId }: Props) {
             otherCharge: Math.max(otherCharge, 0),
             oldDebt: includeOldDebt ? Math.max(oldDebt, 0) : 0,
             note,
+            clientRequestId,
             draftId,
             status: "COMPLETED",
             items: lines.map(({ productId, quantity, unitPrice, discountValue }) => ({
@@ -505,6 +521,9 @@ export function OrderCreateModal({ branchId }: Props) {
           description: error instanceof Error ? error.message : "Lỗi mạng hoặc phiên đăng nhập đã hết hạn",
           variant: "error"
         });
+      } finally {
+        submitInFlightRef.current = false;
+        setIsSubmitting(false);
       }
     });
   }
@@ -788,7 +807,7 @@ export function OrderCreateModal({ branchId }: Props) {
                 >
                   Lưu nháp
                 </Button>
-                <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} loading={isPending} disabled={lines.length === 0}>
+                <Button className="h-11 w-full text-base sm:h-12 sm:text-xl" onClick={submit} loading={isPending || isSubmitting} disabled={lines.length === 0}>
                   Tạo hóa đơn
                 </Button>
               </div>

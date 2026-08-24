@@ -341,6 +341,7 @@ model Order {
   paidAmount      Decimal                @db.Decimal(14, 2)
   debtAmount      Decimal                @default(0) @db.Decimal(14, 2)
   note            String?
+  clientRequestId String?                @unique
   pdfUrl          String?
   pdfFileName     String?
   pdfSize         Int?
