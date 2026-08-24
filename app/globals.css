@@ -91,6 +91,17 @@ input[type="number"] {
     box-shadow: none !important;
     overflow: visible !important;
     page-break-inside: auto;
+    font-size: 20px !important;
+  }
+
+  .invoice-sheet h1 {
+    font-size: 30px !important;
+  }
+
+  .invoice-table,
+  .invoice-table th,
+  .invoice-table td {
+    font-size: 20px !important;
   }
 
   .invoice-table th,
