@@ -344,7 +344,11 @@ export async function getCustomerOutstandingDebt(customerId: string) {
 
 export async function getCustomerDebtTracking(customerId: string) {
   const startedAt = Date.now();
-  const [invoices, cashTransactions] = await Promise.all([
+  const [customer, invoices, cashTransactions] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { openingDebt: true }
+    }),
     prisma.order.findMany({
       where: {
         customerId,
@@ -428,7 +432,7 @@ export async function getCustomerDebtTracking(customerId: string) {
     })
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  let runningBalance = 0;
+  let runningBalance = toNumber(customer?.openingDebt);
   const rows: CustomerDebtTrackingItem[] = entries.map((entry) => {
     if (entry.type === "INVOICE" && "oldDebtAmount" in entry && entry.oldDebtAmount > 0) {
       runningBalance = entry.oldDebtAmount;
