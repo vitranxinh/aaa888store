@@ -15,6 +15,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
         id: true,
         code: true,
         branchId: true,
+        createdAt: true,
         pdfFileName: true
       }
     });
@@ -29,6 +30,8 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
     const pdf = await readInvoicePdf({
       orderId: order.id,
+      orderCode: order.code,
+      createdAt: order.createdAt,
       pdfFileName: order.pdfFileName
     });
 

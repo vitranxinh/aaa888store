@@ -1,8 +1,10 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { put } from "@vercel/blob";
+import { formatInvoiceBlobDateFolder } from "@/lib/utils";
 
 type UploadInvoicePdfInput = {
   orderId: string;
+  orderCode: string;
   createdAt: Date;
   pdfBuffer: Buffer;
   pdfFileName: string;
@@ -11,6 +13,8 @@ type UploadInvoicePdfInput = {
 
 type ReadInvoicePdfInput = {
   orderId: string;
+  orderCode: string;
+  createdAt: Date;
   pdfFileName: string;
 };
 
@@ -32,7 +36,7 @@ function getR2Config() {
   const hasAny = Boolean(accountId || bucket || accessKeyId || secretAccessKey || endpoint);
   const isComplete = Boolean(bucket && endpoint && accessKeyId && secretAccessKey);
 
-  return { bucket, accessKeyId, secretAccessKey, endpoint, publicBaseUrl, hasAny, isComplete };
+  return { accountId, bucket, accessKeyId, secretAccessKey, endpoint, publicBaseUrl, hasAny, isComplete };
 }
 
 function shouldUseR2() {
@@ -63,7 +67,7 @@ function getR2Client() {
 }
 
 export function getInvoiceStorageKey(input: ReadInvoicePdfInput) {
-  return `invoices/${input.orderId}/${input.pdfFileName}`;
+  return `invoices/${formatInvoiceBlobDateFolder(input.createdAt)}/${input.orderId}-${input.pdfFileName}`;
 }
 
 export async function uploadInvoicePdf(input: UploadInvoicePdfInput) {
@@ -82,7 +86,8 @@ export async function uploadInvoicePdf(input: UploadInvoicePdfInput) {
     );
 
     return {
-      url: r2.publicBaseUrl ? `${r2.publicBaseUrl}/${key}?v=${input.generatedAt.getTime()}` : `/api/orders/${input.orderId}/pdf/file?v=${input.generatedAt.getTime()}`
+      url: r2.publicBaseUrl ? `${r2.publicBaseUrl}/${key}?v=${input.generatedAt.getTime()}` : `/api/orders/${input.orderId}/pdf/file?v=${input.generatedAt.getTime()}`,
+      storageProvider: "r2" as const
     };
   }
 
@@ -98,10 +103,15 @@ export async function uploadInvoicePdf(input: UploadInvoicePdfInput) {
 
   const blob = await put(key, input.pdfBuffer, {
     access: "private",
-    contentType: "application/pdf"
+    contentType: "application/pdf",
+    allowOverwrite: true,
+    cacheControlMaxAge: 60
   });
 
-  return { url: blob.url };
+  return {
+    url: `${blob.url}?v=${input.generatedAt.getTime()}`,
+    storageProvider: "vercel-blob" as const
+  };
 }
 
 export async function readInvoicePdf(input: ReadInvoicePdfInput) {
@@ -113,11 +123,12 @@ export async function readInvoicePdf(input: ReadInvoicePdfInput) {
     })
   );
 
-  if (!object.Body) {
+  const body = object.Body;
+  if (!body) {
     throw new Error("Không đọc được file PDF hóa đơn từ R2");
   }
 
-  const bytes = await object.Body.transformToByteArray();
+  const bytes = await body.transformToByteArray();
   return {
     bytes,
     contentType: object.ContentType || "application/pdf",
