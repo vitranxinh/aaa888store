@@ -64,7 +64,7 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
   for (const event of events) {
     if (event.kind === "ORDER") {
       if (event.oldDebtAmount > 0) {
-        receivableDebt = Math.max(receivableDebt, event.oldDebtAmount);
+        receivableDebt = event.oldDebtAmount;
       }
       receivableDebt += event.grandTotal - event.paidAmount;
       continue;

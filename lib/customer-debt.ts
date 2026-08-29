@@ -430,7 +430,7 @@ export async function getCustomerDebtTracking(customerId: string) {
 
   let runningBalance = 0;
   const rows: CustomerDebtTrackingItem[] = entries.map((entry) => {
-    if (entry.type === "INVOICE" && "oldDebtAmount" in entry && entry.oldDebtAmount > runningBalance) {
+    if (entry.type === "INVOICE" && "oldDebtAmount" in entry && entry.oldDebtAmount > 0) {
       runningBalance = entry.oldDebtAmount;
     }
     runningBalance += entry.debitAmount - entry.creditAmount;
