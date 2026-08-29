@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { put } from "@vercel/blob";
 import { jsPDF } from "jspdf";
 import { calculateInvoiceDebtBreakdown } from "@/lib/invoice-totals";
+import { uploadInvoicePdf } from "@/lib/invoice-storage";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/utils";
 
@@ -275,11 +275,6 @@ export async function getInvoicePdfOrder(orderId: string): Promise<InvoicePdfOrd
 }
 
 export async function generateAndStoreInvoicePdf(orderId: string) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.warn("[PDF] Skipping PDF upload to Vercel Blob because BLOB_READ_WRITE_TOKEN is not set.");
-    return null;
-  }
-
   const order = await getInvoicePdfOrder(orderId);
   if (!order) {
     throw new Error("Không tìm thấy hóa đơn để tạo PDF");
@@ -287,20 +282,24 @@ export async function generateAndStoreInvoicePdf(orderId: string) {
 
   const pdfBuffer = buildInvoicePdfBuffer(order);
   const pdfFileName = `${order.code.toLowerCase()}-hoa-don.pdf`;
-  const pathname = `invoices/${order.id}/${Date.now()}-${pdfFileName}`;
-
-  const blob = await put(pathname, pdfBuffer, {
-    access: "private",
-    contentType: "application/pdf"
+  const generatedAt = new Date();
+  const storedPdf = await uploadInvoicePdf({
+    orderId: order.id,
+    createdAt: order.createdAt,
+    pdfBuffer,
+    pdfFileName,
+    generatedAt
   });
+
+  if (!storedPdf) return null;
 
   return prisma.order.update({
     where: { id: orderId },
     data: {
-      pdfUrl: blob.url,
+      pdfUrl: storedPdf.url,
       pdfFileName,
       pdfSize: pdfBuffer.byteLength,
-      pdfGeneratedAt: new Date()
+      pdfGeneratedAt: generatedAt
     },
     select: {
       id: true,

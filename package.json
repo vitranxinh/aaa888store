@@ -20,6 +20,7 @@
     "recalculate:customer-debts": "tsx scripts/recalculate_customer_debts.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1120.0",
     "@hookform/resolvers": "^3.9.0",
     "@prisma/client": "^5.15.0",
     "@radix-ui/react-dialog": "^1.1.1",
