@@ -428,9 +428,11 @@ export function OrderCreateModal({ branchId }: Props) {
   }
 
   function selectCustomer(customer: { id: string; label: string; receivableDebt?: number }) {
+    const currentDebt = Math.max(Number(customer.receivableDebt ?? 0), 0);
     setCustomerId(customer.id);
     setCustomerQuery(customer.label);
-    setOldDebt(Math.max(Number(customer.receivableDebt ?? 0), 0));
+    setOldDebt(currentDebt);
+    setIncludeOldDebt(currentDebt > 0);
     setCustomerResults([]);
   }
 
