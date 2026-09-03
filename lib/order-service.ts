@@ -452,11 +452,7 @@ export async function createOrderFromPayload(payload: OrderPayload): Promise<{ o
   if (!activeCustomer) {
     throw new Error("Khách hàng đã ẩn khỏi danh sách bán, không thể tạo hóa đơn mới.");
   }
-  const payloadWithCurrentDebt: OrderPayload = {
-    ...payload,
-    oldDebt: Number(activeCustomer.receivableDebt ?? 0)
-  };
-  const derived = calculateOrderDerivedState(items, payloadWithCurrentDebt);
+  const derived = calculateOrderDerivedState(items, payload);
   const invoiceCreatedAt = parseVietnamDateTimeLocal(payload.invoiceDate);
   const transactionQueuedAt = Date.now();
   let transactionStartedAt = 0;
