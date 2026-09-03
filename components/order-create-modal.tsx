@@ -432,7 +432,7 @@ export function OrderCreateModal({ branchId }: Props) {
     setCustomerId(customer.id);
     setCustomerQuery(customer.label);
     setOldDebt(currentDebt);
-    setIncludeOldDebt(currentDebt > 0);
+    setIncludeOldDebt(false);
     setCustomerResults([]);
   }
 
