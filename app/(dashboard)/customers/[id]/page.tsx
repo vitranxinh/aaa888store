@@ -22,7 +22,8 @@ function getHistoryStatusLabel(status: CustomerInvoiceHistoryStatus) {
   return "Tất cả";
 }
 
-function getTrackingTypeLabel(type: "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYMENT" | "OVERPAYMENT") {
+function getTrackingTypeLabel(type: "OPENING" | "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYMENT" | "OVERPAYMENT") {
+  if (type === "OPENING") return "Đầu kỳ";
   if (type === "INVOICE") return "Hóa đơn";
   if (type === "RECEIPT") return "Phiếu thu";
   if (type === "PAYMENT") return "Phiếu chi";

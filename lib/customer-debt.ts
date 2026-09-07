@@ -47,7 +47,7 @@ export type CustomerInvoiceItem = {
 export type CustomerDebtTrackingItem = {
   id: string;
   date: Date;
-  type: "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYMENT" | "OVERPAYMENT";
+  type: "OPENING" | "INVOICE" | "RECEIPT" | "PAYMENT" | "PREPAYMENT" | "OVERPAYMENT";
   code: string;
   description: string;
   debitAmount: number;
@@ -267,8 +267,7 @@ export async function getCustomerOutstandingDebt(customerId: string) {
     prisma.order.findMany({
       where: {
         customerId,
-        status: { in: [...ACTIVE_ORDER_STATUS] },
-        debtAmount: { gt: 0 }
+        status: { in: [...ACTIVE_ORDER_STATUS] }
       },
       select: {
         id: true,
@@ -347,20 +346,18 @@ export async function getCustomerDebtTracking(customerId: string) {
   const [customer, invoices, cashTransactions] = await Promise.all([
     prisma.customer.findUnique({
       where: { id: customerId },
-      select: { openingDebt: true }
+      select: { code: true, createdAt: true, openingDebt: true }
     }),
     prisma.order.findMany({
       where: {
         customerId,
-        status: { in: [...ACTIVE_ORDER_STATUS] },
-        debtAmount: { gt: 0 }
+        status: { in: [...ACTIVE_ORDER_STATUS] }
       },
       select: {
         id: true,
         code: true,
         createdAt: true,
         grandTotal: true,
-        oldDebtAmount: true,
         paidAmount: true,
         debtAmount: true
       },
@@ -386,22 +383,50 @@ export async function getCustomerDebtTracking(customerId: string) {
     })
   ]);
 
+  const openingDebt = toNumber(customer?.openingDebt);
   const entries = [
-    ...invoices.map((invoice) => ({
-      id: invoice.id,
-      date: invoice.createdAt,
-      type: "INVOICE" as const,
-      code: invoice.code,
-      description:
-        Number(invoice.paidAmount) > 0
-          ? `Hóa đơn thanh toán một phần, còn nợ ${toNumber(invoice.debtAmount).toLocaleString("vi-VN")} đ`
-          : "Hóa đơn chưa thanh toán",
-      debitAmount: toNumber(invoice.grandTotal),
-      creditAmount: toNumber(invoice.paidAmount),
-      oldDebtAmount: toNumber(invoice.oldDebtAmount),
-      status: Number(invoice.paidAmount) > 0 ? "Thanh toán một phần" : "Chưa thanh toán",
-      orderId: invoice.id
-    })),
+    ...(openingDebt !== 0
+      ? [
+          {
+            id: `${customerId}-opening-debt`,
+            date: customer?.createdAt ?? new Date(0),
+            type: "OPENING" as const,
+            code: customer?.code ?? "NO_DAU_KY",
+            description: openingDebt > 0 ? "Nợ đầu kỳ" : "Khách trả trước đầu kỳ",
+            debitAmount: openingDebt > 0 ? openingDebt : 0,
+            creditAmount: openingDebt < 0 ? Math.abs(openingDebt) : 0,
+            status: openingDebt > 0 ? "Nợ đầu kỳ" : "Khách trả dư",
+            orderId: null
+          }
+        ]
+      : []),
+    ...invoices
+      .filter((invoice) => toNumber(invoice.grandTotal) !== toNumber(invoice.paidAmount))
+      .map((invoice) => {
+        const grandTotal = toNumber(invoice.grandTotal);
+        const paidAmount = toNumber(invoice.paidAmount);
+        return {
+          id: invoice.id,
+          date: invoice.createdAt,
+          type: "INVOICE" as const,
+          code: invoice.code,
+          description:
+            paidAmount > grandTotal
+              ? "Hóa đơn có thu thêm công nợ cũ"
+              : paidAmount > 0
+                ? `Hóa đơn thanh toán một phần, còn nợ ${toNumber(invoice.debtAmount).toLocaleString("vi-VN")} đ`
+                : "Hóa đơn chưa thanh toán",
+          debitAmount: grandTotal,
+          creditAmount: paidAmount,
+          status:
+            paidAmount > grandTotal
+              ? "Thu thêm nợ cũ"
+              : paidAmount > 0
+                ? "Thanh toán một phần"
+                : "Chưa thanh toán",
+          orderId: invoice.id
+        };
+      }),
     ...cashTransactions.map((transaction) => {
       const amount = toNumber(transaction.amount);
       if (transaction.type === "PAYMENT") {
@@ -432,11 +457,8 @@ export async function getCustomerDebtTracking(customerId: string) {
     })
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  let runningBalance = toNumber(customer?.openingDebt);
+  let runningBalance = 0;
   const rows: CustomerDebtTrackingItem[] = entries.map((entry) => {
-    if (entry.type === "INVOICE" && "oldDebtAmount" in entry && entry.oldDebtAmount > runningBalance) {
-      runningBalance = entry.oldDebtAmount;
-    }
     runningBalance += entry.debitAmount - entry.creditAmount;
     const normalizedType =
       entry.type === "PREPAYMENT" && runningBalance < 0

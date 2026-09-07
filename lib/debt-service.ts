@@ -16,8 +16,7 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
         id: true,
         createdAt: true,
         grandTotal: true,
-        paidAmount: true,
-        oldDebtAmount: true
+        paidAmount: true
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }]
     }),
@@ -45,8 +44,7 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
       id: order.id,
       createdAt: order.createdAt,
       grandTotal: Number(order.grandTotal ?? 0),
-      paidAmount: Number(order.paidAmount ?? 0),
-      oldDebtAmount: Number(order.oldDebtAmount ?? 0)
+      paidAmount: Number(order.paidAmount ?? 0)
     })),
     ...standaloneCashTransactions.map((txn) => ({
       kind: "CASH" as const,
@@ -63,9 +61,6 @@ export async function recalculateCustomerReceivableDebt(tx: Prisma.TransactionCl
   let receivableDebt = Number(customer.openingDebt ?? 0);
   for (const event of events) {
     if (event.kind === "ORDER") {
-      if (event.oldDebtAmount > 0) {
-        receivableDebt = Math.max(receivableDebt, event.oldDebtAmount);
-      }
       receivableDebt += event.grandTotal - event.paidAmount;
       continue;
     }
