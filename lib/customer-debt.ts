@@ -267,7 +267,8 @@ export async function getCustomerOutstandingDebt(customerId: string) {
     prisma.order.findMany({
       where: {
         customerId,
-        status: { in: [...ACTIVE_ORDER_STATUS] }
+        status: { in: [...ACTIVE_ORDER_STATUS] },
+        debtAmount: { gt: 0 }
       },
       select: {
         id: true,
