@@ -67,6 +67,7 @@ export default async function CustomerDetailPage({
   const customer = detail.customer;
   const currentBalance = Number(customer.receivableDebt);
   const activeDebtTotal = detail.activeInvoices.reduce((sum, invoice) => sum + invoice.debtAmount, 0);
+  const standaloneCashTransactionCount = detail.receipts.filter((receipt) => receipt.type === "PAYMENT" || receipt.orderId === null).length;
   const trackingRows = currentBalance === 0 ? [] : detail.trackingRows;
   const groupOptions = groups.map((group) => ({ id: group.id, name: group.name }));
 
@@ -188,7 +189,7 @@ export default async function CustomerDetailPage({
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-500">Phiếu thu/chi còn ảnh hưởng số dư</p>
-            <p className="mt-2 text-xl font-bold text-slate-900">{detail.receipts.length}</p>
+            <p className="mt-2 text-xl font-bold text-slate-900">{standaloneCashTransactionCount}</p>
           </div>
         </div>
 
