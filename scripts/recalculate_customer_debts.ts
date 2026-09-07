@@ -14,8 +14,7 @@ async function calculateCustomerDebt(customerId: string, openingDebt: Prisma.Dec
         id: true,
         createdAt: true,
         grandTotal: true,
-        paidAmount: true,
-        oldDebtAmount: true
+        paidAmount: true
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }]
     }),
@@ -41,8 +40,7 @@ async function calculateCustomerDebt(customerId: string, openingDebt: Prisma.Dec
       id: order.id,
       createdAt: order.createdAt,
       grandTotal: Number(order.grandTotal ?? 0),
-      paidAmount: Number(order.paidAmount ?? 0),
-      oldDebtAmount: Number(order.oldDebtAmount ?? 0)
+      paidAmount: Number(order.paidAmount ?? 0)
     })),
     ...standaloneCashTransactions.map((txn) => ({
       kind: "CASH" as const,
@@ -59,9 +57,6 @@ async function calculateCustomerDebt(customerId: string, openingDebt: Prisma.Dec
   let debt = Number(openingDebt ?? 0);
   for (const event of events) {
     if (event.kind === "ORDER") {
-      if (event.oldDebtAmount > 0) {
-        debt = Math.max(debt, event.oldDebtAmount);
-      }
       debt += event.grandTotal - event.paidAmount;
     } else if (event.type === "RECEIPT") {
       debt -= event.amount;
