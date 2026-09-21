@@ -128,10 +128,6 @@ function buildInvoicePdfBuffer(order: InvoicePdfOrder) {
   text("ĐƠN ĐẶT HÀNG", pageWidth / 2, y, 15, { align: "center" });
   y += 7;
   text(order.code, pageWidth / 2, y, 9.5, { align: "center" });
-  y += 6;
-  text(order.branch.name, pageWidth / 2, y, 8.5, { align: "center" });
-  y += 5;
-  text(`SĐT: ${order.branch.phone || "-"}`, pageWidth / 2, y, 8.5, { align: "center" });
   y += 7;
 
   const infoX = marginX;
