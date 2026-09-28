@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/cfa-ethics"];
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/cfa-ethics", "/cfa-all"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
