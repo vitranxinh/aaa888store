@@ -1,3 +1,4 @@
+import { CUSTOMER_DEBT_LOCK_MESSAGE, hasCustomerDebtFields } from "@/lib/customer-debt-lock";
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +10,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const body = await request.json();
+    if (hasCustomerDebtFields(body)) {
+      return NextResponse.json({ error: CUSTOMER_DEBT_LOCK_MESSAGE }, { status: 403 });
+    }
     const parsed = customerSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -53,7 +57,6 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         address: parsed.data.address || null,
         note: parsed.data.note || null,
         groupId: parsed.data.groupId || null,
-        openingDebt: parsed.data.openingDebt ?? 0,
       },
     });
 
@@ -76,6 +79,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   try {
     await requireApiSession(["ADMIN", "MANAGER"]);
     const body = await request.json();
+    if (hasCustomerDebtFields(body)) {
+      return NextResponse.json({ error: CUSTOMER_DEBT_LOCK_MESSAGE }, { status: 403 });
+    }
     const isActive = Boolean(body?.isActive);
 
     const customer = await prisma.customer.update({

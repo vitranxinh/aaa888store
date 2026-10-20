@@ -54,8 +54,7 @@ export const customerSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   address: z.string().optional(),
   note: z.string().optional(),
-  groupId: z.string().optional(),
-  openingDebt: z.number().default(0)
+  groupId: z.string().optional()
 });
 
 export const supplierSchema = z.object({

@@ -23,7 +23,7 @@ export function CustomerCreateForm({ groups }: Props) {
   const pushToast = useToastStore((state) => state.push);
   const form = useForm<FormValues>({
     resolver: zodResolver(customerSchema),
-    defaultValues: { code: "", name: "", phone: "", email: "", address: "", note: "", groupId: "", openingDebt: 0 }
+    defaultValues: { code: "", name: "", phone: "", email: "", address: "", note: "", groupId: "" }
   });
 
   function onSubmit(values: FormValues) {

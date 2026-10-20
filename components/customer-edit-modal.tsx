@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { FormattedNumberInput } from "@/components/formatted-number-input";
 import { Input } from "@/components/ui/input";
 import { customerSchema } from "@/lib/validations";
 import { formatCustomerDebt } from "@/lib/utils";
@@ -35,9 +34,7 @@ export function CustomerEditModal({ customer, groups }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [currentDebtValue, setCurrentDebtValue] = useState(customer.currentDebt);
   const pushToast = useToastStore((state) => state.push);
-  const orderDebt = customer.currentDebt - customer.openingDebt;
 
   const defaultValues = useMemo<FormValues>(
     () => ({
@@ -48,7 +45,6 @@ export function CustomerEditModal({ customer, groups }: Props) {
       address: customer.address || "",
       note: customer.note || "",
       groupId: customer.groupId || "",
-      openingDebt: customer.openingDebt,
     }),
     [customer]
   );
@@ -60,15 +56,10 @@ export function CustomerEditModal({ customer, groups }: Props) {
 
   function onSubmit(values: FormValues) {
     startTransition(async () => {
-      const normalizedCurrentDebt = Number.isFinite(currentDebtValue) ? currentDebtValue : 0;
-      const nextOpeningDebt = normalizedCurrentDebt - orderDebt;
       const response = await fetch(`/api/customers/${customer.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...values,
-          openingDebt: nextOpeningDebt
-        }),
+        body: JSON.stringify(values),
       });
       const payload = await response.json();
 
@@ -162,19 +153,12 @@ export function CustomerEditModal({ customer, groups }: Props) {
               </select>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Công nợ hiện tại</p>
-                <p className={`mt-2 text-3xl font-bold ${currentDebtValue > 0 ? "text-red-600" : currentDebtValue < 0 ? "text-emerald-700" : "text-slate-700"}`}>
-                  {formatCustomerDebt(currentDebtValue)}
+                <p className={`mt-2 text-3xl font-bold ${customer.currentDebt > 0 ? "text-red-600" : customer.currentDebt < 0 ? "text-emerald-700" : "text-slate-700"}`}>
+                  {formatCustomerDebt(customer.currentDebt)}
                 </p>
               </div>
-              <FormattedNumberInput
-                placeholder="Công nợ hiện tại"
-                value={currentDebtValue}
-                onValueChange={setCurrentDebtValue}
-                allowNegative
-                className="h-14 text-xl"
-              />
               <p className="-mt-2 text-sm text-slate-500">
-                Nhập số công nợ cuối cùng muốn hiển thị cho khách hàng. Hệ thống sẽ tự quy đổi phần điều chỉnh nền.
+                Công nợ chỉ được xem, không thể chỉnh sửa trực tiếp.
               </p>
               <textarea
                 rows={4}

@@ -1,3 +1,4 @@
+import { CUSTOMER_DEBT_LOCK_MESSAGE, hasCustomerDebtFields } from "@/lib/customer-debt-lock";
 import { NextResponse } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
   try {
     await requireApiSession(["ADMIN", "MANAGER", "CASHIER"]);
     const body = await request.json();
+    if (hasCustomerDebtFields(body)) {
+      return NextResponse.json({ error: CUSTOMER_DEBT_LOCK_MESSAGE }, { status: 403 });
+    }
     const parsed = customerSchema.safeParse(body);
 
     if (!parsed.success) {

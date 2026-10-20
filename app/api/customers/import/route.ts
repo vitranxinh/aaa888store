@@ -89,7 +89,6 @@ export async function POST(request: Request) {
                 phone: normalizedPhone,
                 address: item.address || null,
                 note: item.note || null,
-                openingDebt: 0,
               },
             });
           } else {
