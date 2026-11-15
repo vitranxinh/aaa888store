@@ -73,7 +73,10 @@ async function CashflowContent({
       take: pageSize + 1
     }),
     prisma.cashTransaction.groupBy({
-      where: cashflowBaseWhere,
+      where: {
+        ...cashflowBaseWhere,
+        createdAt: resolveVietnamDateRange("today")
+      },
       by: ["createdById", "type"],
       _sum: { amount: true },
       _count: { _all: true }
@@ -171,7 +174,7 @@ async function CashflowContent({
         <section className="space-y-3">
           <div>
             <h3 className="text-lg font-bold text-slate-900 sm:text-2xl">Thu / Chi theo nhân viên</h3>
-            <p className="text-sm text-slate-500 sm:text-lg">Tổng hợp theo đúng khung ngày đang lọc để sếp kiểm tra daily từng nhân viên.</p>
+            <p className="text-sm text-slate-500 sm:text-lg">Tổng hợp hôm nay từ 00:00 đến 23:59:59 theo giờ Việt Nam của từng nhân viên.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {employeeCashSummary.map((employee) => {
